@@ -1,0 +1,159 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.04.18.26.52;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine out_dync (trname)
+      implicit none
+*
+      character* (*) trname(*)
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "topo.cdk"
+#include "yomdyn1.cdk"
+#include "path.cdk"
+#include "sor.cdk"
+*
+      integer  fnom,fstouv,fstecr,prog_filename,fstfrm,fstinl,longueur
+      external fnom,fstouv,fstecr,prog_filename,fstfrm,fstinl,longueur
+      character*3 ros
+      character*512 progfile_fp
+      logical boot,ontime,init
+      integer nlis
+      parameter (nlis = 1024)
+      integer liste (nlis)
+      integer pnprog,nklvl(3),k,nis,njs,prognum,err,n1,n2,n3,lislon,nrec
+*
+      data ros,nklvl /'RND',3*1/
+      data boot /.true./
+      save boot,nis,njs
+*
+*------------------------------------------------------------------
+*
+      if (Grdc_ndt.lt.0) return
+*
+      nis = Grdc_gif - Grdc_gid + 1
+      njs = Grdc_gjf - Grdc_gjd + 1
+*
+      ontime = .false.
+      if ( Grdc_ndt.eq.0 ) then
+         Grdc_nsor = 0
+         if (gnstepno.eq.0) ontime = .true.
+      else
+         if (mod(gnstepno,Grdc_ndt).eq.0) then
+            ontime = .true.
+         endif
+      endif
+*
+      if ( ontime .and. (.not.boot.or.(gnstepno.lt.1)) ) then
+         if (myproc.eq.0) then
+            if (gnstepno.lt.1) then
+               out_clostep = 0
+            else
+               if (Grdc_nsor.le.Grdc_ndt) then
+                  out_clostep = min (endstepno,gnstepno)
+               else
+                  out_clostep = min (endstepno,out_clostep+Grdc_nsor)
+               endif
+            endif
+            prognum = out_clostep
+            err = prog_filename (out_progfile,out_lt,out_dat2,out_h0,
+     $                                -1,-1,myrow,mycol,prognum,6,'P')
+            progfile_fp = dfwmil(1:longueur(dfwmil))//'/output/casc/'
+     $                       //out_progfile(1:longueur(out_progfile))
+            err = fnom(out_unf,progfile_fp,'STD+'//ros,0)
+            err = fstouv(out_unf,ros)
+            write (6,101) out_unf,out_progfile(1:longueur(out_progfile))
+            nrec= fstinl (out_unf,n1,n2,n3,' ',' ',-1,-1,-1,' ','>>',
+     $                                            liste,lislon,nlis)
+            if (lislon.lt.1) then
+               err = fstecr ( xpx(Grdc_gid+hx),xpq, -32,out_unf,0,0,0,
+     $              nis,1,1,Grd_ig1c,Grd_ig2c,Grd_ig3c,'X','>>','POS_X',
+     $              gtgrtyp,igs(1), igs(2), igs(3), igs(4), 5, .true.)
+               err = fstecr ( ypx(Grdc_gjd+hy),ypq, -32,out_unf,0,0,0,
+     $              1,njs,1,Grd_ig1c,Grd_ig2c,Grd_ig3c,'X', '^^','POS_Y'
+     $              ,gtgrtyp,igs(1), igs(2), igs(3), igs(4), 5, .true.)
+               call wrvref ( out_unf )
+            endif
+         endif
+*
+         pnprog = int (dble(gnstepno) * grdt / 3600. + 1.e-12)
+*
+         call ecris_fst ( hh0,minx,maxx,miny,maxy,1.,'MX  ',1.0,pnprog,
+     $                                         3,1,nklvl,'CSC',out_unf )
+         call ecris_fst ( hh0(minx,miny,2),minx,maxx,miny,maxy,2.,
+     $                   'MX  ',1.0,pnprog,3,1,nklvl,'CSC',out_unf )
+*
+         call out_casc ( qpp, tpp, hmp, up, vp, swp, clp, smap, trname,
+     $                                        dim2d,gnk,pnprog,out_unf )
+*
+         if (myproc.eq.0) then
+            err = fstfrm(out_unf)
+            call fclos(out_unf)
+            write (6,102) out_unf,out_progfile(1:longueur(out_progfile))
+            out_unf = 0
+         endif
+      endif
+*
+      boot=.false.
+*
+ 101  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS OPENED')
+ 102  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS CLOSED')
+*
+*------------------------------------------------------------------
+      return
+      end
+      subroutine wrvref ( unf )
+      implicit none
+*
+      integer unf
+*
+#include "lcldim.cdk"
+#include "levels.cdk"
+#include "yomdyn1.cdk"
+*
+      integer  fstecr
+      external fstecr
+*
+      integer k,err
+      real wke (gnk+8)
+*
+      do k=1,gnk
+         wke(k)= zt(k)
+      end do
+      wke(gnk+1)= htop
+      wke(gnk+2)= iscal(1)
+      wke(gnk+3)= iscal(2)
+      wke(gnk+4)= tzero_star
+      wke(gnk+5)= ttop_star
+      wke(gnk+6)= ntrop_star
+      wke(gnk+7)= htrop_star
+      wke(gnk+8)= nstrat_star
+      err = fstecr (wke,wke,-32,unf,0,0,0,gnk+8,1,1,0,0,0,
+     $          'C','HT','THERMO_H','X',0,0,0,0,5,.false.)
+*
+      return
+      end
+
+@

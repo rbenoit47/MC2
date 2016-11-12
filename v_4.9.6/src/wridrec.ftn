@@ -1,0 +1,36 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wridrec
+*
+      subroutine wridrec (unf,nil,njl,xpl,ypl)
+      implicit none
+*
+      integer unf,nil,njl
+      real xpl,ypl
+*
+#include "levels.cdk"
+#include "grd.cdk"
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "physcom.cdk"
+#include "physnml.cdk"
+#include "sor.cdk"
+*
+      integer k
+*
+*---------------------------------------------------------------------
+*
+      rewind(unf)
+      write (unf) nil,njl,nk_out
+      write (unf) gcrunstrt,Grd_proj_S,Grd_dx,Grd_dgrw,Grd_phir,
+     $            Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2,
+     $            xpl,ypl,gnlst,htop,grtstar,
+     $            theoc,theocase,satuco,tzero_star,ttop_star,ntrop_star,
+     $            htrop_star,nstrat_star,iscal,
+     $            (zt(z_out(k)),ztr(z_out(k)),zm(z_out(k)),k=1,nk_out)
+*
+*---------------------------------------------------------------------
+*
+      return
+      end

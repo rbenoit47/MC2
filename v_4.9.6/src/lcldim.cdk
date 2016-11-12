@@ -1,0 +1,38 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*     lcldim.cdk
+*
+*     gni           : global dimension in x
+*     gnj           : global dimension in y
+*     nk            : global dimension in z
+*     gnk           : nk ou nk + 1
+*     ntr           : number of passive tracers
+*     hx            : overlap in x
+*     hy            : overlap in y
+*     ldni          : local data segment dimension in x
+*     ldnj          : local data segment dimension in y
+*     lani          : local array dimension in x
+*     lanj          : local array dimension in y
+*     minx          : minimum indice in x
+*     maxx          : maximum indice in x
+*     miny          : minimum indice in y
+*     maxy          : maximum indice in y
+*     npx           : number of processor rows in x
+*     npy           : number of processor cols in y
+*     gnflok        : flagged to 1 if npx*npy = numproc 
+*     north         : flagged to 1 if mycol = npy-1
+*     south         : flagged to 1 if mycol = 0
+*     west          : flagged to 1 if myrow = 0
+*     east          : flagged to 1 if myrow = npx-1
+*
+      logical period_x, period_y
+      integer gni,gnj,gnk,nk,ndynvar,ntr
+      integer hx,hy,ldni,ldnj,lani,lanj,minx,maxx,miny,maxy,maxcfl
+      integer npex,npey,north,south,east,west,gnflok
+      integer dim3d,dim2d,maxldni,maxldnj,minldni,minldnj,endldimi
+*
+      common /lcldim/ gni,gnj,gnk,nk,ndynvar,ntr,maxcfl,hx,hy,
+     $                ldni,ldnj,lani,lanj,period_x, period_y,
+     $                minx,maxx,miny,maxy,npex,npey,gnflok,
+     $                north,south,east,west,dim3d,dim2d,
+     $                maxldni,maxldnj,minldni,minldnj,endldimi
+*

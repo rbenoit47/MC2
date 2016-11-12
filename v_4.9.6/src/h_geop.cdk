@@ -1,0 +1,10 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+      integer ih0,jh0
+      real h_geop,zzgg
+*
+      h_geop(zzgg,ih0,jh0)=
+     $     zzgg+max(0.,sinh((htop-zzgg)/(iscal(1)))/
+     $                        sinh(htop/(iscal(1))))*(hh0(ih0,jh0,1) 
+     $                                               -hh0(ih0,jh0,2))
+     $         +max(0.,sinh((htop-zzgg)/(iscal(2)))/
+     $                        sinh(htop/(iscal(2))))* hh0(ih0,jh0,2)

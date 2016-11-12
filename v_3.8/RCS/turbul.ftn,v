@@ -1,0 +1,432 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.17.14.22.45;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  TURBUL
+*
+#include "phy_macros_f.h"
+      SUBROUTINE TURBUL(D, DSIZ, F, FSIZ, V, VSIZ,
+     $                  WORK, ESPWORK,
+     $                  TKE, QE, SE,
+     $                  KOUNT, TRNCH, N, M, NK, IT)
+
+#include "impnone.cdk"
+      INTEGER DSIZ, FSIZ, VSIZ, ESPWORK
+      INTEGER IT,KOUNT,TRNCH,N,M,NK
+      REAL D(DSIZ), F(FSIZ), V(VSIZ), WORK(ESPWORK)
+      REAL TKE(M,NK), QE(M,NK)
+      REAL SE(M,NK)
+*
+      REAL TFILT
+      SAVE TFILT
+      DATA TFILT / 0.1 /
+
+      REAL HEURSER
+      INTEGER IERGET
+      EXTERNAL MZONXST, SERGET, EXPONEN4
+*
+*Author
+*          J. Mailhot and B. Bilodeau (Jan 1999)
+*
+*Revision
+* 001      B. Bilodeau (Nov 2000) - New comdeck phybus.cdk
+* 002      J. Mailhot  (May 2000) - Add MOISTKE option (ifluvert=3)
+* 003      A-M.Leduc   (Dec 2002) - Add argument qc and remove
+*                                   ISHLCVT to call eturbl4--->eturbl5
+* 004      J. Mailhot  (Feb 2003) - Restore ADVECTKE option
+* 005      A. Plante   (May 2003) - IBM conversion
+*             - calls to exponen4 (to calculate power function '**')
+*             - calls to vexp routine (from massvp4 library)
+*
+*Object
+*          interface for turbulent kinetic energy calculations
+*
+*Arguments
+*
+*          - Input/Output -
+* D        dynamic             bus
+* F        permanent variables bus
+* V        volatile (output)   bus
+* WORK     physics work space
+* TKE      turbulent energy
+*
+*          - Input -
+* DSIZ     dimension of D
+* FSIZ     dimension of F
+* VSIZ     dimension of V
+* ESPWORK  dimension of WORK
+* QE       specific humidity on 'E' levels
+* SE       sigma level for turbulent energy
+* KOUNT    index of timestep
+* TRNCH    number of the slice
+* N        horizontal dimension
+* M        1st dimension of T, Q, U, V
+* NK       vertical dimension
+* IT       task number in multi-tasking
+*
+*
+*IMPLICITES
+*
+#include "indx_sfc.cdk"
+*
+#include "stk.cdk"
+*
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+*
+#include "options.cdk"
+*
+#include "clefcon.cdk"
+*
+#include "consphy.cdk"
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*MODULES
+*
+*
+**********************************************************
+*     AUTOMATIC ARRAYS
+**********************************************************
+*
+      AUTOMATIC ( WORK2    , REAL    , (N)  )
+*
+      EXTERNAL ETURBL5
+      EXTERNAL MOISTKE2
+      EXTERNAL SERXST
+      EXTERNAL SFLTR
+*
+*
+**
+*
+*
+      REAL CF1,CF2, ETURBTAU, ZNTEM
+      INTEGER I,K,NNK
+      REAL AA
+      SAVE AA
+      DATA AA/0.516/
+*
+*
+*     pointeurs des champs de travail
+      real b, c, dsgdz, x, x1, xb, xh, wk, wk2d, enold
+      pointer (b_     , b    (n,nk*4))
+      pointer (c_     , c    (n,nk  ))
+      pointer (dsgdz_ , dsgdz(n,nk  ))
+      pointer (x_     , x    (n,nk  ))
+      pointer (x1_    , x1   (n,nk  ))
+      pointer (xb_    , xb   (n     ))
+      pointer (xh_    , xh   (n     ))
+      pointer (wk_    , wk   (n*2   ))
+      pointer (wk2d_  , wk2d (n,nk  ))
+      pointer (enold_ , enold(n,nk  ))
+*
+*
+*     fonction-formule
+      integer ik
+      ik(i,k) = (k-1)*n + i -1
+*
+*
+      STK_INITA(work, espwork)
+*
+      NNK = N*NK
+*
+      STK_ALLOC(b_     , nnk*4)
+      STK_ALLOC(c_     , nnk  )
+      STK_ALLOC(dsgdz_ , nnk  )
+      STK_ALLOC(x_     , nnk  )
+      STK_ALLOC(x1_    , nnk  )
+      STK_ALLOC(xb_    , n    )
+      STK_ALLOC(xh_    , n    )
+      STK_ALLOC(wk_    , n*2  )
+      STK_ALLOC(wk2d_  , nnk  )
+      STK_ALLOC(enold_ , nnk  )
+*
+      eturbtau=delt
+      if (advectke) then
+         if (kount.gt.1) then
+            eturbtau=factdt*delt
+         endif
+      endif
+*
+*  FILTRE TEMPOREL 
+*
+      CF1=1.0-TFILT
+      CF2=TFILT
+*
+      CALL SERGET ('HEURE', HEURSER, 1, IERGET)
+*
+*  INITIALISER E AVEC EA,Z ET H
+*
+      IF (KOUNT.EQ.0) THEN
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+               TKE(I,K)= MAX (ETRMIN, F(Z0+(indx_agrege-1)*N+I-1)/
+     X              (V(ZA+I-1)+F(Z0+(indx_agrege-1)*N+I-1))*
+     X              EXP(-(V(ZE+ik(I,K))- V(ZE+ik(I,NK)))/F(H+I-1)) )
+            END DO
+         END DO
+         if (advectke) then
+           DO K=1,NK
+*VDIR NODEP
+             DO I=1,N
+               d(enmoins +ik(i,k)) = tke(i,k)
+             END DO
+           END DO
+         endif
+      ENDIF
+*
+*
+      IF (KOUNT.GT.0) THEN
+         CALL SERXST  ( F(ZN) , 'LM' , TRNCH , N , 0.0 ,   1.0 , -1   )
+         CALL MZONXST ( F(ZN) , 'LM' , TRNCH , N, HEURSER, 1.0, -1, IT)
+         CALL SERXST  ( TKE   , 'EN' , TRNCH , N , 0.0 ,   1.0 , -1   )
+         CALL MZONXST ( TKE   , 'EN' , TRNCH , N, HEURSER, 1.0, -1, IT)
+      ENDIF
+*
+      DO K=1,NK
+*VDIR NODEP
+        DO I=1,N
+         if (advectke) then
+           enold(i,k) = d(enmoins +ik(i,k))
+           tke(i,k)   = max(tke(i,k),etrmin)
+         else   
+           enold(i,k) = tke(i,k)
+         endif
+        END DO
+      END DO
+*
+      if (advectke .and. kount.gt.1) then
+         do K=1,NK
+*VDIR NODEP
+            do I=1,N
+               zntem            = f(zn  +ik(i,k))
+               f(zn  +ik(I,K))  = f(znm1+ik(I,K))
+               f(znm1+ik(I,K))  = zntem
+            end do
+         end do
+      endif
+*
+      IF(IFLUVERT.EQ.3) THEN
+*
+*
+*                                    convective velocity scale w*
+*                                    (passed to MOISTKE2 through XH)
+      DO I=1,N
+         XB(I)=1.0+DELTA*QE(I,NK)
+         XH(I)=(GRAV/(XB(I)*V(TVE+ik(I,NK))))*
+     1         ( XB(I)*F(FTEMP+(indx_agrege-1)*N+I-1)
+     1           + DELTA*V(TVE+ik(I,NK))*F(FVAP+(indx_agrege-1)*N+I-1) )
+         XH(I)=MAX(0.0,XH(I))
+         WORK2(I)=F(H+I-1)*XH(I)
+      END DO
+      CALL EXPONEN4(XH,WORK2,1./3.,N,N,1)
+*
+      CALL MOISTKE2( TKE,ENOLD,F(ZN),F(ZD),V(KT),F(QCBL),F(FN),F(FNN),
+     $              V(GTE),V(GQ),V(GQL),F(H),
+     $              D(UMOINS), D(VMOINS), D(TMOINS),
+     $              V(TVE), D(HUMOINS), D(PMOINS), D(SIGM),
+     $              SE, wk2d, C, B, X, 4*NK, ETURBTAU, KOUNT,
+     $              V(ZE), V(KCL),F(UE2),X1,XB,XH,TRNCH,N,M,NK,IT)
+*
+      ELSE
+*
+      CALL ETURBL5( TKE,ENOLD,F(ZN),V(GTE),F(ILMO+(indx_agrege-1)*n),
+     $              F(FN), wk2d, V(GQL), F(LWC), C, B,
+     $              X , D(UMOINS), D(VMOINS), D(TMOINS),
+     $              V(TVE), D(HUMOINS), D(QCMOINS), QE, F(H), D(PMOINS),
+     $              F(TSURF),
+     $              D(SIGM), SE, 4*NK,
+     $              DSGDZ, ETURBTAU, KOUNT,  V(GQ), F(CCN),
+     $              V(KT), V(ZE), V(KCL),X1,XB,XH,TRNCH,N,M,NK,
+     $              F(Z0+(indx_agrege-1)*N), WK, IT)
+*
+      ENDIF
+*
+*  -------------------------------------
+*  FILTRE TEMPOREL (TKE,ZN)
+*  -------------------------------------
+*
+      IF (KOUNT.EQ.0) THEN
+*VDIR NODEP
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+               F(ZNM1+ik(I,K)) = F(ZN+ik(I,K))
+            END DO
+         END DO
+         if (advectke) then
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+               F(ZN0+ik(I,K)) = F(ZN+ik(I,K))
+            END DO
+         END DO
+         endif
+*
+      ELSE
+*
+         if (.not.advectke) then
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+               ZNTEM           = F(ZN+ik(I,K))
+               F(ZN  +ik(I,K)) = CF1*F(ZN+ik(I,K))+CF2*F(ZNM1+ik(I,K))
+               F(ZNM1+ik(I,K)) = ZNTEM
+            END DO
+         END DO
+         else
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+               ZNTEM          = F(ZN+ik(I,K))
+               F(ZN +ik(I,K)) = CF1*F(ZN+ik(I,K))+CF2*F(ZN0+ik(I,K))
+               F(ZN0+ik(I,K)) = ZNTEM
+            END DO
+         END DO
+         endif
+*
+      ENDIF
+*
+*
+*     FILTRE VERTICAL SUR EN
+*
+      CALL SFLTR( TKE, TKE, C, 0.1, N, NK-1 )
+*
+      IF (KOUNT.EQ.0) THEN
+         CALL SERXST  ( F(ZN) , 'LM' , TRNCH , N , 0.0 ,   1.0 , -1   )
+         CALL MZONXST ( F(ZN) , 'LM' , TRNCH , N, HEURSER, 1.0, -1, IT)
+         CALL SERXST  ( TKE   , 'EN' , TRNCH , N , 0.0 ,   1.0 , -1   )
+         CALL MZONXST ( TKE   , 'EN' , TRNCH , N, HEURSER, 1.0, -1, IT)
+      ENDIF
+*
+*
+*  ------------------------------------------------------
+*    HAUTEUR DE LA COUCHE LIMITE STABLE OU INSTABLE
+*  ------------------------------------------------------
+*
+*     Ici HST est la hauteur calculee dans la routine FLXSURF1.
+*
+*     KCL contient le K que l'on a diagnostique dans RIGRAD
+*     et passe a ETURBL3; il pointe vers le premier niveau
+*     de la couche limite.
+*
+*     SCL est utilise comme champ de travail dans la boucle 100;
+*     il est mis a jour dans la boucle 200, et donne la hauteur
+*     de la couche limite en sigma.
+*
+*
+*VDIR NODEP
+      DO 100 I=0,N-1
+*
+        if(f(ilmo+(indx_agrege-1)*n+i).gt.0.0) then
+*         Cas stable
+          f(scl+i) = f(hst+(indx_agrege-1)*n+i)
+        else
+*         Cas instable: max(cas neutre, diagnostic)
+*         Z contient les hauteurs des niveaux intermediaires
+          f(scl+i) = max( f(hst+(indx_agrege-1)*n+i) , 
+     $                    v(ze +ik(i+1,nint(v(kcl+i)))))
+        endif
+*
+*       Si H est en train de chuter, on fait une relaxation pour
+*       ralentir la chute.
+*
+        if(f(h+i) .gt. f(scl+i)) then
+          f(h+i) = f(scl+i) + (f(h+i)-f(scl+i))*exp(-delt/5400.)
+        else
+          f(h+i) = f(scl+i)
+        endif
+*
+100   CONTINUE
+*
+*     On calcule SCL avec une approximation hydrostatique
+      do 200 i=0,n-1
+        f(scl+i)=-grav*f(h+i)/(rgasd*d(tmoins+ik(i+1,nk)))
+200   continue
+      call vsexp(f(scl),f(scl),n)
+* 
+      CALL SERXST  ( f(H)   , 'F2' , TRNCH , N , 0.0 ,    1.0, -1    )
+      CALL MZONXST ( f(H)   , 'F2' , TRNCH , N , HEURSER, 1.0, -1, IT)
+      CALL SERXST  ( F(SCL) , 'SE' , TRNCH , N , 0.0 ,    1.0, -1    )
+      CALL MZONXST ( F(SCL) , 'SE' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*
+*
+      DO K=1,NK-1
+*VDIR NODEP
+         DO I=1,N
+*                                                 KM
+C           IBM CONV. ; PAS D'AVANTAGE A PRECALCULER SQRT CI-DESSOUS
+            V(KM+ik(I,K))=AA*F(ZN+ik(i,k))*SQRT(TKE(i,k))
+*
+*                                                 KT
+            V(KT+ik(I,K))=V(KM+ik(I,K))*V(KT+ik(I,K))
+*
+         END DO
+      END DO
+*
+      STK_FREE
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d4 1
+d23 1
+a23 1
+      EXTERNAL MZONXST, SERGET
+d34 3
+d84 6
+a89 3
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+d218 1
+a218 2
+         XH(I)=( F(H+I-1)*XH(I) )**(1./3.)
+*
+d220 1
+d342 1
+a342 1
+        f(scl+i)=exp(-grav*f(h+i)/(rgasd*d(tmoins+ik(i+1,nk))))
+d344 1
+d356 1
+a368 1
+
+@

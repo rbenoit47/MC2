@@ -1,0 +1,128 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ruvdata
+*
+      subroutine ruvdata (levels,lnk,iun,idatev,ip3,nv)
+      implicit none 
+*
+      integer lnk,iun,idatev,ip3,levels(lnk)
+      character* (*) nv
+**
+#include "halo.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "lcldim.cdk"
+#include "hinterpo.cdk"
+#include "partopo.cdk"
+*
+      character*1 typvar   
+      character*8 etiket
+      integer ip1,ip2,i,j,k,ier,cnt,w_rdhint,iproc,lni_mc2,lnj_mc2,
+     $        i0,in,j0,jn,ii,jj
+      external w_rdhint
+      real wk1(Grd_ni,Grd_nj),wk2(Grd_ni,Grd_nj),
+     $     wk3(Grd_ni*Grd_nj),wk4(Grd_ni*Grd_nj)
+*----------------------------------------------------------------------
+*   
+      etiket = ' '
+      typvar = ' '
+      ip2    = -1
+*      
+      do 110 k=1,lnk
+*
+         ier = w_rdhint (wk1,wk2,xpx,ypx,Grd_ni,Grd_nj,idatev,
+     $          levels(k),ip2,ip3,etiket,typvar,.false.,h_interp,iun,6)
+         if (ier.ge.0) then
+            nv = 'UV'
+         else
+            return
+         endif
+*
+         if (halo.le.0) then
+*
+            do j=0,npey-1
+            do i=0,npex-1
+               iproc = j*npex + i
+               i0 = gc_ld2(1,iproc) - hx*max(0,1-i) + hx
+               in = gc_ld2(1,iproc) + gc_ld2(2,iproc) - 1
+     $                              + hx*max(0,i-npex+2) + hx + 1
+               j0 = gc_ld2(3,iproc) - hx*max(0,1-j) + hx
+               jn = gc_ld2(3,iproc) + gc_ld2(4,iproc) - 1
+     $                              + hx*max(0,j-npey+2) + hx + 1
+               cnt = 0
+               do jj = j0, jn
+               do ii = i0, in
+                  cnt = cnt+1
+                  wk3(cnt)= wk1(ii,jj)
+                  wk4(cnt)= wk2(ii,jj)
+               end do
+               end do
+               call bmf_write ( gc_ld2(5,iproc), 'UU  ',in-i0+1,1,in-i0+1,
+     $                          jn-j0+1,1,jn-j0+1,lnk,k,k,0,0,0,0,41,0,cnt,wk3 )
+               call bmf_write ( gc_ld2(5,iproc), 'VV  ',in-i0+1,1,in-i0+1,
+     $                          jn-j0+1,1,jn-j0+1,lnk,k,k,0,0,0,0,41,0,cnt,wk4 )
+            end do
+            end do
+*
+         else
+*
+            cnt = 0
+            do j = 1, halox
+            do i = 1, Grd_ni
+               cnt = cnt+1
+               wk3(cnt)= wk1(i,j)
+               wk4(cnt)= wk2(i,j)
+            end do
+            end do
+            call bmf_write ( gc_ld2(5,0),'UU  ',Grd_ni,1,Grd_ni,
+     $                   halox,1,halox,lnk,k,k,0,0,0,0,41,0,cnt,wk3 )
+            call bmf_write ( gc_ld2(5,0),'VV  ',Grd_ni,1,Grd_ni,
+     $                   halox,1,halox,lnk,k,k,0,0,0,0,41,0,cnt,wk4 )
+            cnt = 0
+            do j = Grd_nj-halox+1,Grd_nj
+            do i = 1, Grd_ni
+               cnt = cnt+1
+               wk3(cnt)= wk1(i,j)
+               wk4(cnt)= wk2(i,j)
+            end do
+            end do
+            call bmf_write ( gc_ld2(5,0)+1,'UU  ',Grd_ni,1,Grd_ni,
+     $                   halox,1,halox,lnk,k,k,0,0,0,0,41,0,cnt,wk3 )
+            call bmf_write ( gc_ld2(5,0)+1,'VV  ',Grd_ni,1,Grd_ni,
+     $                   halox,1,halox,lnk,k,k,0,0,0,0,41,0,cnt,wk4 )
+            cnt = 0
+            do j = halox,Grd_nj-halox+1
+            do i = 1, halox
+               cnt = cnt+1
+               wk3(cnt)= wk1(i,j)
+               wk4(cnt)= wk2(i,j)
+            end do
+            end do
+            call bmf_write ( gc_ld2(5,0)+2, 'UU  ', halox,1,halox, 
+     $                    Grd_nj-2*halox+2,1,Grd_nj-2*halox+2,lnk,k,k,
+     $                    0,0,0,0,41,0,cnt,wk3 )
+            call bmf_write ( gc_ld2(5,0)+2, 'VV  ', halox,1,halox, 
+     $                    Grd_nj-2*halox+2,1,Grd_nj-2*halox+2,lnk,k,k,
+     $                    0,0,0,0,41,0,cnt,wk4 )
+            cnt = 0
+            do j = halox,Grd_nj-halox+1
+            do i = Grd_ni-halox+1,Grd_ni
+               cnt = cnt+1
+               wk3(cnt)= wk1(i,j)
+               wk4(cnt)= wk2(i,j)
+            end do
+            end do
+            call bmf_write ( gc_ld2(5,0)+3, 'UU  ', halox,1,halox, 
+     $                    Grd_nj-2*halox+2,1,Grd_nj-2*halox+2,lnk,k,k,
+     $                       0,0,0,0,41,0,cnt,wk3 )
+            call bmf_write ( gc_ld2(5,0)+3, 'VV  ', halox,1,halox, 
+     $                    Grd_nj-2*halox+2,1,Grd_nj-2*halox+2,lnk,k,k,
+     $                       0,0,0,0,41,0,cnt,wk4 )
+*
+         endif
+*     
+ 110     continue
+*
+*----------------------------------------------------------------------
+      return
+      end
+      

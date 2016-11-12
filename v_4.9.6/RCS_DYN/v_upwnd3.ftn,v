@@ -1,0 +1,694 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r v_upwnd3 -- Upstream interpolation
+*
+      subroutine v_upwnd3  (fup, f, xd, yd, zd, fxx, fyy, fzz, 
+     $          lminx,lmaxx,lminy,lmaxy,lnk,iwest,jsouth,intp )
+      implicit none
+*
+      character*3 intp
+      integer lminx, lmaxx, lminy, lmaxy, lnk, iwest, jsouth
+      real    fup(lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        f  (lminx:lmaxx,lminy:lmaxy,lnk)
+      real*8  xd (lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        yd (lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        zd (lminx:lmaxx,lminy:lmaxy,lnk),
+     $        fxx(lminx:lmaxx,lminy:lmaxy,lnk),
+     $        fyy(lminx:lmaxx,lminy:lmaxy,lnk),
+     $        fzz(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+*AUTHORs    M. Desgagne & C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *               ANDRE ROBERT  SEMI-LAGRANGIAN SCHEME              *
+*    *                                                                 *
+*    *                          CALCULATES                             *
+*    *                                                                 *
+*    *                      upstream values fup                        *
+*    *                                                                 *
+*    *                           of field   f                          *
+*    *                                                                 *
+*    *          assuming rectilinear Lagrangian displacements          *
+*    *                                                                 *
+*    *                   equal to        xd, yd, zd                    *
+*    *                                                                 *
+*    *                  and taking into account grid types             *
+*    *                                                                 *
+*    *                 ( tri-cubic interpolation scheme )              *
+*    *                                                                 *
+*    *******************************************************************
+*
+*ARGUMENTS
+*     _________________________________________________________________
+*    |         |                                                 |     |
+*    |   NAME  | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |    fup  | field updated with upstream values of f         |  o  |
+*    |         |                                                 |     |
+*    |      f  | field that  is to be updated                    |  i  |
+*    |         |                                                 |     |
+*    |     xd  | lagrangian displacement along X                 |  i  |
+*    |     yd  | lagrangian displacement along Y                 |  i  |
+*    |     zd  | lagrangian displacement along Z                 |  i  |
+*    |         |                                                 |     |
+*    |  lminx  | starting index along X                          |  i  |
+*    |  lmaxx  | ending   index along X                          |  i  |
+*    |  lminy  | starting index along  Y                         |  i  |
+*    |  lmaxy  | ending   index along  Y                         |  i  |
+*    |    lnk  | size in direction      Z                        |  i  |
+*    |         |                                                 |     |
+*    |  iwest  | grid parameter along X                          |  i  |
+*    | jsouth  | grid parameter along  Y                         |  i  |
+*    |_________|_________________________________________________|_____|
+*
+*
+#include "nbcpu.cdk"
+#include "lcldim.cdk"
+#include "partopo.cdk"
+*
+      integer i, j, k, id, jd, iff, jf, un,
+     $       ix, jy, kz, ix1, jy1, kz1, ixd, jyd, kzd, kzm, kzp
+      real*8  capx, capy, capz, pt5, one, two, six, ov6, off,
+     $        c0, c1, c2, c3, c4, d0, d1, d2, d3, d4,
+     $        e0, e1, e2, e3, e4, f0, f1, f2, f3, g1, g2, g3,
+     $        fyy0, fyy1, fzz0, fzz1, fzz2, fzz3
+      parameter (pt5=0.5d0,one=1.0d0,two=2.0d0,six=6.0d0,ov6=one/six)
+*
+*----------------------------------------------------------------------
+*
+*  modified upwind point-range for fxx, fyy
+*
+      id   =   2 - hx
+      jd   =   2 - hy
+      iff  = ldni + (hx - 1) - east 
+      jf   = ldnj + (hy - 1) - north 
+*
+      un   = min( 1, lnk - 1 )
+*
+*----------------------------------------------------------------------
+      if (intp.eq."lin") then
+*----------------------------------------------------------------------
+*
+*     ***** tri-linear interpolation *****
+*
+*
+      do 10 k = 1, lnk
+         do j = 1+jsouth, ldnj-north
+*VDIR UNROLL=2
+         do i = 1+iwest, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k)
+            ix   = int(capx)
+            capx = capx - dble(ix)
+            ix   = ix - hx
+            ix1  = ix + 1
+*
+            capy = dble(j+hy) - yd(i,j,k)
+            jy   = int(capy)
+            capy = capy - dble(jy)
+            jy   = jy - hy
+            jy1  = jy + 1
+*
+            capz = dble(k) - zd(i,j,k)
+            kz   = int(capz)
+            capz = capz - dble(kz)
+            kz1  = kz + un
+*
+            c3 = capx
+            c1 = one - c3
+*
+            d3 = capy
+            d1 = one - d3
+*
+            e3 = capz
+            e1 = one - e3
+*
+*         Interpolate in grid cell (ix,jy,kz)
+
+            f0   = c1 * f(ix ,jy ,kz)  + c3 * f(ix1,jy ,kz)
+
+            f1   = c1 * f(ix ,jy1,kz)  + c3 * f(ix1,jy1,kz)
+
+            f2   = d1 * f0  + d3 * f1
+
+*         Interpolate in grid cell (ix,jy,kz1)
+
+            f0   = c1 * f(ix ,jy ,kz1)  + c3 * f(ix1,jy ,kz1)
+
+            f1   = c1 * f(ix ,jy1,kz1)  + c3 * f(ix1,jy1,kz1)
+
+            f3   = d1 * f0   + d3 * f1
+
+*         Interpolate between kz and kz1
+
+            fup(i,j,k) = e1 * f2  + e3 * f3
+
+         end do
+         end do
+*
+ 10   continue
+*
+      endif
+*
+*
+*----------------------------------------------------------------------
+      if (intp.eq."sqa") then
+*----------------------------------------------------------------------
+*
+*  ***** ultra-simplified two-dimensional quadratic/linear scheme *****
+*
+*
+      do 15 k = 1, lnk
+         do j = 1+jsouth, ldnj-north
+*VDIR UNROLL=2
+         do i = 1+iwest, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k) + pt5
+            ix   = int(capx)
+            capx = capx - dble(ix) - pt5
+            ix   = ix - hx
+*
+            jy = j
+*
+            capz = dble(k) - zd(i,j,k) + pt5
+            kz   = int(capz)
+            kzm=max(  1,kz-1)
+            kzp=min(lnk,kz+1)
+            capz = capz - dble(kz) - pt5
+*
+            c1 = - pt5 * capx * ( one - capx )
+            c2 = ( one - capx)* ( one + capx )
+            c3 = + pt5 * capx * ( one + capx )
+*
+            e1 = - pt5 * capz
+            e3 = + pt5 * capz
+*
+            fup(i,j,k)   = c1 * f(ix-1 ,jy   ,kz)
+     $                   + c2 * f(ix   ,jy   ,kz)
+     $                   + c3 * f(ix+1 ,jy   ,kz)
+     $                   + e1 * f(ix   ,jy   ,kzm)
+     $                   + e3 * f(ix   ,jy   ,kzp)
+*
+         end do
+         end do
+*
+ 15   continue
+*
+      endif
+*
+*
+*----------------------------------------------------------------------
+      if (intp.eq."qua") then
+*----------------------------------------------------------------------
+*
+*     ***** tri-quadratic interpolation *****
+*
+*
+      do 20 k = 1, lnk
+         do j = 1+jsouth, ldnj-north
+*VDIR UNROLL=2
+         do i = 1+iwest, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k) + pt5
+            ix   = int(capx)
+            capx = capx - dble(ix) - pt5
+            ix   = ix - hx
+*
+            capy = dble(j+hy) - yd(i,j,k) + pt5
+            jy   = int(capy)
+            capy = capy - dble(jy) - pt5
+            jy   = jy - hy
+*
+            capz = dble(k) - zd(i,j,k) + pt5
+            kz   = int(capz)
+            kzm=max(  1,kz-1)
+            kzp=min(lnk,kz+1)
+            capz = capz - dble(kz) - pt5
+*
+            c1 = - pt5 * capx * ( one - capx )
+            c2 = ( one - capx)* ( one + capx )
+            c3 = + pt5 * capx * ( one + capx )
+*
+            d1 = - pt5 * capy * ( one - capy )
+            d2 = ( one - capy)* ( one + capy )
+            d3 = + pt5 * capy * ( one + capy )
+*
+            e1 = - pt5 * capz * ( one - capz )
+            e2 = ( one - capz)* ( one + capz )
+            e3 = + pt5 * capz * ( one + capz )
+*
+*         Interpolate horizontally around grid point (ix,jy,kzm)
+*
+            f1   = c1 * f(ix-1 ,jy-1 ,kzm)
+     $           + c2 * f(ix   ,jy-1 ,kzm)
+     $           + c3 * f(ix+1 ,jy-1 ,kzm)
+
+            f2   = c1 * f(ix-1 ,jy   ,kzm)
+     $           + c2 * f(ix   ,jy   ,kzm)
+     $           + c3 * f(ix+1 ,jy   ,kzm)
+
+            f3   = c1 * f(ix-1 ,jy+1 ,kzm)
+     $           + c2 * f(ix   ,jy+1 ,kzm)
+     $           + c3 * f(ix+1 ,jy+1 ,kzm)
+
+            g1   = d1 * f1  + d2 * f2  + d3 * f3
+
+*
+*         Interpolate horizontally around grid point (ix,jy,kz)
+*
+            f1   = c1 * f(ix-1 ,jy-1 ,kz)
+     $           + c2 * f(ix   ,jy-1 ,kz)
+     $           + c3 * f(ix+1 ,jy-1 ,kz)
+
+            f2   = c1 * f(ix-1 ,jy   ,kz)
+     $           + c2 * f(ix   ,jy   ,kz)
+     $           + c3 * f(ix+1 ,jy   ,kz)
+
+            f3   = c1 * f(ix-1 ,jy+1 ,kz)
+     $           + c2 * f(ix   ,jy+1 ,kz)
+     $           + c3 * f(ix+1 ,jy+1 ,kz)
+
+            g2   = d1 * f1  + d2 * f2  + d3 * f3
+
+*
+*         Interpolate horizontally around grid point (ix,jy,kzp)
+*
+            f1   = c1 * f(ix-1 ,jy-1 ,kzp)
+     $           + c2 * f(ix   ,jy-1 ,kzp)
+     $           + c3 * f(ix+1 ,jy-1 ,kzp)
+
+            f2   = c1 * f(ix-1 ,jy   ,kzp)
+     $           + c2 * f(ix   ,jy   ,kzp)
+     $           + c3 * f(ix+1 ,jy   ,kzp)
+
+            f3   = c1 * f(ix-1 ,jy+1 ,kzp)
+     $           + c2 * f(ix   ,jy+1 ,kzp)
+     $           + c3 * f(ix+1 ,jy+1 ,kzp)
+
+            g3   = d1 * f1  + d2 * f2  + d3 * f3
+
+
+*         Interpolate vertically
+
+            fup(i,j,k) = e1 * g1  + e2 * g2  + e3 * g3
+
+         end do
+         end do
+*
+ 20   continue
+*
+      endif
+*
+*----------------------------------------------------------------------
+      if (intp.eq."cub") then
+*----------------------------------------------------------------------
+*
+*     ***** tri-cubic interpolation *****
+*
+*
+      off  = 0.0d0
+*
+cc code permitting off.eq.0.5 (symmetric cubic polynomial) is below
+cc      off  = 0.5d0
+*
+*----------------------------------------------------------------------
+*
+*     Compute fxx, fyy and fzz
+*
+!$omp do
+      do k=1,lnk
+         do j=jd+jsouth,jf
+         do i=id+iwest,iff
+            fxx(i,j,k) = dble(f(i+1,j,k))-two*dble(f(i  ,j  ,k))
+     $                                       +dble(f(i-1,j  ,k))
+            fyy(i,j,k) = dble(f(i,j+1,k))-two*dble(f(i  ,j  ,k))
+     $                                       +dble(f(i  ,j-1,k))
+         end do
+         end do
+         if ((k.eq.1).or.(k.gt.lnk-1)) then
+            do j=jd,jf
+            do i=id,iff
+               fzz(i,j,k) = 0.
+            end do
+            end do
+         else
+            do j=jd,jf
+            do i=id,iff
+               fzz(i,j,k) = dble(f(i,j,k+1))-two*dble(f(i,j,k  ))
+     $                                          +dble(f(i,j,k-1))
+            end do
+            end do
+         endif
+      end do
+!$omp enddo
+*
+*----------------------------------------------------------------------
+*
+!$omp do
+      do 30 k = 1, lnk
+         do j = 1+jsouth, ldnj-north
+*VDIR UNROLL=2
+         do i = 1+iwest, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k)
+            ix   = int(capx)
+            capx = capx - dble(ix)
+            ix   = ix - hx
+            ix1  = ix + 1
+*
+c traitement symetrique du signe du deplacement
+c            ixd  = nint(-xd(i,j,k))
+c            capx = -xd(i,j,k) - dble(ixd)
+c            ix   = i + ixd
+c            ix1  = ix + sign(one,capx)
+c            capx = abs(capx)
+ccccccccccccccccccccccccccccccccccccccccccccccc
+*
+            capy = dble(j+hy) - yd(i,j,k)
+            jy   = int(capy)
+            capy = capy - dble(jy)
+            jy   = jy - hy
+            jy1  = jy + 1
+*
+c traitement symetrique du signe du deplacement
+c            jyd  = nint(-yd(i,j,k))
+c            capy = -yd(i,j,k) - dble(jyd)
+c            jy   = j + jyd
+c            jy1  = jy + sign(one,capy)
+c            capy = abs(capy)
+ccccccccccccccccccccccccccccccccccccccccccccccc
+*       
+            capz = dble(k) - zd(i,j,k)
+            kz   = int(capz)
+            capz = capz - dble(kz)
+            kz1  = kz + un
+*
+cc code permitting off.eq.0.5
+cc            ixd  = int(xd(i,j,k))
+cc            ix1  = sign(one,xd(i,j,k))
+cc            capx =  abs(ixd-xd(i,j,k)) - off
+cc            ix   = i  - ixd
+cc            ix1  = ix - ix1
+cc*
+cc            jyd  = int(yd(i,j,k))
+cc            jy1  = sign(one,yd(i,j,k))
+cc            capy =  abs(jyd-yd(i,j,k)) - off
+cc            jy   = j  - jyd
+cc            jy1  = jy - jy1
+cc*
+cc            kzd  = int(zd(i,j,k))
+cc            kz1  = sign(one,zd(i,j,k))
+cc            capz =  abs(kzd-zd(i,j,k)) - off
+cc            kz   = k  - kzd
+cc            kz1  = kz - kz1
+*
+            c3 = off + capx
+            c1 = one - c3
+            c0 = - ov6 * c1 * c3
+            c2 = c0 * ( two - c3 )
+            c4 = c0 * ( one + c3 )
+*           
+            d3 = off + capy
+            d1 = one - d3
+            d0 = - ov6 * d1 * d3
+            d2 = d0 * ( two - d3 )
+            d4 = d0 * ( one + d3 )
+*           
+            e3 = off + capz
+            e1 = one - e3
+            e0 = - ov6 * e1 * e3
+            e2 = e0 * ( two - e3 )
+            e4 = e0 * ( one + e3 )
+*
+*         Interpolate in grid cell (ix,jy,kz)
+
+            f0   = c1 * f(ix ,jy ,kz)  + c2 * fxx(ix ,jy ,kz) +
+     $             c3 * f(ix1,jy ,kz)  + c4 * fxx(ix1,jy ,kz)
+
+            f1   = c1 * f(ix ,jy1,kz)  + c2 * fxx(ix ,jy1,kz) +
+     $             c3 * f(ix1,jy1,kz)  + c4 * fxx(ix1,jy1,kz)
+
+            fyy0 = fyy(ix,jy ,kz)
+     $             + c3 * ( fyy(ix1,jy ,kz) - fyy(ix,jy ,kz) )
+            fyy1 = c1 * fyy(ix,jy1,kz)   + c3 * fyy(ix1,jy1,kz)
+
+            fzz0 = fzz(ix,jy ,kz)
+     $             + c3 * ( fzz(ix1,jy ,kz) - fzz(ix,jy ,kz) )
+            fzz1 = c1 * fzz(ix,jy1,kz)   + c3 * fzz(ix1,jy1,kz)
+
+            f2   = d1 * f0  + d2 * fyy0 + d3 * f1 + d4 * fyy1
+            fzz2 = fzz0 + d3 * ( fzz1 - fzz0)
+
+*         Interpolate in grid cell (ix,jy,kz1)
+
+            f0   = c1 * f(ix ,jy ,kz1)  + c2 * fxx(ix ,jy ,kz1) +
+     $             c3 * f(ix1,jy ,kz1)  + c4 * fxx(ix1,jy ,kz1)
+
+            f1   = c1 * f(ix ,jy1,kz1)  + c2 * fxx(ix ,jy1,kz1) +
+     $             c3 * f(ix1,jy1,kz1)  + c4 * fxx(ix1,jy1,kz1)
+
+            fyy0 = fyy(ix,jy ,kz1) 
+     $             + c3 * ( fyy(ix1,jy ,kz1) - fyy(ix,jy ,kz1) )
+            fyy1 = c1 * fyy(ix,jy1,kz1) + c3 * fyy(ix1,jy1,kz1)
+
+            fzz0 = fzz(ix,jy ,kz1)
+     $             + c3 * ( fzz(ix1,jy ,kz1) - fzz(ix,jy ,kz1) )
+            fzz1 = c1 * fzz(ix,jy1,kz1) + c3 * fzz(ix1,jy1,kz1)
+
+            f3   = d1 * f0   + d2 * fyy0 + d3 * f1 + d4 * fyy1
+            fzz3 = fzz0 + d3 * ( fzz1 - fzz0 )
+*
+*         Interpolate between kz and kz1
+*
+            fup(i,j,k) = e1 * f2  + e2 * fzz2 + e3 * f3 + e4 * fzz3
+*
+         end do
+         end do
+*
+ 30   continue
+!$omp enddo
+*
+      endif
+*
+*
+*----------------------------------------------------------------------
+      if (intp.eq."bcu") then
+*----------------------------------------------------------------------
+*
+*     ***** pure horizontal bi-cubic interpolation *****
+*
+*----------------------------------------------------------------------
+*
+*     Compute fxx and fyy
+*
+!$omp do
+      do k=1,lnk
+         do j=jd+jsouth,jf
+         do i=id+iwest,iff
+            fxx(i,j,k) = dble(f(i+1,j,k))-two*dble(f(i  ,j  ,k))
+     $                                       +dble(f(i-1,j  ,k))
+            fyy(i,j,k) = dble(f(i,j+1,k))-two*dble(f(i  ,j  ,k))
+     $                                       +dble(f(i  ,j-1,k))
+         end do
+         end do
+      end do
+!$omp enddo
+*
+*----------------------------------------------------------------------
+*
+!$omp do
+      do 40 k = 1, lnk
+         do j = 1+jsouth, ldnj-north
+*VDIR UNROLL=2
+         do i = 1+iwest, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k)
+            ix   = int(capx)
+            capx = capx - dble(ix)
+            ix   = ix - hx
+            ix1  = ix + 1
+*
+            capy = dble(j+hy) - yd(i,j,k)
+            jy   = int(capy)
+            capy = capy - dble(jy)
+            jy   = jy - hy
+            jy1  = jy + 1
+*
+            c3 = capx
+            c1 = one - c3
+            c0 = - ov6 * c1 * c3
+            c2 = c0 * ( two - c3 )
+            c4 = c0 * ( one + c3 )
+*
+            d3 = capy
+            d1 = one - d3
+            d0 = - ov6 * d1 * d3
+            d2 = d0 * ( two - d3 )
+            d4 = d0 * ( one + d3 )
+*
+*         Interpolate in grid cell (ix,jy,k )
+*
+            f0   = c1 * f(ix ,jy ,k )  + c2 * fxx(ix ,jy ,k ) +
+     $             c3 * f(ix1,jy ,k )  + c4 * fxx(ix1,jy ,k )
+
+            f1   = c1 * f(ix ,jy1,k )  + c2 * fxx(ix ,jy1,k ) +
+     $             c3 * f(ix1,jy1,k )  + c4 * fxx(ix1,jy1,k )
+
+            fyy0 = fyy(ix,jy ,k )
+     $             + c3 * ( fyy(ix1,jy ,k ) - fyy(ix,jy ,k ) )
+            fyy1 = c1 * fyy(ix,jy1,k )   + c3 * fyy(ix1,jy1,k )
+
+            fup(i,j,k) = d1 * f0  + d2 * fyy0 + d3 * f1 + d4 * fyy1
+*
+         end do
+         end do
+*
+ 40   continue
+!$omp enddo
+*
+      endif
+*
+*----------------------------------------------------------------------
+      if (intp.eq."cuq") then
+*----------------------------------------------------------------------
+*
+*     ***** hor. bi-cubic/vert. quadratic interpolation *****
+*
+*----------------------------------------------------------------------
+*
+*     Compute fxx, fyy and fzz
+*
+      do k=1,lnk
+         do j=jd+jsouth,jf
+         do i=id+iwest,iff
+            fxx(i,j,k) = dble(f(i+1,j,k))-two*dble(f(i  ,j  ,k))
+     $                                       +dble(f(i-1,j  ,k))
+            fyy(i,j,k) = dble(f(i,j+1,k))-two*dble(f(i  ,j  ,k))
+     $                                       +dble(f(i  ,j-1,k))
+         end do
+         end do
+      end do
+*
+*----------------------------------------------------------------------
+*
+      do 35 k = 1, lnk
+         do j = 1+jsouth, ldnj-north
+*VDIR UNROLL=2
+         do i = 1+iwest, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k)
+            ix   = int(capx)
+            capx = capx - dble(ix)
+            ix   = ix - hx
+            ix1  = ix + 1
+*
+            capy = dble(j+hy) - yd(i,j,k)
+            jy   = int(capy)
+            capy = capy - dble(jy)
+            jy   = jy - hy
+            jy1  = jy + 1
+*
+            capz = dble(k) - zd(i,j,k) + pt5
+            kz   = int(capz)
+            kzm=max(  1,kz-1)
+            kzp=min(lnk,kz+1)
+            capz = capz - dble(kz) - pt5
+*
+            c3 = capx
+            c1 = one - c3
+            c0 = - ov6 * c1 * c3
+            c2 = c0 * ( two - c3 )
+            c4 = c0 * ( one + c3 )
+*           
+            d3 = capy
+            d1 = one - d3
+            d0 = - ov6 * d1 * d3
+            d2 = d0 * ( two - d3 )
+            d4 = d0 * ( one + d3 )
+*           
+            e1 = - pt5 * capz * ( one - capz )
+            e2 = ( one - capz)* ( one + capz )
+            e3 = + pt5 * capz * ( one + capz )
+*
+*         Interpolate in grid cell (ix,jy,kzm)
+
+            f0   = c1 * f(ix ,jy ,kzm)  + c2 * fxx(ix ,jy ,kzm) +
+     $             c3 * f(ix1,jy ,kzm)  + c4 * fxx(ix1,jy ,kzm)
+
+            f1   = c1 * f(ix ,jy1,kzm)  + c2 * fxx(ix ,jy1,kzm) +
+     $             c3 * f(ix1,jy1,kzm)  + c4 * fxx(ix1,jy1,kzm)
+
+            fyy0 = fyy(ix,jy ,kzm)
+     $             + c3 * ( fyy(ix1,jy ,kzm) - fyy(ix,jy ,kzm) )
+            fyy1 = c1 * fyy(ix,jy1,kzm)   + c3 * fyy(ix1,jy1,kzm)
+
+            g1   = d1 * f0  + d2 * fyy0 + d3 * f1 + d4 * fyy1
+
+*         Interpolate in grid cell (ix,jy,kz)
+
+            f0   = c1 * f(ix ,jy ,kz)  + c2 * fxx(ix ,jy ,kz) +
+     $             c3 * f(ix1,jy ,kz)  + c4 * fxx(ix1,jy ,kz)
+
+            f1   = c1 * f(ix ,jy1,kz)  + c2 * fxx(ix ,jy1,kz) +
+     $             c3 * f(ix1,jy1,kz)  + c4 * fxx(ix1,jy1,kz)
+
+            fyy0 = fyy(ix,jy ,kz)
+     $             + c3 * ( fyy(ix1,jy ,kz) - fyy(ix,jy ,kz) )
+            fyy1 = c1 * fyy(ix,jy1,kz)   + c3 * fyy(ix1,jy1,kz)
+
+            g2   = d1 * f0  + d2 * fyy0 + d3 * f1 + d4 * fyy1
+
+*         Interpolate in grid cell (ix,jy,kzp)
+
+            f0   = c1 * f(ix ,jy ,kzp)  + c2 * fxx(ix ,jy ,kzp) +
+     $             c3 * f(ix1,jy ,kzp)  + c4 * fxx(ix1,jy ,kzp)
+
+            f1   = c1 * f(ix ,jy1,kzp)  + c2 * fxx(ix ,jy1,kzp) +
+     $             c3 * f(ix1,jy1,kzp)  + c4 * fxx(ix1,jy1,kzp)
+
+            fyy0 = fyy(ix,jy ,kzp) 
+     $             + c3 * ( fyy(ix1,jy ,kzp) - fyy(ix,jy ,kzp) )
+            fyy1 = c1 * fyy(ix,jy1,kzp) + c3 * fyy(ix1,jy1,kzp)
+
+            g3   = d1 * f0   + d2 * fyy0 + d3 * f1 + d4 * fyy1
+
+*         Interpolate vertically
+
+            fup(i,j,k) = e1 * g1 + e2 * g2 + e3 * g3
+
+         end do
+         end do
+*
+ 35   continue
+*
+      endif
+*
+*-----------------------------------------------------------------------
+      return
+      end
+@

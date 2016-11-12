@@ -1,0 +1,90 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+#include "cdate.cdk"
+#include "grd.cdk"
+#include "filename.cdk"
+#include "lcldim.cdk"
+#include "levels.cdk"
+#include "nbcpu.cdk"
+#include "nestpnt.cdk"
+#include "nesting.cdk"
+#include "physcom.cdk"
+#include "rec.cdk"
+#include "solver.cdk"
+#include "tracers.cdk"
+#include "hinterpo.cdk"
+#include "vinterpo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "physnml.cdk"
+#include "sor.cdk"
+#include "semilag.cdk"
+#include "ms.cdk"
+*
+      namelist /grille/ Grd_ni,Grd_nj,Grd_iref,Grd_jref,
+     $                  Grd_latr,Grd_lonr,Grd_dx,
+     $                  Grd_dgrw,Grd_phir,Grd_proj_S,
+     $                  Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2
+*
+      namelist /pil_cfgs/ gnnt,grdt,gnnrstrt,Pil_runstrt_S,gnmtn,trpil,
+     $                ctebcs,Pil_nesdt,gnpilver,h_interp,
+     $                hblen_x,hblen_y,maxcfl,sfc_only
+      namelist /pil_cfgs_print/ gnnt,grdt,gnnrstrt,Pil_runstrt_S,gnmtn,
+     $                ctebcs,Pil_nesdt,gnpilver,h_interp,
+     $                hblen_x,hblen_y,maxcfl,sfc_only
+*
+      namelist /pe_topo/ npex,npey
+*
+      namelist /mc2_cfgs/gndtini,grninit,gndstat,gnpstat,gnstatdp,gnnls,
+     $        gnmaphy,gnnohyd,grepsi,grtf,vmh_stime,vmh_ndt,semi_lag,
+     $        hord_type,hord_del,hord_lnr,hord_nutop,hord_zspng,nosolv,
+     $        hord_fuv,hord_fww,hord_fhu,hord_ftt,hord_ftr,staguv,
+     $        tzero_star,ttop_star,ntrop_star,htrop_star,nstrat_star,
+     $        iscal,grpilver,gnpvw,nofcms,glcpld,gncpld,glconta,gnload,
+     $        hsolvpre,maxite,diagres,precond,nstepsor_d,launchsor,
+     $        period_x,period_y,Tsl_ic,Tsl_iter,theocase,
+     $        nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy,grtstar,
+     $        g_id,g_if,g_jd,g_jf,z_out,trig_rstrt,time2stop,tmg,
+     $        gnk,nktop,htop,gnnpbl,zt,v_interp,gnnt,gnnrstrt,
+     $        Grdc_ni,Grdc_nj,Grdc_iref,Grdc_jref,no_coriol,no_msf,
+     $        Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_ndt,Grdc_nsor,
+     $        Grdc_dgrw,Grdc_phir,Grdc_proj_S,Grdc_trnm_S,
+     $        Grdc_xlat1,Grdc_xlon1,Grdc_xlat2,Grdc_xlon2
+      namelist /mc2_cfgs_p/
+     $        gndtini,grninit,gndstat,gnpstat,gnstatdp,gnnls,
+     $        gnmaphy,gnnohyd,grepsi,grtf,vmh_stime,vmh_ndt,semi_lag,
+     $        hord_type,hord_del,hord_lnr,hord_nutop,hord_zspng,nosolv,
+     $        hord_fuv,hord_fww,hord_fhu,hord_ftt,hord_ftr,staguv,
+     $        tzero_star,ttop_star,ntrop_star,htrop_star,nstrat_star,
+     $        iscal,grpilver,gnpvw,nofcms,glcpld,gncpld,glconta,gnload,
+     $        hsolvpre,maxite,diagres,precond,nstepsor_d,launchsor,
+     $        period_x,period_y,Tsl_ic,Tsl_iter,theocase,
+     $        nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy,grtstar,
+     $        g_id,g_if,g_jd,g_jf,trig_rstrt,time2stop,tmg,
+     $        gnk,nktop,htop,gnnpbl,v_interp,gnnt,gnnrstrt,
+     $        Grdc_ni,Grdc_nj,Grdc_iref,Grdc_jref,no_coriol,no_msf,
+     $        Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_ndt,Grdc_nsor,
+     $        Grdc_dgrw,Grdc_phir,Grdc_proj_S,
+     $        Grdc_xlat1,Grdc_xlon1,Grdc_xlat2,Grdc_xlon2
+*
+      namelist /sor_cfgs/ gtetikt, levtyp_S, out_unit_S, fileout,
+     $                    pres_o , height_o, rndoseq, datyp   ,nbit,
+     $                    gnstep1, gnstep2 , udolist, v_interp,
+     $                    gnip3 ,  staguv, flipit, out_runt
+*
+      namelist /sor_cfgs_print/ gtetikt, out_unit_S,
+     $                    rndoseq ,datyp   ,nbit, out_runt,
+     $                    gnstep1, gnstep2, v_interp,
+     $                    gnip3,  staguv, flipit
+*
+      namelist /restart/ gnnrstrt,gndstat,gnpstat,gnnls,
+     $                   nstepsor_d,gnstatdp,trig_rstrt,time2stop,
+     $                   diagres,g_id,g_if,g_jd,g_jf,z_out,
+     $                   upolist,nstepsor_p,launchsor
+
+
+
+
+
+
+
+

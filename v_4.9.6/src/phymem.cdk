@@ -1,0 +1,73 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+* Folded space
+*
+      integer nf3d,nf2d,nf1d
+      parameter (nf3d = 20 , nf2d = 4 , nf1d = 3) 
+      real fu0,fv0,fsw0,ft0,fes0,fcl0,fum,fvm,ftm,fesm,fclm
+      pointer (pafu0,  fu0(*)), (pafv0,  fv0(*)), (pafsw0,fsw0(*)),
+     $        (paft0,  ft0(*)), (pafes0,fes0(*)), (pafcl0,fcl0(*)),
+     $        (pafum,  fum(*)), (pafvm, fvm(*)),  (paftm,  ftm(*)),
+     $        (pafesm, fesm(*)),(pafclm,fclm(*))
+*
+      real ttrad,tugwd,tvgwd,thudifv,ttdifv,tudifv,tvdifv,twdifv,
+     $     thucond,ttcond,cltend
+      pointer (pattrad  ,ttrad  (*)), (patugwd,  tugwd  (*)),
+     $        (patvgwd  ,tvgwd  (*)), (pathudifv,thudifv(*)),
+     $        (pattdifv ,ttdifv (*)), (patudifv ,tudifv (*)),
+     $        (patvdifv ,tvdifv (*)), (patwdifv ,twdifv (*)),
+     $        (pathucond,thucond(*)), (pattcond,ttcond  (*)), 
+     $        (pacltend , cltend(*))
+*
+      real prt,dez,sfcpsm,zun,ztn,area
+      pointer (paprt,prt(*)), (padez,dez(*)), (pasfcpsm,sfcpsm(*)), 
+     $        (pazun,zun(*)), (paztn,ztn(*)), (paarea,area(*))
+*
+      real wh,sigdez
+      pointer (pawh,wh(*)),(pasigdez,sigdez(*))
+*
+      real lebus
+      pointer (palebus, lebus(*))
+*
+*     Pointers to physics output bus
+      real phyobus,phyobusc
+      pointer (paphyobus, phyobus(*)), (paphyobusc, phyobusc(*))
+*
+      common /phymem1/ pafu0,pafv0,pafsw0,paft0,pafes0,pafcl0,
+     $                 pafum,pafvm,paftm,pafesm,pafclm,pawh,pasigdez,
+     $                 pattrad,patugwd,patvgwd,pathudifv,pattdifv,
+     $                 patudifv,patvdifv,patwdifv,pathucond,pattcond,
+     $                 pacltend,paprt,padez,pasfcpsm,pazun,paztn,
+     $                 paarea,palebus,paphyobus,paphyobusc
+*
+* Gridded space
+*
+      integer n3d
+      parameter (n3d = 4)
+      real aum,avm,w1,w2,msf,omsf
+      pointer (paaum ,aum (minx:maxx,miny:maxy,gnk)),
+     $        (paavm ,avm (minx:maxx,miny:maxy,gnk)),
+     $        (paw1  ,w1  (minx:maxx,miny:maxy,gnk)),
+     $        (paw2  ,w2  (minx:maxx,miny:maxy,gnk)),
+     $        (pamsf ,msf (minx:maxx,miny:maxy)),
+     $        (paomsf,omsf(minx:maxx,miny:maxy))
+*
+      common /phymem2/ paaum,paavm,paw1,paw2,pamsf,paomsf
+
+      real utdp1,vtdp1,ttdp1,hutdp1,swtdp1,cltdp1,
+     $     utdp2,vtdp2,ttdp2,hutdp2,swtdp2,cltdp2
+      pointer (pautp1  ,utdp1  (minx:maxx,miny:maxy,gnk)),
+     $        (pavtp1  ,vtdp1  (minx:maxx,miny:maxy,gnk)),
+     $        (pattp1  ,ttdp1  (minx:maxx,miny:maxy,gnk)),
+     $        (pahutp1 ,hutdp1 (minx:maxx,miny:maxy,gnk)),
+     $        (paswtp1 ,swtdp1 (minx:maxx,miny:maxy,gnk)),
+     $        (pacltp1 ,cltdp1 (minx:maxx,miny:maxy,gnk,*)),
+     $        (pautp2  ,utdp2  (minx:maxx,miny:maxy,gnk)),
+     $        (pavtp2  ,vtdp2  (minx:maxx,miny:maxy,gnk)),
+     $        (pattp2  ,ttdp2  (minx:maxx,miny:maxy,gnk)),
+     $        (pahutp2 ,hutdp2 (minx:maxx,miny:maxy,gnk)),
+     $        (paswtp2 ,swtdp2 (minx:maxx,miny:maxy,gnk)),
+     $        (pacltp2 ,cltdp2 (minx:maxx,miny:maxy,gnk,*))
+*
+      common /phymem3/ pautp1,pavtp1,pattp1,pahutp1,paswtp1,pacltp1,
+     $                 pautp2,pavtp2,pattp2,pahutp2,paswtp2,pacltp2

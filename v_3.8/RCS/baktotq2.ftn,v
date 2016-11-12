@@ -1,0 +1,211 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P BAKTOTQ2
+*
+#include "phy_macros_f.h"
+      SUBROUTINE BAKTOTQ2 (T, QV, QC, TM, S, PS, TIF, FICE,
+     1                    DT, DQV, DQC,
+     1                    TVE, QCBL, FNN, FN, ZN, ZE,
+     1                    TAU, N, M, NK)
+*
+*
+#include "impnone.cdk"
+*
+*
+      INTEGER N, M, NK
+      REAL TAU
+      REAL T(M,NK), QV(M,NK), QC(N,NK), TM(N,NK)
+      REAL S(N,NK), PS(N), TIF(N,NK), FICE(N,NK)
+      REAL DT(N,NK), DQV(N,NK), DQC(N,NK)
+      REAL TVE(N,NK), QCBL(N,NK)
+      REAL FNN(N,NK), FN(N,NK), ZN(N,NK), ZE(N,NK)
+*
+*Author
+*          J. Mailhot (Nov 2000)
+*
+*Revision
+* 001      A.-M. Leduc (Oct 2001) Automatic arrays
+* 002      B. Bilodeau and J. Mailhot (Dec 2001) Add a test to
+*                      check the presence of advected explicit cloud water.
+* 003      J. Mailhot (Nov 2000) Cleanup of routine
+* 004      J. Mailhot (Feb 2003) - MOISTKE option based on implicit clouds only
+
+*
+*Object
+*          Transform conservative variables and their tendencies
+*          back to non-conservative variables and tendencies.
+*          Calculate the boundary layer cloud properties (cloud fraction, cloud
+*          water content, flux enhancement factor).
+*
+*Arguments
+*
+*          - Input/Output -
+* T        thetal on input (temperature on output)
+* QV       qw (total water content = QV + QC) on input (specific humidity on output)
+*
+*          - Input -
+* QC       cloud water content
+* TM       temperature at current time 
+* S        sigma levels
+* PS       surface pressure (in Pa)
+* TIF      temperature to compute ice fraction
+* FICE     ice fraction
+*
+*          - Input/Output -
+* DT       thetal tendency on input (temperature tendency on output)
+* DQV      qw tendency on input (specific humidity tendency on output)
+*
+*          - Output -
+* DQC      cloud water content tendency
+*
+*          - Input -
+* TVE      virtual temperature on 'E' levels
+* QCBL     cloud water content of BL clouds (subgrid-scale)
+* FNN      flux enhancement factor (fN) * cloud fraction (N)
+*
+*          - Input/Output -
+* FN       constant C1 in second-order moment closure (on input)
+*          cloud fraction (on output)
+*
+*          - Input -
+* ZN       length scale for turbulent mixing (on 'E' levels)
+* ZE       length scale for turbulent dissipation (on 'E' levels)
+* TAU      timestep
+* N        horizontal dimension
+* M        first dimension of T and QV
+* NK       vertical dimension
+*
+*
+*Notes
+*          Retrieval of cloud water content is done by 
+*          a sub-grid-scale parameterization (implicit clouds)
+*
+*IMPLICITS
+*
+#include "consphy.cdk"
+*
+**
+*
+      INTEGER J, K
+*
+*
+**********************************************************
+*     AUTOMATIC ARRAYS
+**********************************************************
+*
+      AUTOMATIC ( EXNER   , REAL    , (N,NK)  )
+      AUTOMATIC ( THL     , REAL    , (N,NK)  )
+      AUTOMATIC ( QW      , REAL    , (N,NK)  )
+      AUTOMATIC ( A       , REAL    , (N,NK)  )
+      AUTOMATIC ( B       , REAL    , (N,NK)  )
+      AUTOMATIC ( C       , REAL    , (N,NK)  )
+      AUTOMATIC ( ALPHA   , REAL    , (N,NK)  )
+      AUTOMATIC ( BETA    , REAL    , (N,NK)  )
+      AUTOMATIC ( QCP     , REAL    , (N,NK)  )
+*
+**********************************************************
+*
+*
+* MODULES
+      EXTERNAL THERMCO2, CLSGS
+
+
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*
+*------------------------------------------------------------------------
+*
+*
+*       1. Retrieval of implicit cloud water content 
+*       --------------------------------------------
+*
+      DO K=1,NK
+      DO J=1,N
+        EXNER(J,K) = S(J,K)**CAPPA
+        THL(J,K) = T(J,K) + TAU*DT(J,K)
+        QW(J,K) = QV(J,K) + TAU*DQV(J,K)
+      END DO
+      END DO
+*
+      CALL THERMCO2 (T, QV, QC, S, PS, TIF, FICE, FNN,
+     1               THL, QW, A, B, C, ALPHA, BETA,
+     1               0, .FALSE., N, M, NK)
+*
+*                                              retrieve QC from QW and THL (put in QCP)
+      CALL CLSGS (THL, TVE, QW, QCP, FN, FNN, FN,
+     1            ZN, ZE, S, A, B, C, N, NK)
+*                 
+*
+*       2.     Back to non-conservative variables (T and QV) and tendencies
+*       -------------------------------------------------------------------
+*
+      DO K=1,NK
+      DO J=1,N
+*                                              back to T- and QV-
+        T(J,K) = TM(J,K)
+        QV(J,K) = QV(J,K) - MAX( 0.0 , QC(J,K) )
+*
+*                                              update QC and QCBL 
+        DQC(J,K) = ( MAX(0.0 , QCP(J,K)) - 
+     1               MAX(0.0 , QC(J,K)   ) )/TAU
+*                                              prevent negative values for new QCBL
+        DQC(J,K) = MAX( DQC(J,K) , -MAX( 0.0 ,QC(J,K) )/TAU )
+        QCBL(J,K) =  MAX( 0.0 , QC(J,K) ) + DQC(J,K) * TAU
+*                                              retrieve T, and QV tendencies
+*                                              (T and QV updates are made elsewhere)
+        DT(J,K) = EXNER(J,K)*DT(J,K) 
+     1            + ((CHLC+FICE(J,K)*CHLF)/CPD)*DQC(J,K)
+        DQV(J,K) = DQV(J,K) - DQC(J,K)
+*                                              prevent negative values for QV
+        DQV(J,K) = MAX( DQV(J,K) , -MAX( 0.0 ,QV(J,K) )/TAU )
+*                                              set cloud water content tendency to zero
+        DQC(J,K) = 0.0 
+*
+      END DO
+      END DO
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

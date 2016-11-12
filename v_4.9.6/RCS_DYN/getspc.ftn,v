@@ -1,0 +1,179 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+**s/r getspc
+*
+      subroutine getspc ( topo_h, datev )
+      implicit none
+*
+      character*16 datev
+      real topo_h(*)
+*
+**
+#include "filename.cdk"
+#include "grd.cdk"
+#include "cdate.cdk"
+#include "halo.cdk"
+#include "lcldim.cdk"
+#include "partopo.cdk"
+#include "rec.cdk"
+#include "hinterpo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+*
+      integer  s_rdhint,vrtstc,pilotf,longueur
+      external s_rdhint,vrtstc,pilotf,longueur
+*
+      character*2 typvar
+      character*3 nmr,nmc
+      character*8 etk,dum
+      character*50 filename_b
+      character*256 filename
+      integer nkfin
+      parameter (nkfin = 1000)
+      real pref(nkfin*3),topo_l(Grd_ni*Grd_nj*2)
+      integer i,j,k,n,nilvls,datestp,ip3,ip1,err_mx
+*
+*----------------------------------------------------------------------
+*
+      write (6,105) datev
+*
+      call datp2f (datestp,datev)
+      n = ipilf
+      filename = "process/pilot/"//pilot_f(n)(1:longueur(pilot_f(n)))
+      write (6,106) filename(1:longueur(filename))
+*
+      nilvls = vrtstc (pref,datestp,nkfin,un_pil)
+      if (nilvls.le.0) then
+         if (pilotf (datestp,'UU',' ',' ',-1,-1,-1).lt.0) then
+            write (6,1005) datev
+            stop
+         endif
+         nilvls = vrtstc (pref,datestp,nkfin,un_pil)
+      endif
+*
+      etk    = ' '
+      typvar = ' '
+      err_mx = -1
+*
+      if (gngalsig.eq.2) then
+         call convip (ip1,pref(1),  1  ,1,dum,.false.)
+         err_mx = s_rdhint (topo_l,xpx,ypx,Grd_ni,Grd_nj,'GZ',-1,
+     $            ip1,-1,-1,etk,typvar,.false.,h_interp,un_pil,6)
+         if (err_mx.ge.0) then
+            do i=1,Grd_ni*Grd_nj
+               topo_l(i) = topo_l(i) * 10.
+            end do
+            call dc_topo (topo_l,maxhh01_l,maxhh02_l,Grd_ni,Grd_nj )
+         endif
+      endif
+      if (gngalsig.eq.0) then
+         do i=1,Grd_ni*Grd_nj*2
+            topo_l(i) = topo_h(i)
+         end do
+         err_mx = 0
+      endif
+      if (gngalsig.eq.1) then
+         call convip (ip1,1.,3,1,dum,.false.)
+         err_mx = s_rdhint (topo_l,xpx,ypx,Grd_ni,Grd_nj,'MX',datestp,
+     $                 ip1,-1,-1,etk,typvar,.false.,h_interp,un_pil,6)
+         if (err_mx.ge.0) then
+            err_mx = -1
+            call convip (ip1,2.,3,1,dum,.false.)
+            err_mx = s_rdhint (topo_l(Grd_ni*Grd_nj+1),xpx,ypx,
+     $                      Grd_ni,Grd_nj,'MX',datestp,ip1,-1,-1,
+     $                      etk,typvar,.false.,h_interp,un_pil,6)
+         endif
+         maxhh01_l = 0
+         maxhh02_l = 0.
+         n = Grd_ni*Grd_nj
+         do i=1,n
+            maxhh01_l = max(maxhh01_l,topo_l(i)-topo_l(n+i))
+            maxhh02_l = max(maxhh02_l,topo_l(n+i))
+         end do
+      endif
+*     
+      do k=1,nilvls+1
+         pref(nilvls+k+1) = pref(nkfin+k)
+      end do
+      do k=1,nilvls+1
+         pref(2*(nilvls+1)+k) = pref(2*nkfin+k)
+      end do
+*
+      if (halo.le.0) then
+c         call bmf_splitinit (npex,npey,path,' ',date,hour,min,sec,
+c     $                                           num,numlen,' ')
+         do j=0,npey-1
+         do i=0,npex-1
+            n   = j*npex + i
+            write(nmr,100) j
+            write(nmc,100) i
+            filename_b='process/bm'//datev(1:15)//'_'//nmc//'_'//nmr
+            open (gc_ld2(5,n),file=filename_b,access='SEQUENTIAL',
+     $                                      form='UNFORMATTED')
+         end do
+         end do
+      else
+         filename_b='process/bm'//datev(1:15)//'_s'
+         open(gc_ld2(5,0),file=filename_b,access='SEQUENTIAL',
+     $                                  form='UNFORMATTED')
+         filename_b='process/bm'//datev(1:15)//'_n'
+         open(gc_ld2(5,0)+1,file=filename_b,access='SEQUENTIAL',
+     $                                    form='UNFORMATTED')
+         filename_b='process/bm'//datev(1:15)//'_w'
+         open(gc_ld2(5,0)+2,file=filename_b,access='SEQUENTIAL',
+     $                                    form='UNFORMATTED')
+         filename_b='process/bm'//datev(1:15)//'_e'
+         open(gc_ld2(5,0)+3,file=filename_b,access='SEQUENTIAL',
+     $                                    form='UNFORMATTED')
+      endif
+*
+      halox = -1
+      if (halo.gt.0) halox = halo + 1
+*
+      call wtopo (topo_l,topo_h,Grd_ni,Grd_nj,datev.eq.gcrunstrt)
+*
+      ip3 = -1
+      call doninip ( pref,nilvls,un_pil,datestp,ip3 )
+*
+      if (halo.le.0) then
+         do i=0,npex*npey-1
+            close (gc_ld2(5,i))
+         end do
+      else
+         close (gc_ld2(5,0)  )
+         close (gc_ld2(5,0)+1)
+         close (gc_ld2(5,0)+2)
+         close (gc_ld2(5,0)+3)
+      endif
+*
+*---------------------------------------------------------------------
+ 100  format (i3.3)
+ 105  format (/80('#'),/,1X,'PROCESSING DATASET VALID: ',a16/80('#'))
+ 106  format (/1X,'Trying file: ',a)
+ 1005 format (/' MISSING DATA VALID AT: 'a/,10x,'----- ABORT -----'/)
+      return
+      end
+*
+
+@

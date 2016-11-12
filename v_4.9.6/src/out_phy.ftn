@@ -1,0 +1,164 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_phy
+*
+      subroutine out_phy (outbus,outbusc,prt,lvls,fni,fnj,
+     $                         doni,donj,ni,nj,nkl,stepno)
+      implicit none
+*
+      integer fni,fnj,doni,donj,ni,nj,nkl,stepno
+      real outbus(*), outbusc(*), prt(fni*fnj,nkl), lvls(nkl)
+*
+*AUTHOR     Michel Desgagne                Nov   1995
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (dumphy3)
+*    Gather the index of physics variables to write on disk 
+*    for the current timestep.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*   outbus      I    R    A    physics output bus (complete)
+*   sizeobus    I    I    S    dimension of outbus
+*   prt         I    R    A    hydrostatic pressure on thermo. lvls
+*   lvls        I    R    A    thermodynamic levels
+*   fni         I    I    S    folded dimension along X
+*   fnj         I    I    S    folded dimension along Y
+*   doni        I    I    S    computational hor. dimension along X
+*   donj        I    I    S    computational hor. dimension along Y
+*   ni          I    I    S    regular dimension along X
+*   nj          I    I    S    regular dimension along Y
+*   nkl         I    I    S    vertical dimension
+*   stepno      I    I    S    step number
+*
+*IMPLICIT
+*
+#include "lesbus.cdk"
+#include "partopo.cdk"
+#include "sor.cdk"
+#include "lcldim.cdk"
+#include "physnml.cdk"
+#include "yomdyn.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+*
+*MODULES
+*
+**
+      character*6 ptstep
+      character*128 progfile
+      character*256 sormc2
+      integer i,ierr,cnt,unf,gthid,clostep,ncharf
+      integer g_ido,g_ifo,g_jdo,g_jfo
+      pointer (pagthid  ,  gthid(*))
+      data unf /84/
+      Logical isopen,boot
+      data isopen,boot,clostep /.false.,.true.,-1/
+      save isopen,clostep,progfile,ncharf,boot
+*----------------------------------------------------------------------
+*
+      if (Grdc_proj_S .ne. '@') call out_phyc 
+     $     ( outbusc,fni,fnj,doni,donj,ni,nj,stepno )
+*
+      if (out_runt) then
+         do i=1, nlevtyp
+            if (levtyp_S(i).ne.'@') then
+               levtyp = levtyp_S(i)
+               if (levtyp.eq.'G') out_kind=0
+               if (levtyp.eq.'P') out_kind=2
+               if (levtyp.eq.'H') out_kind=0
+               call out_phyr ( outbus,fni,fnj,doni,donj,ni,nj,stepno )
+            endif
+         end do
+         return
+      endif
+*      
+#if ! defined (T3E)
+      bprogfile = '../zmc2.prog_p'
+#else
+      bprogfile = 'zmc2.prog_p'
+#endif
+*
+      g_ido = min(gni,max(1,g_id))
+      g_ifo = min(gni,max(1,g_if))
+      g_jdo = min(gnj,max(1,g_jd))
+      g_jfo = min(gnj,max(1,g_jf))
+*
+      if (.not.isopen) then
+         clostep = min (endstepno,stepno+nstepsor_p-1)
+         if (boot) clostep = min (endstepno , clostep + 1)
+         if (myproc.eq.0) then
+            write(ptstep,'(I6.6)') clostep
+            ncharf   = index(bprogfile,' ') - 1
+            progfile = bprogfile(1:ncharf)//'_'//ptstep(1:6)
+            write (6,101) unf,progfile(1:ncharf+7)
+            open (unf,file=progfile,access='SEQUENTIAL',
+     $                               form='UNFORMATTED')
+            call wridrec (unf,g_ifo-g_ido+1,g_jfo-g_jdo+1,
+     $                    xpx(max(1,g_ido)+hx),ypx(max(1,g_jdo)+hy))
+         endif
+      endif
+      isopen=.true.
+*
+      if (phyotop.gt.0) then
+         call hpalloc (pagthid, phyotop, ierr,1)
+      else
+         pagthid=0
+      endif
+*
+      cnt = 0
+      do 10 i=1,phyotop
+         if ((stepno.eq.0).and.(phyopar(i,5).le.0)) then
+            cnt = cnt + 1
+            gthid(cnt) = i
+            goto 10
+         endif
+         if (phyopar(i,5).le.0) goto 10
+         if (mod(stepno,phyopar(i,5)).eq.0) then
+            cnt = cnt + 1
+            gthid(cnt) = i
+            goto 10
+         endif
+ 10   continue
+*
+      if (cnt.gt.0) then
+         if (myproc.eq.0) then
+         print'(/a,i4,a)', ' WRITING THE FOLLOWING ',cnt,
+     $                    ' PHYSICS VARIABLE(S) ON DISK:'
+         print*, (phyonm(gthid(i),2),i=1,cnt)
+         endif
+*
+         call wrphyo2 ( outbus,gthid,cnt,prt,lvls,fni,fnj,doni,donj,
+     $                                         ni,nj,nkl,stepno,unf )
+      endif
+*
+      if (phyotop.gt.0) then
+         call hpdeallc (pagthid   ,ierr,1)
+      endif
+*
+      boot=.false.
+*
+      if (stepno.eq.clostep) then
+         if (myproc.eq.0) then
+            close (unf)
+            write (6,102) unf,progfile(1:ncharf+7)
+            write(ptstep,'(I6.6)') clostep
+            sormc2='runsor -prog '//ptstep//' -phy'//
+     $      ' 1> sormc2_'//ptstep//'.pout 2> sormc2_'//ptstep//'.perr &'
+            if (launchsor) call system (sormc2)
+         endif
+         isopen=.false.
+      endif
+*
+ 101  format (' OPENING FORTRAN UNIT=',i3,' FILE = ',a)
+ 102  format (' CLOSING FORTRAN UNIT=',i3,' FILE = ',a)
+*----------------------------------------------------------------------
+      return
+      end
+
+

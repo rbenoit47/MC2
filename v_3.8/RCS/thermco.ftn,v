@@ -1,0 +1,187 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P THERMCO
+*
+#include "phy_macros_f.h"
+      SUBROUTINE THERMCO (T, QV, QC, S, PS, TIF,
+     1                    THL, QW, A, B, C, ALPHA, BETA,
+     1                    N, M, NK)
+*
+#include "impnone.cdk"
+*
+*
+      INTEGER N, M, NK
+      REAL T(M,NK), QV(M,NK), QC(N,NK)
+      REAL S(N,NK), PS(N), TIF(M,NK)
+      REAL THL(N,NK), QW(N,NK), A(N,NK), B(N,NK), C(N,NK)
+      REAL ALPHA(N,NK), BETA(N,NK)
+*
+*Author
+*          J. Mailhot (Nov 1999)
+*
+*Revision
+* 001      J. Mailhot  (Jan 2000) - Changes to add mixed-phase mode
+* 002      A.-M. Leduc (Oct 2001) Automatic arrays
+*
+*Object
+*          Calculate the thermodynamic coefficients used in the presence of clouds
+*          and the conservative variables.
+*
+*Arguments
+*
+*          - Input -
+* T        temperature 
+* QV       specific humidity
+* QC       total cloud water content
+* S        sigma levels
+* PS       surface pressure (in Pa)
+* TIF      temperature used to compute ice fraction
+*
+*          - Output -
+* THL      ice-liquid potential temperature (thetal)
+* QW       total water content (QW = QV + QC )
+* A        thermodynamic coefficient
+* B        thermodynamic coefficient
+* C        thermodynamic coefficient
+* ALPHA    thermodynamic coefficient
+* BETA     thermodynamic coefficient
+*
+*          - Input -
+* N        horizontal dimension
+* M        first dimension of T and QV
+* NK       vertical dimension
+*
+*
+*Notes
+*          See definitions in: 
+*          - Bechtold and Siebesma 1998, JAS 55, 888-895
+*
+*
+*IMPLICITS
+*
+#include "consphy.cdk"
+*
+**
+*
+      INTEGER J, K, ITOTAL
+*
+*
+*
+**********************************************************
+*     AUTOMATIC ARRAYS
+**********************************************************
+*
+      AUTOMATIC ( PRES    , REAL    , (N,NK)  )
+      AUTOMATIC ( EXNER   , REAL    , (N,NK)  )
+      AUTOMATIC ( QSAT    , REAL    , (N,NK)  )
+      AUTOMATIC ( DQSAT   , REAL    , (N,NK)  )
+      AUTOMATIC ( TH      , REAL    , (N,NK)  )
+      AUTOMATIC ( FICE    , REAL    , (N,NK)  )
+      AUTOMATIC ( TFICE   , REAL    , (N,NK)  )
+      AUTOMATIC ( DFICE   , REAL    , (N,NK)  )
+*
+**********************************************************
+*
+*
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*
+*MODULES
+      EXTERNAL FICEMXP
+*------------------------------------------------------------------------
+*
+*
+*
+*      1.     Preliminaries
+*      --------------------
+*
+*                                              ice fraction
+      CALL FICEMXP(FICE,TFICE,DFICE,TIF,N,M,NK)
+*
+      DO K=1,NK
+      DO J=1,N
+        PRES(J,K) = S(J,K)*PS(J)
+        EXNER(J,K) = S(J,K)**CAPPA
+        TH(J,K) = T(J,K)/EXNER(J,K)
+        THL(J,K) = TH(J,K)*( 1.0 - ((CHLC+FICE(J,K)*CHLF)/CPD)
+     1                      *( QC(J,K)/T(J,K) ) )
+        QW(J,K) = QV(J,K)+QC(J,K)
+*                                              (A contains TL temporarily)
+        A(J,K) = EXNER(J,K)*THL(J,K)
+      END DO
+      END DO
+*
+*
+      DO K=1,NK
+      DO J=1,N
+*                                              saturation specific humidity
+        QSAT(J,K) = FQSMX( A(J,K), PRES(J,K), TFICE(J,K) )
+*                                             D QSAT / DT
+        C(J,K) = FDLESMX( A(J,K), TFICE(J,K), DFICE(J,K) )
+        DQSAT(J,K) = FDQSMX( QSAT(J,K), C(J,K) )
+      END DO
+      END DO
+*
+*
+*
+*
+*       2.     Thermodynamic coefficients
+*       ---------------------------------
+*                                              (cf. BS 1998 Appendix A)
+      DO K=1,NK
+      DO J=1,N
+        A(J,K) = 1.0/( 1.0 + ((CHLC+FICE(J,K)*CHLF)/CPD)*DQSAT(J,K) )
+        B(J,K) = A(J,K)*EXNER(J,K)*DQSAT(J,K)
+        C(J,K) = A(J,K)*( QW(J,K)-QSAT(J,K) )
+        ALPHA(J,K) = DELTA*TH(J,K)
+        BETA(J,K) = ((CHLC+FICE(J,K)*CHLF)/CPD)/EXNER(J,K) 
+     1              - (1.0+DELTA)*TH(J,K)
+      END DO
+      END DO
+*
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

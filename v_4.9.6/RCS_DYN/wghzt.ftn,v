@@ -1,0 +1,67 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wghzt
+*
+      subroutine wghzt (wh, ht, nk)
+      implicit none
+*
+      integer nk
+      real wh(nk), ht(nk)
+*
+*AUTHOR     Michel Desgagne                June     1993
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (wghzt)
+*     Compute nk-1 weights for vertical interpolation from
+*     momentum to thermodynamic levels.
+*
+*FILES
+*
+*ARGUMENTS
+*
+*IMPLICIT
+#include "yomdyn1.cdk"
+*
+*MODULES
+*
+**
+      integer k
+*
+*----------------------------------------------------------------------
+*
+      do 1 k=1,nk-2
+         wh(k) = (ht(k+2) - ht(k+1)) / (ht(k+2) - ht(k))
+ 1    continue
+*
+      k=nk-1
+      wh(k) = (htop - ht(k+1)) / (htop - ht(k))
+*
+*----------------------------------------------------------------------
+*
+      return
+      end
+@

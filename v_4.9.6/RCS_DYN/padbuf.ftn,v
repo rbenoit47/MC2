@@ -1,0 +1,58 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine padbuf (f,lminx,lmaxx,lminy,lmaxy,lnk)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk
+      character*1 grid
+      real f(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+#include "lcldim.cdk"
+      integer i,j,k,iff,id,jd,jf
+*----------------------------------------------------------------------
+      id   = 1    - hx
+      jd   = 1    - hy
+      iff  = ldni + hx 
+      jf   = ldnj + hy
+*
+      do k=1,lnk
+      do j=jf+1,maxy
+      do i=id,iff
+         f(i,j,k) = f(i,jf,k)
+      end do
+      end do
+      end do
+*
+      do k=1,lnk
+      do i=iff+1,maxx
+      do j=jd,maxy
+         f(i,j,k) = f(iff,j,k)
+      end do
+      end do
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

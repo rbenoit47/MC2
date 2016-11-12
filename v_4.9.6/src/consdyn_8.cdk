@@ -1,0 +1,20 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+*     Common contenant les constantes communes cmc-rpn lues sur
+*     le fichier 'constantes'. (on utilise le systeme 's.i.')
+*
+      real*8 cpd_8   , cpv_8 , rgasd_8 , rgasv_8 , trpl_8 , tcdk_8 , 
+     $       rauw_8  , eps1_8, eps2_8  , delta_8 , cappa_8, tgl_8  , 
+     $       consol_8, grav_8, rayt_8  , stefan_8, pi_8   , omega_8, 
+     $       knams_8 , stlo_8, karman_8, ric_8   , chlc_8 , chlf_8 , 
+     $       t1s_8   , t2s_8 , aw_8    , bw_8    , ai_8   , bi2_8  , 
+     $       slp_8
+*
+      common/ctesdyn_8/
+     $       cpd_8   , cpv_8 , rgasd_8 , rgasv_8 , trpl_8 , tcdk_8 , 
+     $       rauw_8  , eps1_8, eps2_8  , delta_8 , cappa_8, tgl_8  , 
+     $       consol_8, grav_8, rayt_8  , stefan_8, pi_8   , omega_8, 
+     $       knams_8 , stlo_8, karman_8, ric_8   , chlc_8 , chlf_8 , 
+     $       t1s_8   , t2s_8 , aw_8    , bw_8    , ai_8   , bi2_8  , 
+     $       slp_8
+*

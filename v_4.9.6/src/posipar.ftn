@@ -1,0 +1,116 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r posipar
+*     
+      subroutine posipar
+      implicit none
+*     
+**
+#include "consdyn_8.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+*
+      character*1 grdtyp
+      integer ier,ni1,nj1,i,j,g1,g2,g3,g4,ezgdef_fmem,ezsetopt
+      real xr,yr
+      real*8 dayfrac,d2r,c1,c2,c3,d60,xpos,ypos,a1,a2,a3,a4,a5
+      parameter (a1=2000.0d0 , a2=1000.0d0, a3=180.0d0, 
+     $           a4=2.0d0, a5=90.0d0)
+*
+*---------------------------------------------------------------------
+*
+c      ier = ezsetopt('VERBOSE', 'YES')
+*
+      ni1 = Grd_ni 
+      nj1 = Grd_nj
+*
+      call hpalloc  (paxpx  , ni1   ,ier,1)
+      call hpalloc  (paypx  , nj1   ,ier,1)
+      call hpalloc  (paxpq  ,(ni1-1),ier,1)
+      call hpalloc  (paypq  ,(nj1-1),ier,1)
+*      
+*     *** Positional parameters for f and q points
+*
+      d2r = dble(pi_8) / a3
+      d60 = dble(Grd_dx)
+*
+      grdtyp=' '  !  to trap invalid cases
+*      
+      if (Grd_proj_S.eq.'P') then ! Polar stereographic projection
+*
+         grdtyp = 'N'
+         call xyfll (xr,yr,Grd_latr,Grd_lonr,Grd_dx,Grd_dgrw,1)
+         xref  = (dble(xr)-dble(Grd_iref-1)) * d60 / a2
+         yref  = (dble(yr)-dble(Grd_jref-1)) * d60 / a2
+         xpos  = xref
+         ypos  = yref
+         call xpyp_n ( xpx, ypx, xpos, ypos, 0,0,d60,ni1,nj1)
+         xpos  = xref + d60/a2
+         ypos  = yref + d60/a2
+         call xpyp_n ( xpq, ypq, xpos, ypos, 0,0,d60,ni1-1,nj1-1)
+         call cxgaig (grdtyp,g1,g2,g3,g4,0.,0.,1000.,Grd_dgrw)
+*
+      endif
+*     
+      if (Grd_proj_S.eq.'M') then ! Mercator projection
+*     
+         grdtyp = 'E'
+         c2 = dble(rayt_8)/a2*cos(dble(Grd_phir)*d2r)*d2r
+         c1 = d60/a2/c2
+         c2 = a4 / d2r
+         c3 = c1 * d2r 
+         xref = dble(Grd_lonr) + (dble(1-Grd_iref)) * c1
+         yref = c2*atan(tan(dble(Grd_latr+90.)/c2)*exp(c3*
+     $          (dble(1-Grd_jref)) ))-a5
+         xpos  = xref
+         ypos  = yref
+         call xpyp_m (xpx,ypx,xpos,ypos,0,0,c1,ni1,nj1)
+         xpos = dble(Grd_lonr) + (dble(2-Grd_iref)) * c1
+         ypos = c2*atan(tan(dble(Grd_latr+90.)/c2)*exp(c3*
+     $          (dble(2-Grd_jref)) ))-a5
+         call xpyp_m (xpq,ypq,xpos,ypos,0,0,c1,ni1-1,nj1-1)
+         call cxgaig (grdtyp,g1,g2,g3,g4,Grd_xlat1,Grd_xlon1,
+     $                                   Grd_xlat2,Grd_xlon2)
+*
+      endif
+*
+      if (Grd_proj_S.eq.'L') then ! Spherical
+*     
+         grdtyp = 'E'
+         c1   = Grd_dx    ! directly in degree lat-lon
+         xref = dble(Grd_lonr) + (dble(1-Grd_iref)) * c1
+         yref = dble(Grd_latr) + (dble(1-Grd_jref)) * c1
+         xpos  = xref
+         ypos  = yref
+         call xpyp_l (xpx,ypx,xpos,ypos,0,0,c1,ni1,nj1)
+         xpos = dble(Grd_lonr) + (dble(2-Grd_iref)) * c1
+         ypos = dble(Grd_latr) + (dble(2-Grd_jref)) * c1
+         call xpyp_l (xpq,ypq,xpos,ypos,0,0,c1,ni1-1,nj1-1)
+         call cxgaig (grdtyp,g1,g2,g3,g4,Grd_xlat1,Grd_xlon1,
+     $                                   Grd_xlat2,Grd_xlon2)
+*
+      endif
+*
+      if (grdtyp.eq.' ') then
+         print *, 'S/R POSIPAR.  IMPROPER GRID TYPE. Grd_proj = ',
+     $        Grd_proj_S
+         stop
+      endif
+*
+      Grd_id = ezgdef_fmem (ni1,nj1,'Z',grdtyp,g1,g2,g3,g4,xpx,ypx)
+*
+ 375  format (/1x,'ABORT -- ABORT ===> NARCH = 0'/)
+ 830  format (/1x,"PROBLEM IN ROUTINE ""IDFST"""/
+     $         1x,"POSITIONAL RECORDS MISSING"/)
+ 850  format (/1x,"PROBLEM IN ROUTINE ""IDFST"""/
+     $         1x,"GRID TYPE NOT SUPPORTED"/)
+*--------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+

@@ -1,0 +1,18 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*     p a r t o p o . h
+*
+*     Logical parallel processor topology 
+*
+*     myproc        : processor number 1..nproc
+*     myrow         : 0..nprow-1
+*     mycol         : 0..npcol-1
+*     numproc       : nprow * npcol
+*
+      integer myproc, myrow, mycol, numproc,
+     $        gc_ld, gc_ld2, endtopo
+      logical north_L, east_L, south_L, west_L
+      pointer (pagcl , gc_ld  (4,0:*)),(pagcl2 , gc_ld2  (5,0:*))
+      common  / partopo /
+     $        myproc, myrow, mycol, numproc,
+     $        north_L, east_L, south_L, west_L, pagcl, pagcl2, endtopo
+

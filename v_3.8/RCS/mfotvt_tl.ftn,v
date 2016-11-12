@@ -1,0 +1,79 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R MFOTVT_TL
+*
+      SUBROUTINE MFOTVT_TL(TV,TT,QQ,TT5,QQ5,NI,NK,N)
+*
+#include "impnone.cdk"
+      INTEGER NI, NK, N
+      REAL TV(NI,NK), TT(NI,NK), QQ(NI,NK), TT5(NI,NK), QQ5(NI,NK)
+*
+*Author
+*          A. Zadra  (May 2002)
+*
+*Object
+*          Tangent linear of MFOTVT
+*
+*IMPLICITES
+#include "consphy.cdk"
+*MODULES
+      EXTERNAL INCTPHY
+*
+**
+*--------------------------------------------------------------------
+      INTEGER K, I
+#include "dintern.cdk"
+#include "fintern.cdk"
+*--------------------------------------------------------------------
+#include "initcph.cdk"
+*
+      DO K=1,NK
+        DO I=1,N
+         TV(I,K) = DBLE(TT(I,K)) * (1.0D0 + DBLE(DELTA)*DBLE(QQ5(I,K)))
+     +           + DBLE(TT5(I,K))* DBLE(DELTA)*DBLE(QQ(I,K))   
+        ENDDO
+      ENDDO
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

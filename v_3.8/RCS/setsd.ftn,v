@@ -1,0 +1,85 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  SETsd
+*
+      SUBROUTINE SETsd(SD,S,n,NK)
+*
+#include "impnone.cdk"
+      INTEGER n,NK
+      REAL SD(n,NK),S(n,NK)
+*
+*Author
+*          R Benoit (Aug 93) - based on s/r setef
+*
+*
+*Object
+*          to prepare the sd array (see setef)
+*
+*Arguments
+*
+*          - Output -
+* SD       sigma intervals
+*
+*          - Input -
+* S        sigma levels
+* N        horizontal dimension
+* NK       vertical dimension
+*
+*
+*MODULES
+*
+*
+**
+*
+      INTEGER K,j
+*
+      DO 1 K=1,NK-1
+         do 1 j=1,n
+    1    SD(j,K)=S(j,K+1)-S(j,K)
+      do 2 j=1,n
+      SD(j,NK)=0.
+ 2    continue
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

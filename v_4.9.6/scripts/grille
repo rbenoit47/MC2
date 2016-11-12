@@ -1,0 +1,177 @@
+#!/bin/ksh -x
+#
+if [ ! ${MODEL} -o ! ${MODEL_VERSION} ] ; then
+  echo "\n Model environment not set properly --- ABORT ---\n" ; exit 1
+fi
+#
+eval `cclargs $0 \
+       -iref     "0"     "0"     "[i index of reference point]"\
+       -jref     "0"     "0"     "[j index of reference point]"\
+       -latr     "=-100" "=-100" "[true reference latitude]"\
+       -lonr     "=-400" "=-400" "[true reference longitude]"\
+       -outf     "tape1" "tape1" "[Output file name]"\
+       -genesis  "0"     "1"     "[Produce geophysical fields with genesis 1.3.0]"\
+       -old_genesis  "0" "1"     "[Produce geophysical fields with older genesis]"\
+       -gengeo   "0"     "1"     "[Produce geophysical fields with gengeo]"\
+       -filtlc   "2"     "3"     "[# deltax for horizontal filtering of ME]"\
+       -nijmax   "300"   "500"   "[ff]"\
+       -xrec     "0"     "1"     "[Visualize grid with xrec]"\
+  ++ $*`
+#
+if [ ${old_genesis} -gt 0 ] ;then
+  GENGRID=model_grid
+  export EDITFST=editfst
+  export PGSM=pgsm
+  export BIGB=bigb.scr
+  export RUGO=rugos.scr
+else
+  GENGRID=model_grid2000
+  export EDITFST=editfst2000
+  export PGSM=pgsm2000
+  export BIGB=bigb_1.3.0
+  export RUGO=rugos_1.3.0
+fi
+
+#================== Model dependent variables ================
+settingsfile="gem_settings.nml"
+typeline="Grd_typ_S= 'LU', Grd_roule=.true."
+namelistname="&grid"
+if [ "x$MODEL" = "xmc2" ]
+then
+    settingsfile="mc2_settings.nml"
+    typeline=" "
+    namelistname="&grille"
+fi
+
+#
+#================== Set Grid Parameters ================
+if [ ! -s $settingsfile ] ; then
+    cat > $settingsfile <<EOF
+ $namelistname
+  $typeline
+  Grd_ni  = 101 , Grd_nj  = 101
+  Grd_iref= 50 , Grd_jref= 50
+  Grd_latr= 46. , Grd_lonr= 91.
+  Grd_dx= .1,
+  Grd_proj_S= 'L' , Grd_phir= 22.5 , Grd_dgrw= 260.
+  Grd_xlat1= 0.,  Grd_xlon1=100.,Grd_xlat2= 0., Grd_xlon2=  190.
+ /
+EOF
+
+    cat <<EOF
+  ==================================================
+  PLEASE SET GRID PARAMETERS IN $settingsfile
+  and rerun script "grille" again.
+  ==================================================
+EOF
+exit 0
+else
+    cat <<EOF
+  ============================================================
+  GRID PARAMETERS READ FROM $settingsfile (namelist $namelistname)
+  ============================================================
+EOF
+fi
+
+#================== Unify settings file  ================
+cp model_settings.cfg model_settings.cfg_bk$$ 2>/dev/null
+
+if [ "x$MODEL" = "xmc2" ]
+then
+
+    cat > dir.dir$$ <<__EOF
+s/\&grille/\&grid/
+s/[gG]rd_proj_S/Grd_typ_S=\"LU\",Grd_proj_S/
+__EOF
+
+else
+
+    cat > dir.dir$$ <<__EOF
+s/, *[gG]rd_roule *= *.true.//
+s/[gG]rd_roule *= *.true. *,//
+s/[gG]rd_roule *= *.true. *//
+s/, *[gG]rd_roule *= *.false.//
+s/[gG]rd_roule *= *.false. *,//
+s/[gG]rd_roule *= *.false. *//
+__EOF
+
+fi
+
+cat dir.dir$$
+
+cat $settingsfile | sed -f dir.dir$$  > model_settings.cfg
+/bin/rm -f dir.dir$$
+
+#================== Produce Grid Pos Rec ================
+/bin/rm -f tape1 true_posi $outf 2> /dev/null
+if [ $iref -gt 0 -a $jref -gt 0 -a $latr -gt -100 -a $lonr -gt -400 ] ; then
+  cat > true_posi <<EOF
+$iref $jref $latr $lonr
+EOF
+fi
+#
+$GENGRID
+/bin/rm -f true_posi
+#
+if [ X"$outf" != X"tape1" ] ; then
+  mv tape1 $outf
+fi
+
+/bin/rm -f model_settings.cfg
+mv model_settings.cfg_bk$$ model_settings.cfg 2>/dev/null
+
+#================== Visualise the grid ================
+if [ $xrec -eq 1 -a -s $outf ] ; then
+#
+  r.fstliste -izfst $outf -nomvar ">>" | sed 's/\://g' > liste
+  export ip1=`cat liste | awk '{print $3}'`
+  export ip2=`cat liste | awk '{print $4}'`
+  export ip3=`cat liste | awk '{print $5}'`
+  /bin/rm -f liste
+#
+  cat > p1.dir <<pgsm100
+ sortie (std,1000)
+ compac=-24
+ grille (tape2,$ip1,$ip2,$ip3)
+*
+ heure(0)
+ outlalo(-1,-1,-1)
+*
+ setintx(cubique)
+ champ('ME')
+end
+pgsm100
+#
+  cp $outf tmp$$
+  $PGSM -iment /users/dor/armn/mid/data3/clim/glbclim -ozsrt tmp$$ -i p1.dir
+  /bin/rm -f p1.dir
+#
+  xrec5 -imflds tmp$$ ; /bin/rm -f tmp$$
+  genesis=0
+  gengeo=0
+#
+fi
+#
+if [ $genesis -gt 0 ] ; then
+  date
+  genesis.scr -filtlc $filtlc
+  date
+fi
+#
+#if [ $gengeo -gt 0 ] ; then
+#  mach=meso
+#  rep_install=/data/local5/armn/armnsch/gengeo
+#  repw=/tmp/gengeo$$
+#
+#  rsh $mach "mkdir $repw" ; rcp tape1 $mach:$repw
+#  cat << eof | rsh $mach /usr/local/env/-ksh
+#  cd $repw
+#  export PATH=\$PATH:${rep_install}/bin/Linux:${rep_install}/scripts
+#  gengeo.ksh -tape1 tape1 -filtlc $filtlc -nijmax $nijmax
+#eof
+#  rcp $mach:$repw/gengeoout.fst ./ ; rsh $mach "/bin/rm -rf $repw"
+#fi
+if [ $gengeo -gt 0 ] ; then
+   gengeo.ksh -tape1 tape1 -filtlc $filtlc -nijmax $nijmax
+fi
+

@@ -1,0 +1,273 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P CLIMPHS2
+#include "phy_macros_f.h"
+      SUBROUTINE CLIMPHS2(F,FSIZ,KOUNT,NI)
+*
+#include "impnone.cdk"
+*
+      INTEGER FSIZ,NI,KOUNT
+      REAL F(FSIZ)
+*
+*Author
+*         G.Pellerin (sep 1996) - Based on physlc from SEF
+*Revision   
+* 001     B. Dugas (sep 95)   - Remove comdeck solcap
+* 002     J. Mailhot (Feb 99) - Changes for new SURFACE interface
+* 003     B. Dugas (Sep 2000) - Adaptation to v3.66 physics
+*
+**
+*Object
+*         Apply the climate increments to the geophysical fields
+*         stored in the permanent bus. Called at the start of phyexe.
+*
+*Arguments
+*         - Input/Output -
+* F       Permanent bus
+*
+*         - Input -
+* FSIZ    Dimension of F
+* KOUNT   Current timestep number
+* NI      Horizontal dimension
+*
+*Notes
+* Geophysical fields that are always modified
+* SNODP       Snow depht over glaciers (indx_glacier)
+* TGLACIER(2) Bottom glacier temperature
+* TWATER      Sea surface temperature
+*
+* Geophysical fields that are only modified
+* if ICEMELT is false
+* GLSEA       Sea ice fraction
+* ICEDP       Sea ice depht
+* SNODP       Snow depht over sea-ice (indx_ice)
+*
+* Geophysical fields that are only modified
+* if the land surface scheme is Force-Restore
+* ALVIS       Soil albedo
+* SNODP       Snow depht over soil (indx_soil)
+* TSOIL   (2) Temperature of deep soil layer
+* WSOIL   (1) Superficial soil moisture
+*
+#include "consphy.cdk"
+#include "options.cdk"
+#include "indx_sfc.cdk"
+#include "phybus.cdk"
+#include "surfacepar.cdk"
+*
+*MODULES
+*
+      INTEGER I
+      REAL    PPJOUR,DeltaNE
+      REAL    MASK
+*
+      INTEGER iceI, glacierI, soilI
+*
+      AUTOMATIC ( POIDS , REAL , (0:NI-1,4) )
+*
+      EXTERNAL CLEFGET, INIVEG, CALCALB1, COHERENCE
+*---------------------------------------------------------------- 
+*
+      PPJOUR   = 86400./delt
+*
+      iceI     = (indx_ice    -1)*NI-1
+      glacierI = (indx_glacier-1)*NI-1
+      soilI    = (indx_soil   -1)*NI-1
+*
+*VDIR NODEP
+      DO I=0,NI-1
+*
+         iceI     =     iceI +1
+         glacierI = glacierI +1
+         soilI    =    soilI +1
+*
+         DeltaNE  = F(INCRNE + I ) * PPJOUR
+*
+**       calculate the different surface weights
+*
+         MASK = F(MG+I)
+         IF      (MASK.GT.(1.-CRITMASK)) THEN
+            MASK     = 1.0
+            F(ML +I) = 0.0
+         ELSE IF (MASK.LT.    CRITMASK ) THEN
+            MASK     = 0.0
+         ENDIF
+*
+**       update the sea and lake ice mask, which is defined everywhere
+*
+         F(GLSEA0 + I )         = F(GLSEA0 + I )
+     +                          + F(INCRGL + I ) * PPJOUR
+*
+         F(GLSEA  + I )         = MIN( 1.0, MAX( 0.0, F(GLSEA0 + I ) ) )
+*
+**       account for the critmask threshold for the ice mask;
+**       distinguish between increasing and receeding cases
+*
+         IF ( F(INCRGL + I ) * PPJOUR * 30. .GE. CRITMASK
+     +  .AND. F(GLSEA  + I )                .GT. 0.0 ) THEN
+              F(GLSEA  + I )    = MAX(
+     +                            F(GLSEA  + I ) , CRITMASK )
+         ELSE IF (F(GLSEA  + I ) .LT. CRITMASK) THEN
+              F(GLSEA  + I )    = 0.0
+         ENDIF
+*
+         POIDS (I,indx_ice    ) = (1.-MASK) *     F(GLSEA   +I)
+*
+**       open water (including lakes)
+         POIDS (I,indx_water  ) = (1.-MASK) * (1.-F(GLSEA   +I))
+*
+**       continental glaciers
+         POIDS (I,indx_glacier) =     MASK  *     F(GLACIER +I)
+*
+**       soil
+         POIDS (I,indx_soil   ) =     MASK  * (1.-F(GLACIER+I))
+*
+         IF (.NOT.agregat) THEN
+*
+            IF      (F(MG     +I).GE.0.5  .AND.
+     +               F(GLACIER+I).LT.0.5) THEN
+*
+               POIDS (I,indx_soil   ) = 1.0
+               POIDS (I,indx_glacier) = 0.0
+               POIDS (I,indx_water  ) = 0.0
+               POIDS (I,indx_ice    ) = 0.0
+*
+            ELSE IF (F(MG     +I).GE.0.5  .AND.
+     +               F(GLACIER+I).GE.0.5) THEN
+*
+               POIDS (I,indx_soil   ) = 0.0
+               POIDS (I,indx_glacier) = 1.0
+               POIDS (I,indx_water  ) = 0.0
+               POIDS (I,indx_ice    ) = 0.0
+*     
+            ELSE IF (F(MG     +I).LT.0.5  .AND.
+     +               F(GLSEA  +I).LT.0.5) THEN
+*
+               POIDS (I,indx_soil   ) = 0.0
+               POIDS (I,indx_glacier) = 0.0
+               POIDS (I,indx_water  ) = 1.0
+               POIDS (I,indx_ice    ) = 0.0
+*
+*
+            ELSE IF (F(MG     +I).LT.0.5  .AND.
+     +               F(GLSEA  +I).GE.0.5) THEN
+*
+               POIDS (I,indx_soil   ) = 0.0
+               POIDS (I,indx_glacier) = 0.0
+               POIDS (I,indx_water  ) = 0.0
+               POIDS (I,indx_ice    ) = 1.0
+*
+            ENDIF
+*
+         ENDIF
+*
+**       Increment sea-ice variables as needed
+**       (sea-ice mask and depth, and snow depth)
+*
+         IF (.NOT.ICEMELT        .AND.
+     +       POIDS(I,indx_ice)   .GT. 0.0) THEN
+            F(ICEDP        +I ) = MAX( 0.0,
+     +                            F(ICEDP        +I ) 
+     +                          + F(INCRICD      +I ) * PPJOUR )
+            F(SNODP     +iceI ) = MAX( 0.0,
+     +                            F(SNODP     +iceI ) + DeltaNE )
+         ENDIF
+*
+**       Increment sea-surface temperatures as needed
+*
+         IF (POIDS(I,indx_water) .GT. 0.0)
+     +      F(TWATER       +I ) = F(TWATER       +I )
+     +                          + F(INCRTS       +I ) * PPJOUR
+*
+**       Increment continental glacier variables everywhere
+**       (second layer temperature and snow depth)
+*
+            F(TGLACIER +NI +I ) = F(TGLACIER +NI +I )
+     +                          + F(INCRTG       +I ) * PPJOUR
+            F(SNODP +glacierI ) = MAX( 0.0,
+     +                            F(SNODP +glacierI ) + DeltaNE )
+*
+            F(TGLACIER +NI +I ) = MIN( F(TGLACIER +NI +I ), TRPL )
+*
+**       Increment soil variables as needed
+**       (soil moisture, second layer temperature and snow depth)
+*
+         IF (ISCHMSOL.EQ.1 .AND.
+     +       POIDS(I,indx_soil)  .GT. 0.0) THEN
+            F(WSOIL        +I ) = MAX( 0.0,
+     +                            F(WSOIL        +I )
+     +                          + F(INCRHS       +I ) * PPJOUR )
+            F(TSOIL    +NI +I ) = F(TSOIL    +NI +I )
+     +                          + F(INCRTP       +I ) * PPJOUR
+            F(SNODP    +soilI ) = MAX( 0.0,
+     +                            F(SNODP    +soilI ) + DeltaNE )
+            IF (DeltaNE * 30. .GE. CRITSNOW)
+     +      F(SNODP    +soilI ) = MAX( CRITSNOW,
+     +                            F(SNODP    +soilI ) )
+         ENDIF
+*
+      END DO
+*
+**     Re-Initialize the parameters that depend on vegetation  
+*
+      IF (SCHMSOL.EQ.'ISBA')
+     +   CALL INIVEG( F, FSIZ, KOUNT, NI )
+*
+**     Account for unreliable lake ice fraction.
+**     This code block is shared with S/P INISURF
+*
+       CALL LACS(F, FSIZ, NI)
+*
+**     Re-define the short wave radiation albedo over land
+**     since conditions may have evolved (Force-Restore only)
+*
+      IF (SCHMSOL.EQ.'FCREST')
+     +   CALL CALCALB1( F(ALNOSNO), F(VEGINDX),
+     +                  F(SNODP   +(indx_soil-1)*NI), 
+     +                  F(ALVIS   +(indx_soil-1)*NI), NI )
+*
+      CALL COHERENCE( F,FSIZ,NI )
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

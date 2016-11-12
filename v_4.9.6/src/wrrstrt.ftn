@@ -1,0 +1,44 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wrrstrt
+*
+      subroutine wrrstrt (file_name,dim4r,dynnes,dim2,phytend,dim5,
+     $                                   dyndiv,dim3,lebus,nlebus)
+      implicit none
+*
+      character* (*) file_name
+      integer dim4r,dim2,dim3,dim5,nlebus
+      real dynnes(dim2),phytend(dim5),dyndiv(dim3),
+     $     lebus(nlebus)
+*
+#include "dynmem.cdk"
+#include "yomdyn.cdk"
+#include "physnml.cdk"
+#include "lun.cdk"
+#include "partopo.cdk"
+*
+      real s1,s2
+      pointer (pas1, s1(dim4r)), (pas2, s2(dim4r))
+*---------------------------------------------------------------------
+*
+      open (un_rstrt,file=file_name,access='SEQUENTIAL',
+     $                                form='UNFORMATTED')
+      rewind (un_rstrt)
+      pas1 = paqp0
+      pas2 = paqpp
+      if (myproc.eq.0) then
+         write (un_rstrt) theoc
+         write (un_rstrt) gni,gnj,hx,hy
+         call wpilpar  (un_rstrt)
+         call wmc2par  (un_rstrt)
+         if (gnmaphy.gt.0) call wphypar (un_rstrt)
+      endif
+      if (gnmaphy.gt.0) write (un_rstrt) runlgt
+      write (un_rstrt) s1,s2,dynnes,dyndiv
+      if (gnmaphy.gt.0) then
+          write (un_rstrt) phytend
+          if (incore) write (un_rstrt) lebus
+      endif
+*
+*---------------------------------------------------------------------
+      return
+      end

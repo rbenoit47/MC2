@@ -1,0 +1,4 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+      real*8 dtm,dtp
+      
+      common /dtmdtp/ dtm, dtp

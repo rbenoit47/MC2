@@ -1,0 +1,45 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine topoinit
+      implicit none
+*
+#include  "lcldim.cdk"
+#include  "partopo.cdk"
+      include 'mpif.h'
+*
+      integer  iproc, glbpos(4,0:numproc-1), err
+*
+*----------------------------------------------------------------------
+*
+      do iproc = 0, numproc-1
+         glbpos(1,iproc) = 0
+         glbpos(2,iproc) = 0
+         glbpos(3,iproc) = 0
+         glbpos(4,iproc) = 0
+      end do
+*
+      call rpn_comm_topo (Gni,minx,maxx,ldni,err,
+     $                    hx,glbpos(1,myproc),.true.,.true.) 
+      call rpn_comm_topo (Gnj,miny,maxy,ldnj,err,
+     $                    hy,glbpos(3,myproc),.false.,.true.)
+*
+      glbpos(2,myproc) = glbpos(1,myproc) + ldni - 1
+      glbpos(4,myproc) = glbpos(3,myproc) + ldnj - 1
+      call MPI_ALLREDUCE (glbpos,gc_ld,numproc*4,
+     $                    MPI_INTEGER,MPI_BOR,MPI_COMM_WORLD,err)
+*
+      maxldni = 0
+      maxldnj = 0
+      do iproc = 0, numproc-1
+         maxldni = max(maxldni,(gc_ld(2,iproc)-gc_ld(1,iproc)+1))
+         maxldnj = max(maxldnj,(gc_ld(4,iproc)-gc_ld(3,iproc)+1))
+      end do
+*
+      lani  = maxx - minx + 1
+      lanj  = maxy - miny + 1
+      dim3d = lani*lanj*gnk
+      dim2d = lani*lanj
+*
+*----------------------------------------------------------------------
+*
+      return
+      end

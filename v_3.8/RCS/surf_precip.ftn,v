@@ -1,0 +1,198 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P SURF_PRECIP
+*
+#include "phy_macros_f.h"
+      SUBROUTINE SURF_PRECIP ( T, TLC, TLS, TSC, TSS, 
+     1                         RAINRATE, SNOWRATE, N)
+*
+#include "impnone.cdk"
+*
+      INTEGER N
+      REAL T(N), TLC(N), TLS(N), TSC(N), TSS(N)
+      REAL RAINRATE(N), SNOWRATE(N)
+*
+*Author
+*          S. Belair (November 1998)
+*Revisions
+* 001      B. Bilodeau (January 2001)
+*          Automatic arrays
+* 002      B. Bilodeau and S. Belair (July 2001)
+*          Change conditions for option 0
+*
+*Object
+*          Determine the phase of precipitation 
+*          reaching the surface
+*
+*Arguments
+*
+*          - Input -
+* T        low-level air temperature
+* TLC      total liquid "convective" precipitation rate
+* TLS      total liquid "stratiform" precipitation rate
+* TSC      total solid  "convective" precipitation rate
+* TSS      total solid  "stratiform" precipitation rate
+*
+*          - Output -
+* RAINRATE rate of precipitation at the surface (liquid)
+* SNOWRATE rate of precipitation at the surface (solid)
+*
+*
+#include "consphy.cdk"
+#include "options.cdk"
+*
+*
+      INTEGER I, OPTION
+*
+*
+*
+*MODULES
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( TOTRATE , REAL , (N))
+      AUTOMATIC ( STRAT   , REAL , (N))
+*
+************************************************************************
+*
+*
+*
+*
+*
+*                    Sum of the precipitation rate at
+*                    the surface
+*
+      DO I=1,N
+        RAINRATE(I) = 0.
+        SNOWRATE(I) = 0.
+        TOTRATE (I) = TLC(I)+TLS(I)+TSC(I)+TSS(I)
+      END DO
+*
+*
+*
+*                    OPTIONS:  Depending on the explicit scheme
+*                              used during the integration, 
+*                              we have two options for specifying
+*                              the phase of precipitation reaching
+*                              the ground
+*
+      IF ( ISTCOND.EQ.0 .OR. ISTCOND.EQ.1 .OR.
+     +     ISTCOND.EQ.2 .OR. ISTCOND.EQ.6     ) THEN
+        OPTION=0
+      ELSE
+        OPTION=1
+      END IF
+*
+*
+*
+      IF (OPTION.EQ.0) THEN
+*
+*                    FIRST OPTION:
+*                    The phase of the precipitation reaching
+*                    the surface is simply determined from
+*                    the low-level air temperature:
+*
+*                     T > 0.  then rain
+*                     T < 0.  then snow
+*
+        DO I=1,N
+          IF (T(I).GE.TCDK) THEN
+            RAINRATE(I) = TOTRATE(I)
+            SNOWRATE(I) = 0.
+          ELSE IF (T(I).LT.TCDK) THEN
+            RAINRATE(I) = 0.
+            SNOWRATE(I) = TOTRATE(I)
+          END IF
+        END DO
+*
+*
+*
+      ELSE 
+*
+*
+*                    SECOND OPTION:
+*                    The phase of precipitation at the surface
+*                    is determined by results from the "explicit"
+*                    condensation scheme (MIXED-PHASE, EXMO, KONG-YAU).  
+*
+        DO I=1,N
+          STRAT(I) = TLS(I) + TSS(I)
+*
+*
+*                    If "stratiform" (stable condensation) is greater
+*                    than 0, then the explicit scheme determines if
+*                    the precipitation is rain or snow
+*
+          IF (TSS(I).GE.1.E-10) THEN
+            RAINRATE(I) = 0.0
+            SNOWRATE(I) = TOTRATE(I)
+          ELSE IF (TLS(I).GE.1.E-10) THEN
+            RAINRATE(I) = TOTRATE(I)
+            SNOWRATE(I) = 0.0
+*
+*                    If "stratiform" precipitation is null, then
+*                    we use low-level air temperature to specify
+*                    the phase of precip.
+*
+          ELSE IF (T(I).GE.TCDK) THEN
+            RAINRATE(I) = TOTRATE(I)
+            SNOWRATE(I) = 0.0
+          ELSE IF (T(I).LT.TCDK) THEN
+            RAINRATE(I) = 0.
+            SNOWRATE(I) = TOTRATE(I)
+          END IF
+*
+*
+        END DO
+*
+*
+      END IF
+*
+*
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

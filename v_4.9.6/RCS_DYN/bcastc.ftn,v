@@ -1,0 +1,209 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      logical function bcastc ()
+      implicit none
+*
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "nesting.cdk"
+#include "nestpnt.cdk"
+#include "nbcpu.cdk"
+#include "levels.cdk"
+#include "physcom.cdk"
+#include "solver.cdk"
+#include "lcldim.cdk"
+#include "lesbus.cdk"
+#include "cdate.cdk"
+#include "sor.cdk"
+#include "semilag.cdk"
+#include "vinterpo.cdk"
+#include "partopo.cdk"
+*
+      include "mpif.h"
+*
+      logical inictes
+      integer nw,fact,ierr,lunout,bidon(2), l2, l1
+      real*8 dayfrac,sec_in_day
+      parameter (sec_in_day=86400.0d0)
+*------------------------------------------------------------------
+      bcastc = .false.
+*
+      l2 = loc(bidon(2))
+      l1 = loc(bidon(1))
+      fact = l2 - l1
+*
+      l2 = loc(endgrdi)
+      l1 = loc(Grd_ni )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Grd_ni    ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endydi  )
+      l1 = loc(gnmaphy )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (gnmaphy   ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endyd1i )
+      l1 = loc(gnnpbl  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (gnnpbl    ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endreci )
+      l1 = loc(gnidate     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (gnidate   ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endnesi )
+      l1 = loc(Pil_nesdt   )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Pil_nesdt ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endnesti )
+      l1 = loc(hblen_x  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast(hblen_x    ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endldimi )
+      l1 = loc(gni     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (gni       ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsoli )
+      l1 = loc(maxite  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (maxite    ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsl_i )
+      l1 = loc(Tsl_iter)
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Tsl_iter  ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsor_i )
+      l1 = loc(nvardyn  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (nvardyn   ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast (geotop    ,1 ,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast (geospc    ,1 ,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+*
+      l2 = loc(endgrdr    )
+      l1 = loc(Grd_latr   )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Grd_latr  ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endyd1r )
+      l1 = loc(grtstar     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (grtstar   ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endrecr )
+      l1 = loc(grpi     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (grpi      ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endnesr )
+      l1 = loc(grninit     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (grninit   ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endnestr )
+      l1 = loc(grpilver     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (grpilver  ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endlvlr )
+      l1 = loc(zt     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (zt        ,nw,MPI_REAL    ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsolr )
+      l1 = loc(hsolvpre)
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (hsolvpre  ,nw,MPI_REAL    ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsor_r )
+      l1 = loc(pres_o)
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (pres_o    ,nw,MPI_REAL    ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endnesr8 )
+      l1 = loc(tf_nest  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (tf_nest   ,nw,MPI_double_precision,0,
+     $                                MPI_COMM_WORLD,ierr )
+*
+      l2 = loc(endnesl )
+      l1 = loc(ctebcs     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (ctebcs    ,nw,MPI_LOGICAL ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endydl )
+      l1 = loc(glconta     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (glconta   ,nw,MPI_LOGICAL ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsoll )
+      l1 = loc(diagres )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (diagres   ,nw,MPI_LOGICAL ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsl_L )
+      l1 = loc(Tsl_ic  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Tsl_ic    ,nw,MPI_LOGICAL ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endsor_l)
+      l1 = loc(staguv  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (staguv    ,nw,MPI_LOGICAL ,0,MPI_COMM_WORLD,ierr )
+*
+      nw = 256 + nkout*15 + 27
+      call MPI_bcast 
+     $     (Grd_proj_S,    1,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
+      call MPI_bcast 
+     $     (gcrunstrt,    64,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (theocase ,    24,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (precond,       8,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (hord_type,    10,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (current_nest, 16,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (v_interp,     32,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (gttpvar,      nw,  MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast 
+     $     (Grdc_trnm_S,max_trnm*4,MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+
+      dayfrac=dble(gnstepno)*dble(grdt)/sec_in_day
+      call incdatsd(gcjobstrt,gcrunstrt,dayfrac)
+      dayfrac=dble(gnstepno+gnnrstrt)*dble(grdt)/sec_in_day
+      call incdatsd(gcjobend,gcrunstrt,dayfrac)
+      dayfrac=dble(gnnt)*dble(grdt)/sec_in_day
+      call incdatsd(gcrunend,gcrunstrt,dayfrac)
+*
+      if (.not.go4it) then
+         if (myproc.eq.0) write (6,9100)
+         goto 9988
+      endif
+*   
+      lunout=-1
+      if (myproc.eq.0) lunout=6
+      if (.not.inictes(lunout)) then
+         if (myproc.eq.0) write (6,9110)
+         goto 9988
+      endif
+*
+      bcastc = .true.
+*
+ 9100 format (/,' --ABORT--ABORT--ABORT-- in BCASTC'/)
+ 9110 format (/,' PROBLEM INITIALIZATING PHYSICAL CONSTANTS',/)
+*
+*------------------------------------------------------------------
+*
+ 9988 return
+      end
+
+@

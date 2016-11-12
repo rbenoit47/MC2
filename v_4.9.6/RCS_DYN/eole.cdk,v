@@ -1,0 +1,64 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@      real uvg,vvg,thrate
+      integer mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos
+      real mtn_heigth,mtn_ray
+      real blb_zp
+      integer blb_xp,blb_xs,blb_zs
+      character mtn_typ
+      logical my_prout
+      real haut1,haut2,haut3,haut4
+      real tprofil1,tprofil2,tprofil3,tprofil4
+      real uprofil1,uprofil2,uprofil3,uprofil4
+      real vprofil1,vprofil2,vprofil3,vprofil4
+      logical nest_rug,rotarb
+      integer meth_ts, stabilite_air
+      real critstab
+      logical cycle_diurne,fhalo
+      real*8 my_psol
+c
+      logical nofc, noms
+c
+*
+      common /eole/ thrate,uvg,vvg,
+     $     blb_zp,blb_xs,blb_zs,blb_xp,
+     $     mtn_typ,mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos,mtn_heigth,
+     $     my_prout,haut1,haut2,haut3,haut4,tprofil1,tprofil2,
+     $     tprofil3,tprofil4,uprofil1,uprofil2,uprofil3,uprofil4,
+     $     vprofil1,vprofil2,vprofil3,vprofil4,
+     $     mtn_ray,nest_rug,stabilite_air,meth_ts,rotarb,
+     $     critstab,cycle_diurne,fhalo,my_psol, nofc, noms
+*
+*
+* Pseudo-logical switches common deck for EOLE.
+*
+* vraies_mtn = 0, No EOLE application
+* vraies_mtn = 1, EOLE application with idealized topo
+* vraies_mtn = 2, EOLE application with real surface data (ME, Z0, etc.)
+*
+      integer vraies_mtn
+*
+      common /init_cfgs/ vraies_mtn
+*
+      namelist /init_cfgs/ vraies_mtn
+@

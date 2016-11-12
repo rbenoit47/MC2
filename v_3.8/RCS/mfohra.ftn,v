@@ -1,0 +1,173 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R MFOHRA  -  CALCULE HUM REL DE HUM SP, TEMP ET PRESSION.
+*              -  (EAU SEULEMENT)
+*
+#include "phy_macros_f.h"
+      SUBROUTINE MFOHRA(HR,QQ,TT,PX,LNPS,MODP,NI,NK,N)
+*
+#include "impnone.cdk"
+*
+      INTEGER NI, NK, N, MODP
+      REAL HR(NI,*), QQ(NI,*), TT(NI,*)
+      REAL PX(*), LNPS(NI,*)
+      REAL TEMP1,TEMP2
+*
+*Author
+*          N. Brunet  (Jan91)
+*
+*Revision
+* 001      B. Bilodeau  (August 1991)- Adaptation to UNIX
+* 002      B. Bilodeau (January 2001) - Automatic arrays
+* 003      G. Pellerin  (June 2003) - IBM conversion
+*                 - calls to vexp routine (from massvp4 library)
+*
+*Object
+*          to calculate relative humidity from specific humidity,
+*          temperature and pressure(Water phase considered only)
+*
+*Arguments
+*
+*          - Output -
+* HR       relative humidity
+*
+*          - Input -
+* QQ       specific humidity
+* TT       temperature in Kelvins
+* PX       see MODP
+* LNPS     see MODP
+* MODP     pressure mode (SI units only):
+*          =0; pressure level in PX
+*          =1; sigma level in PX and PS(surface pressure) in LNPS
+*          =2; sigma level in PX and logarithm of sigma level in
+*          LNPS
+*          =3; all points of pressure in LNPS(NI,*) in Pascals
+*          =4; sigma level in PX and logarithm of sigma level in
+*          LNPS(in millibars unless using SI units)
+*          =5; logarithm of pressure level in PX(in millibars unless
+*          using SI units)
+* NI       horizontal dimension
+* NK       vertical dimension
+* N        number of points to process
+*
+*IMPLICITES
+#include "consphy.cdk"
+*MODULES
+      EXTERNAL INCTPHY
+*
+*   FONCTION CALCULANT L'HUMIDITE RELATIVE
+*    FOHRA(QQQ,TTT,PRS)=DMIN1(DBLE(PRS),FOEFQ(QQQ,PRS))/FOEWA(TTT)
+*   FONCTION DE VAPEUR SATURANTE (TETENS)
+*    FOEWA(TTT)=610.78D0*DEXP(17.269D0*(DBLE(TTT)-DBLE(TRPL))/
+*    W (DBLE(TTT)-35.86D0))
+*
+**
+*
+      INTEGER K, I
+      REAL*8 DEPS1,DEPS2,DTRPL,DTEMP
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( PN , REAL , (N) )
+      AUTOMATIC ( XT , REAL*8 , (NI, NK) )
+*
+************************************************************************
+*
+#include "dintern.cdk"
+#include "fintern.cdk"
+#include "initcph.cdk"
+*
+      DTRPL=DBLE(TRPL)
+      DEPS1=DBLE(EPS1)
+      DEPS2=DBLE(EPS2)
+*
+       DO K=1,NK
+         DO I=1,NI
+         DTEMP=DBLE(TT(I,K))
+         XT(I,K)=17.269D0*(DTEMP-DBLE(TRPL))/(DTEMP-35.86D0)
+         ENDDO
+      ENDDO
+*
+      CALL VEXP(XT,XT,NI*NK)
+*
+      DO 10 K=1,NK
+*
+#include "modpr2.cdk"
+*
+      DO 15 I=1,N
+         TEMP1 = PN(I)
+         TEMP2 = QQ(I,K)
+         DTEMP = FOEFQ(TEMP2,TEMP1)
+         HR(I,K) = DMIN1(DBLE(TEMP1),DTEMP) / (610.78D0*XT(I,K))
+15    CONTINUE
+10    CONTINUE
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d11 3
+a13 3
+      REAL HR(NI,NK), QQ(NI,NK), TT(NI,NK)
+      REAL PX(NK), LNPS(NI,*)
+      REAL TEMP1, TEMP2
+d21 2
+d57 6
+d64 1
+a64 1
+*--------------------------------------------------------------------
+d66 1
+d73 1
+d76 1
+a76 1
+
+a78 1
+*--------------------------------------------------------------------
+d81 10
+d92 1
+d99 4
+a102 2
+         TEMP1   = PN(I)
+         HR(I,K) = FOHRA(QQ(I,K),TT(I,K),TEMP1)
+@

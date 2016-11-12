@@ -1,0 +1,268 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r e_geopfld
+      subroutine e_geopfld ( topo_h )
+      implicit none
+*
+      real topo_h(*)
+*
+*AUTHOR  M. Desgagne    May 2001
+*
+*IMPLICIT
+#include "lesbus.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "grd.cdk"
+#include "filename.cdk"
+#include "lcldim.cdk"
+#include "cdate.cdk"
+#include "rec.cdk"
+#include "hinterpo.cdk"
+#include "lun.cdk"
+*
+**
+      integer  fnom,fstouv,fclos,fstfrm,s_rdhint,longueur,pilotf,newdate
+      external fnom,fstouv,fclos,fstfrm,s_rdhint,longueur,pilotf,newdate
+*
+      character*2   typvar
+      character*4   nomvar 
+      character*8   etk,typ,interp,seq,dum
+      character*256 analysis,climato,geophy
+      logical flag
+      integer ip1,ip2,ip3,iun2,iun3,unf,err_me,iun,
+     $        i,j,indx,ier,im,ivar,ic,offk,offj,idatev,ni,nj,deln,
+     $        jj, month,day,mi,mf,fstdate,dat2,dat3
+      integer , dimension (:) , allocatable :: err
+      real f2d(Grd_ni,Grd_nj),wk(Grd_ni*Grd_nj),wk2(Grd_ni,Grd_nj),
+     $     nudif,poi,pof
+      real , dimension (:) , allocatable :: geobus
+      real*8 dayfrac,sec_in_day
+      parameter (sec_in_day=86400.0d0)      
+*
+*---------------------------------------------------------------------
+*
+      climato = "process/climato"
+      geophy  = "process/geophy"
+      ni      = gni-2*hx
+      nj      = gnj-2*hy
+      etk     = ' '
+      typvar  = ' '
+*
+      write (un_geo) gni,gnj,hx,hy
+      call wpilpar (un_geo)
+*
+      iun2 = 0
+      iun3 = 0
+      ier  = fnom   (iun2,climato ,'RND+OLD+R/O',0)
+      ier  = fstouv (iun2,'RND')
+      ier  = fnom   (iun3,geophy  ,'RND+OLD+R/O',0)
+      ier  = fstouv (iun3,'RND')
+      if (ier.lt.0) stop
+*
+*    Interpolating Target Topography (ME)
+*
+      err_me = s_rdhint (wk,xpx,ypx,Grd_ni,Grd_nj,'ME',-1,-1,
+     $                   -1,-1,etk,typvar,.false.,h_interp,iun3,6)
+*
+      if (err_me.ge.0) then
+         deln=0
+         nudif=0.25
+ 998     if (deln.ne.0) then
+            do i=1,Grd_ni*Grd_nj
+               topo_h(i) = wk(i)
+               wk(i) = 0.0
+            end do
+            do i=2,deln,2
+               call smth2d_pil (wk,topo_h,Grd_ni,Grd_nj,1,0.25)
+            end do
+         endif
+         nudif=nudif-0.25
+         if (nudif.gt.0.0) goto 998
+         do i=1,Grd_ni*Grd_nj
+            topo_h(i) = max(0.,wk(i)*float(gnmtn))
+         end do
+         call dc_topo(topo_h,maxhh01_h,maxhh02_h,Grd_ni,Grd_nj)
+         call statfld ( topo_h, 'ME', 1, "geopfld", .false.,1,Grd_ni,
+     $               1,Grd_nj,1,1,1,1,Grd_ni,Grd_nj,1)
+         call statfld ( topo_h(Grd_ni*Grd_nj+1), 'ME', 2, "geopfld", 
+     $               .false.,1,Grd_ni,
+     $               1,Grd_nj,1,1,1,1,Grd_ni,Grd_nj,1)
+      else
+         write (6,1005) 'ME'
+         stop
+      endif
+*
+*     Open proper input data file for sfc fields
+*
+      call datp2f (idatev,gcrunstrt)
+      if (pilotf (idatev,'UU',etk,typvar,-1,-1,-1).lt.0) stop
+*
+      call geopini (ni,nj)
+      allocate (geobus(max(1,geospc)),err(geotop))
+      do i=1,geospc
+         geobus(i)=0.
+      end do
+*
+      do ivar = 1, geotop
+         err(ivar) = -1
+      end do
+*
+      call datp2f ( fstdate,gcrunstrt )
+      ier    = newdate ( fstdate,dat2,dat3,-3 )
+      dat3   = dat2 / 100
+      day    = dat2 - dat3*100
+      dat2   = dat3 / 100
+      month  = dat3 - dat2*100
+*
+      if ( day .ge. 15 ) then
+         jj = day
+         mi = month
+      else
+         jj = day + 30
+         mi = month - 1
+         if ( mi .lt. 1 ) mi = 12
+      endif
+      mf = mi + 1
+      if ( mf .gt. 12 ) mf = 1
+      pof = (real(jj-15)/30.)
+      poi = 1. - pof
+*
+      do 100 ivar=1,geotop
+ 870     nomvar = geonm(ivar,2)
+         if (nomvar.eq.'00') then
+            err(ivar) = 0
+            goto 100
+         endif
+         etk   = geonm(ivar,3)
+         typ   = geonm(ivar,4)
+         interp= geonm(ivar,5)
+         seq(1:8) = '        '
+         seq(1:longueur(geonm(ivar,6))) = geonm(ivar,6)
+         write(6,1001) nomvar,geonm(ivar,1),etk,typ,interp,seq
+ 670     unf = -1
+         ip1 = -1
+         ip2 = -1
+         if (seq(1:1).ne." ") then
+            unf = un_pil
+            if (seq(1:1).eq."C") then
+              	unf = iun2
+	        ip2 = month
+            endif
+            if (seq(1:1).eq."G") unf = iun3
+         end if
+         if (unf.gt.0) then
+         do 110 im=1,geopar(ivar,3)
+            if (geopar(ivar,3).gt.1)
+     $           call convip ( ip1, real(im), 3, 1, dum, .false. )
+            indx = geopar(ivar,1) + (im-1)*ni*nj
+            if (seq(1:1).ne."V") then
+            err(ivar) = s_rdhint (f2d,xpx,ypx,Grd_ni,Grd_nj,nomvar,-1,
+     $                       ip1,ip2,-1,etk,typ,.false.,interp,unf,6)
+            if (err(ivar).lt.0) then
+               if (nomvar(1:2).eq.'LG') then
+                  geonm(ivar,2) = 'GL'
+                  goto 870
+               else if (nomvar(1:2).eq.'Z0') then
+                  geonm(ivar,2) = 'ZP'
+                  goto 870
+               else
+                  seq = seq(2:longueur(seq))
+                  goto 670
+               endif
+            else
+               if (nomvar(1:2).eq.'ZP') then
+                  do j=1,Grd_nj
+                  do i=1,Grd_ni
+                     f2d(i,j) = exp(f2d(i,j))
+                  end do
+                  end do
+               endif
+            endif
+            else
+            write (6,1000) day, month,poi, mi, pof, mf
+            err(ivar) = s_rdhint (f2d,xpx,ypx,Grd_ni,Grd_nj,nomvar,-1,
+     $                       ip1,mi,-1,etk,typ,.false.,interp,iun2,6)
+            err(ivar) = s_rdhint (wk2,xpx,ypx,Grd_ni,Grd_nj,nomvar,-1,
+     $                       ip1,mf,-1,etk,typ,.false.,interp,iun2,6)
+            do j=1,Grd_nj
+            do i=1,Grd_ni
+               f2d(i,j) = poi*f2d(i,j) + pof*wk2(i,j)
+            end do
+            end do
+            endif 
+            offk = geopar(ivar,1)+(ni*nj)*(im-1)
+            do j=1,nj
+               offj=ni*(j-1)
+               do i=1,ni
+                  geobus(offk+offj+i-1)= f2d(i+hx+1,j+hy+1)
+               end do
+            end do
+*
+ 110     continue
+         endif
+ 100  continue
+*
+      flag=.false.
+      do ivar = 1, geotop
+         if (err(ivar).lt.0) then
+            flag=.true.
+            write (6,1005) geonm(ivar,2)
+         endif
+      end do
+      if (flag) stop
+*
+      if (gnmaphy.gt.0) call geopfld (geobus,geospc,topo_h,
+     $                                        ni,nj,Grd_ni,Grd_nj)
+*
+      do i =1,geotop
+      do ic=1,geopar(i,3)
+         call statfld ( geobus(geopar(i,1)+(ic-1)*ni*nj), geonm(i,1), 
+     $                  ic, "geopfld", .false.,1,ni,1,nj,1,
+     $                  1,1,1,ni,nj,1)
+      end do
+      end do
+*
+*     Write geobus on file ungeo
+*
+      call wrgeop4 (geobus,geospc,Grd_ni,Grd_nj)
+      deallocate (geobus,err)
+*
+      ier = fstfrm (iun2)
+      ier = fclos  (iun2)
+      ier = fstfrm (iun3)
+      ier = fclos  (iun3)
+*
+      write (6,600)
+*
+ 600  format (' ',' rdgeoanl complete')
+ 1000 format ('AVERAGING CLIMATOLOGY for (dd/mm): ',i2,'/',i2,
+     $        '  (month/weight): ',2('(',f7.5,'/',i2,') '))
+ 1001 format (/'====>',' Processing ',a2,' ',a8,4a8,' <====')
+ 1005 format (' GEOPHYSICAL FIELD: 'a,' NOT AVAILABLE --- ABORT ---')
+*
+*---------------------------------------------------------------------
+*
+      return
+      end
+@

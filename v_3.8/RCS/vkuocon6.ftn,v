@@ -1,0 +1,1623 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.07.02.17.21.51;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.04.02.21.19.45;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P VKUOCON6
+*
+      SUBROUTINE VKUOCON6 ( D, DSIZ, F, FSIZ, V, VSIZ, 
+     $                      G, GSIZ, GZM, SE,
+     $                      DT, NI, N, NK, 
+     $                      KOUNT, J, ITASK )
+*
+#include "impnone.cdk"
+      INTEGER FSIZ,NI,N,NK,KOUNT,J,ITASK,GSIZ,VSIZ,DSIZ
+      REAL F(FSIZ), V(VSIZ), D(DSIZ), G(GSIZ)
+      REAL GZM(N,NK), SE(N,NK)
+      REAL DT
+*
+*Author
+*          J. Mailhot RPN(July 1985)
+*
+*Revision
+* 001      J. Mailhot RPN(Nov 1985) Use T instead of TV
+* 002      J. Mailhot RPN(Nov 1985) Add outputs NEIGE,QCL,CU
+* 003      G.Pellerin(Nov87) Adaptation to code revision
+* 004      J. Mailhot RPN(Oct 1988) Rate of conv/stratiform precip.
+* 005      G.Pellerin(August90) Adaptation to thermo functions
+* 007      N. Brunet  (May91)
+*          New version of thermodynamic functions and file of
+*          constants
+* 008      B. Bilodeau  (August 1991)- Adaptation to UNIX
+* 009      C. Girard    (November 1992) - New parameterization
+*          of cloud fraction
+* 010      G. Pellerin and G. Lemay (Oct 93) - Dynamic memory allocation
+*          with stkmemw and removal of the loops on the index NJ
+* 011      G. Pellerin (Nov 93) NJ removed; routine fully 2-Dimensional
+* 012      A. Methot (Dec 93) Add vertical motion in pressure (OMEGAP)
+*             to KUO's call
+* 013      B. Bilodeau (Feb 94) Cleanup - Change name from VKUOCON to VKUOCON2
+* 014      B. Bilodeau (Aug 94) New physics interface
+* 015      S. Belair (Summer 94) New schemes : FCP, EXMOIS, KFC
+* 016      M. Desgagne (Oct 95) New interface
+* 017      B. Bilodeau (Nov 96) - Replace common block pntclp by
+*                                 common block convbus
+* 018      G. Pellerin and C. Girard (Nov 95) New convection KUOSYM
+*             revised kuo (KUOSTD) and revised Sundqvist (KUOSUN) and CONSUN.
+* 019      G. Pellerin (Aug 1996) Added vertical integral of moiture fields
+*             for output
+* 020      G. Pellerin (Nov 1996) New convection option : RAS
+* 021      F. Kong     (Dec 1996) New explicit microphysics schemes
+*                          (Ref. Kong and Yau (1996), Atmosphere-Ocean)
+* 022      B. Bilodeau (Aug 1997) New option FCPKUO
+* 023      B. Bilodeau (Feb 1998) Interface between CONSUN and most 
+*                                 convective schemes. FCPKUO uses
+*                                 KUOSYM instead of OLDKUO.
+* 024      B. Bilodeau (May 1998) Smooth transition between FCP and 
+*             KUOSYM when CONVEC="FCPKUO" (using weight FCPOIDS)
+* 025      B. Bilodeau (Nov 1998) Merge phyexe and param4
+* 026      J. Mailhot  (Mar 1999) - Changes for new SURFACE interface
+* 027      M. Desgagne and B. Bilodeau (Aug 1999)- Carry cloud fraction from
+*                                 microphysics schemes to radiation scheme 
+* 028      A. Methot (May 1999) - Rename MICROCND to MIXPHASE; pass GZ to 
+*                                 MIXPHASE instead of DZ
+* 029      A. Methot (Sept 2000) - Correct bug related to ZSQEM
+* 030      B.Bilodeau (Nov 2000) - New comdeck phybus.cdk
+* 031      A. Erfani and B. Bilodeau (Oct 2001) - Added the option KFCKUO2
+* 032      A-M. Leduc (Nov 2001) - Call kfcp2 (modified arguments of kfcp1)
+* 033      A. Plante (Feb 2002) - Correct TLIP bug in call to mixphase
+* 034      D. Talbot (Feb 2002) - Correct calls to time series extraction
+*               of diagnostics for mixphase
+* 035      S.Belair, A-M. Leduc (Nov 2002) - add zsqcem and convective counter 
+*                                            v(kkfcp)for kfcp2 ...>kfcp3
+* 036      S. Menard and B. Bilodeau (Feb 2003) - add output to consun 
+*               for AURAMS
+* 037      B. Bilodeau, P. Vaillancourt and A. Glazer (Dec 2002) - Remove ctp
+*               and ctp from call to intwat
+* 038      B. Bilodeau (Mar 2003) - Comment useless redefinition of CCS for MIXPHAS
+* 039      B. Dugas (Mar 2003) - Add mode STRATOS consideration
+*
+*Object
+*          to do the KUO(deep convection) scheme with either simple
+*          large-scale condensation scheme or Sundqvist scheme.
+*          Liquid and solid precipitation rates are calculated as
+*          well
+*
+*Arguments
+*
+*          - Input/Output -
+* F        field for permanent physics variables
+* V        volatile bus
+* D        dynamic bus
+* G        work space
+*
+*          - Input -
+* DSIZ     dimension of D
+* FSIZ     dimension of F
+* VSIZ     dimension of V
+* GSIZ     dimension of G
+*
+*          - Input -
+* GZM      height
+*
+*          - Input -
+* SE       staggered local sigma levels
+* FCPMASK  switch to indicate which convection scheme is used for a
+*          given point for CONVEC="FCP" or CONVEC="FCPKUO" options
+*          =  2   FCP yes
+*                 KUO no
+*          =  1   FCP possible
+*                 KUO no
+*          =  0   FCP no
+*                 KUO yes
+*          = -1   FCP possible
+*                 KUO yes
+*          = -2   FCP yes
+*                 KUO yes
+* FCPOIDS  weight given to FCP (with respect to KUOSYM) 
+*          when FCPKUO option is used
+*
+*          - Input -
+* DT	   timestep
+* NI       1st horizontal dimension
+* N        first dimension of T,Q,etc.
+* NK       vertical dimension
+* KOUNT    timestep number
+* J        index of the row for which calculations are done
+*          (used only for zonal diagnostics extraction)
+* ITASK    task number
+*
+*
+*MODULES
+*
+      EXTERNAL KUO2,CONDS,MRAS0,MKCLDTOP
+      EXTERNAL SERXST
+      EXTERNAL MZONXST,SERGET
+      EXTERNAL KUOSUN,KUOSTD,KUOSYM,CONSUN1,LSCTROL
+      EXTERNAL SKOCON
+      EXTERNAL FALL,FCPARA2,INIFCP,KFCP3,VERTDIFF
+      EXTERNAL INTWAT3
+      REAL HEURSER, AIRDENM1, TCEL, FRAC
+      INTEGER IERGET, ICPU, IK
+      REAL CDT1
+**
+*     VARIABLES ALLOCATION DYNAMIQUE
+*
+      REAL ZCTE,ZCQE,ZSTE,ZSQE,ZCQCE,ZSQCE,ZCQRE,ZSQRE,BETA
+      INTEGER ILAB,INDEX,NZPREC
+*
+      REAL PSB,AVERT,SIGMA,PRESTOP,CCFCP
+      REAL RAINCV,SCR3,SIGD,WORK5
+      REAL QRFALL,T0,Q0,QC0,QR0,QI0,QG0
+      REAL liquid, solid
+      INTEGER NCA
+*
+      EXTERNAL STFSLB3, SECAJUS,EMICROW,EMICROI,EMICROG
+      EXTERNAL MIXPHASE4
+*
+      REAL ZBUF
+      REAL ZFM1, ZFM
+      INTEGER KCTP,NKR,FNR,CCKR
+*
+      POINTER(IZCTE   ,ZCTE  (NI,NK  )),
+     $       (IZCQE   ,ZCQE  (NI,NK  )),
+     $       (IZCQCE  ,ZCQCE (NI,NK  )),
+     $       (IZCQRE  ,ZCQRE (NI,NK  )),
+     $       (IZSTE   ,ZSTE  (NI,NK  )),
+     $       (IZSQE   ,ZSQE  (NI,NK  )),
+     $       (IZSQCE  ,ZSQCE (NI,NK  )),
+     $       (IZSQRE  ,ZSQRE (NI,NK  )),
+     $       (IILAB   ,ILAB  (NI,NK  )),
+     $       (ISCR3   ,SCR3  (NI,NK  )),
+     $       (ISIGD   ,SIGD  (NI,NK  )),
+     $       (IWORK5  ,WORK5 (NI,NK  )),
+     $       (IQRFALL ,QRFALL(NI,NK  )),
+     $       (IT0     ,T0    (NI,NK  )),
+     $       (IQ0     ,Q0    (NI,NK  )),
+     $       (IQC0    ,QC0   (NI,NK  )),
+     $       (IQR0    ,QR0   (NI,NK  )),
+     $       (IQI0    ,QI0   (NI,NK  )),
+     $       (IQG0    ,QG0   (NI,NK  )),
+     $       (IZBUF   ,ZBUF  (NI,NK  )),
+     $       (IZFM1   ,ZFM1  (NI,NK  )),
+     $       (IZFM    ,ZFM   (NI,NK  )),
+     $       (IAVERT  ,AVERT (NI,NK  )),
+     $       (ICCFCP  ,CCFCP (NI,NK  )),
+     $       (ISIGMA  ,SIGMA (NI,NK+1)),
+     $       (IPSB    ,PSB   (NI     )),
+     $       (IRAINCV ,RAINCV(NI     )),
+     $       (INCA    ,NCA   (NI     )),
+     $       (IBETA   ,BETA  (NI     )),
+     $       (IINDEX  ,INDEX (NI     )),
+     $       (ILIQUID ,LIQUID(NI,NK  )),
+     $       (ISOLID  ,SOLID (NI,NK  ))
+*
+      INTEGER NIR
+      INTEGER ILABR(NI*NK)
+      REAL ZCTER(NI*NK), ZCQER(NI*NK), TLCR(NI), TSCR(NI)
+      REAL CUCOV(NI*NK), OMEGAR(NI*NK), ZFMR(NI*NK), TR(NI*NK)
+      REAL TTMR(NI*NK), QQR(NI*NK), TQMR(NI*NK), GZMR(NI*NK)
+      REAL PSR(NI), PSMR(NI), KCLR(NI), SR(NI*NK)
+      REAL BETAR(NI)
+      POINTER (IZCTER , ZCTER ), (IZCQER , ZCQER ),
+     $        (ITLCR  , TLCR  ), (ITSCR  , TSCR  ),
+     $        (IILABR , ILABR ), (ICUCOV , CUCOV ),
+     $        (IOMEGAR, OMEGAR), (IZFMR  , ZFMR  ),
+     $        (ITR    , TR    ), (ITTMR  , TTMR  ),
+     $        (IQQR   , QQR   ), (ITQMR  , TQMR  ),
+     $        (IGZMR  , GZMR  ), (IPSR   , PSR   ),
+     $        (IPSMR  , PSMR  ), (IKCLR  , KCLR  ),
+     $        (ISR    , SR    ), (IBETAR , BETAR )
+*
+*
+*     pointeurs en equivalence avec les champs 
+*     des bus dynamique et volatil
+*
+      real uu(n,nk),vv(n,nk),t(n,nk),q(n,nk),ps(n)
+      real ttm(n,nk),tqm(n,nk),psm(n)
+      real qctend(n,nk),qcm(n,nk),qc(n,nk)
+      real qrtend(n,nk),qrm(n,nk),qr(n,nk)
+      real qitend(n,nk),qim(n,nk),qi(n,nk)
+      real qgtend(n,nk),qgm(n,nk),qgp(n,nk)
+      real omegap2(n,nk),s(n,nk),dxdy2(ni)
+      real fice2(n,nk), fcpmask(ni)
+      real fcpoids(ni)
+*
+      pointer (iuu     , uu      ), (ivv     , vv      ),
+     $        (it      , t       ), (iq      , q       ),
+     $        (ips     , ps      ), (ittm    , ttm     ),
+     $        (itqm    , tqm     ), (ipsm    , psm     ),
+     $        (iqctend , qctend  ), (iqcm    , qcm     ),
+     $        (iqc     , qc      ), (iqrtend , qrtend  ),
+     $        (iqrm    , qrm     ), (iqr     , qr      ),
+     $        (iqitend , qitend  ), (iqim    , qim     ),
+     $        (iqi     , qi      ), (iqgtend , qgtend  ),
+     $        (iqgm    , qgm     ), (iqgp    , qgp     ),
+     $        (ifice2  , fice2   ), (iomegap2, omegap2 ),
+     $        (is      , s       ), (idxdy2  , dxdy2   ),
+     $                              (ifcpmask, fcpmask ),
+     $        (ifcpoids,fcpoids  )
+*
+      REAL HUM, PRESS, KEEP, GRAVINV
+*
+      INTEGER I,K,NITER
+      LOGICAL DBGKUO, DBGCOND, DBGSUN, SYMSUN
+      SAVE    DBGKUO, DBGCOND, DBGSUN, SYMSUN
+*
+#include "nocld.cdk"
+#include "options.cdk"
+#include "consphy.cdk"
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+#include "stk.cdk"
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+      DATA DBGKUO , DBGCOND, DBGSUN, SYMSUN / 4* .FALSE. /
+*
+*
+      CDT1 = FACTDT * DT
+      GRAVINV = 1./GRAV
+*
+      ICPU = ITASK
+      CALL SERGET ( 'HEURE' , HEURSER , 1 , IERGET  )
+*
+*
+***
+*
+*     pointeurs en equivalence avec les bus dynamique et volatil
+*     ----------------------------------------------------------
+*
+      iuu     = loc (d(  uplus))
+      ivv     = loc (d(  vplus))
+      it      = loc (d(  tplus))
+      iq      = loc (d( huplus))
+      ips     = loc (d(  pplus)) 
+      ittm    = loc (v(  tcond))
+      itqm    = loc (v( hucond))
+      ipsm    = loc (d( pmoins))
+      iqctend = loc (v( qccond))
+      iqcm    = loc (d(qcmoins))
+      iqc     = loc (d( qcplus))
+      iqrtend = loc (v( qrcond))
+      iqrm    = loc (d(qrmoins))
+      iqr     = loc (d( qrplus))
+      iqitend = loc (v( qicond))
+      iqim    = loc (d(qimoins))
+      iqi     = loc (d( qiplus))
+      iqgtend = loc (v( qgcond))
+      iqgm    = loc (d(qgmoins))
+      iqgp    = loc (d( qgplus))
+      ifice2  = loc (f(   fice))
+      iomegap2= loc (d( omegap))
+      is      = loc (d(   sigm)) 
+      idxdy2  = loc (d(   dxdy)) 
+      ifcpmask= loc (d( fcpmsk))
+      ifcpoids= loc (d( fcpoid))
+*
+*
+*     ALLOCATION DYNAMIQUE DES CHAMPS DE TRAVAIL
+*     ------------------------------------------
+*     UTILISES JUSQU'A LA FIN DE VKUOCON
+*     ----------------------------------
+*
+*     INITIALISATION DE L'ESPACE DE TRAVAIL
+      STK_INITA(G,GSIZ)
+*
+      STK_ALLOC(ISIGMA , NI*(NK+1))
+      STK_ALLOC(IZCTE  , NI*NK)
+      STK_ALLOC(IZCQE  , NI*NK)
+      STK_ALLOC(IZCQCE , NI*NK)
+      STK_ALLOC(IZCQRE , NI*NK)
+      STK_ALLOC(IZSTE  , NI*NK)
+      STK_ALLOC(IZSQE  , NI*NK)
+      STK_ALLOC(IZSQCE , NI*NK)
+      STK_ALLOC(IZSQRE , NI*NK)
+      STK_ALLOC(IILAB  , NI*NK)
+      STK_ALLOC(ISCR3  , NI*NK)
+      STK_ALLOC(ISIGD  , NI*NK)
+      STK_ALLOC(IWORK5 , NI*NK)
+      STK_ALLOC(IQRFALL, NI*NK)
+      STK_ALLOC(IT0    , NI*NK)
+      STK_ALLOC(IQ0    , NI*NK)
+      STK_ALLOC(IQC0   , NI*NK)
+      STK_ALLOC(IQR0   , NI*NK)
+      STK_ALLOC(IQI0   , NI*NK)
+      STK_ALLOC(IQG0   , NI*NK)
+      STK_ALLOC(IZBUF  , NI*NK)
+      STK_ALLOC(IZFM1  , NI*NK)
+      STK_ALLOC(IZFM   , NI*NK)
+      STK_ALLOC(IAVERT , NI*NK)
+      STK_ALLOC(ICCFCP , NI*NK)
+      STK_ALLOC(IPSB   , NI   )
+      STK_ALLOC(IRAINCV, NI   )
+      STK_ALLOC(INCA   , NI   )
+      STK_ALLOC(IBETA  , NI   )
+      STK_ALLOC(IINDEX , NI   )
+      STK_ALLOC(ILIQUID, NI*NK)
+      STK_ALLOC(ISOLID , NI*NK)
+*
+*
+*     CALCULS PRELIMINAIRES
+*     ---------------------
+*
+*     MISE A ZERO DE ILAB
+      DO I=1,NI*NK
+        ILAB(I,1) = 0
+      END DO
+*
+*     MISE A ZERO DE TOUT L'ESPACE DE TRAVAIL
+      DO I=1,GSIZ
+         G(I) = 0.0
+      END DO
+*
+*
+      DO K=1,NK
+*VDIR NODEP
+         DO I=1,NI
+*
+            IK = (K-1)*NI+I-1
+*
+            T0    (I,K) =  T(I,K)
+            Q0    (I,K) =  Q(I,K)
+*
+            Q     (I,K) = MAX( Q  (I,K) , 0.0 )
+            TQM   (I,K) = MAX( TQM(I,K) , 0.0 )
+*
+            IF ( ISTCOND .GE. 2 )   THEN
+               QC0(I,K) = QC(I,K)
+               QC (I,K) = MAX ( QC (I,K) , 0.0 )
+               QCM(I,K) = MAX ( QCM(I,K) , 0.0 )
+            ENDIF
+*
+            IF ( ISTCOND .GE. 6 ) THEN
+*
+               QR0 (I,K) = QR(I,K)
+               QR  (I,K) = MAX ( QR (I,K) , 0.0 )
+               QRM (I,K) = MAX ( QRM(I,K) , 0.0 )
+*
+*              CALCUL DE LA VITESSE VERTICALE "SIGMA DOT"
+               SIGD(I,K) = OMEGAP2(I,K) / PS(I)
+*
+            ENDIF
+*
+            IF ( ISTCOND .GE. 7 ) THEN
+               QI0 (I,K) = QI(I,K)
+               QI  (I,K) = MAX ( QI (I,K) , 0.0 )
+               QIM (I,K) = MAX ( QIM(I,K) , 0.0 )
+            ENDIF
+*
+            IF ( ISTCOND .GE. 8 ) THEN
+               QG0 (I,K) = QGP(I,K)
+               QGP (I,K) = MAX ( QGP(I,K) , 0.0 )
+               QGM (I,K) = MAX ( QGM(I,K) , 0.0 )
+            ENDIF
+*
+         END DO
+*
+      END DO
+*
+*     INITIALISATION DU CHAMP "INDEX"
+      NIR = 0
+      DO I = 1,NI
+         IF ( NINT( FCPMASK(I) ) .LE. 0  ) THEN
+            NIR = NIR + 1
+            INDEX(NIR) = I
+         ENDIF
+      END DO
+*
+*
+      IF (ICONVEC.EQ.5.OR.ICONVEC.EQ.6.OR.ICONVEC.EQ.11 .or.
+     +      ICONVEC.EQ.12) THEN
+*
+        CALL INIFCP (PSB,PS,PSM,RAINCV,F(RCKFC),
+     +               F(FCPFLG),NCA,SCR3,OMEGAP2,
+     +               AVERT,SIGMA,S,
+     +               PRESTOP,NI,NK,DT)
+*
+      ENDIF
+*
+*     extraction des hauteurs (en DAM)
+      DO I=1,NI*NK
+         WORK5(I,1) = 0.1 * GRAVINV * GZM(I,1)
+      END DO
+      CALL SERXST (WORK5,'GZ',J, NI, 0.,     1.,  -1      )
+*
+*
+*******************************************************************
+*        CONVECTION                                               *
+*        ----------                                               *
+*******************************************************************
+*
+      IF (ICONVEC.EQ.1) THEN
+*
+*        AJUSTEMENT CONVECTIF SEC
+*        ------------------------
+*
+         CALL SECAJUS(ZCTE, T, S, PS, NITER, 0.1, CDT1, NI, NK)
+*
+*        APPLICATION DES TENDANCES CONVECTIVES DE TEMPERATURE
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+               T(I,K) =  T(I,K) + CDT1 *  ZCTE (I,K)
+            END DO
+         END DO
+*
+      ENDIF
+*
+*
+      IF(WET) THEN
+*
+*
+         IF (ICONVEC.EQ.3) THEN
+*
+*           KUO (PREMIERE VERSION)
+*           ----------------------
+*
+            DO 333 K=1,NK
+               DO 333 I=1,NI
+                  ZFM  (I,K) = MAX (0., QC (I,K) )
+ 333        CONTINUE
+*
+            CALL KUO2 (ZCTE,ZCQE,F(TLC),F(TSC),
+     $                 ILAB,F(CCK),OMEGAP2,zfm,
+     $                 T,TTM,Q,TQM,
+     $                 GZM,PS,PSM,V(KCL),
+     $                 S, CDT1, NI, NI, NK,
+     $                 DBGKUO, SATUCO)
+*
+*
+            IF(ISTCOND.GE.2) THEN
+*              CALCUL DE LA TENDANCE CONVECTIVE DE QC
+               DO 334 K=1,NK
+                  DO 334 I=1,NI
+                     ZCQCE(I,K)=(ZFM (I,K)+MIN(0.,QC(I,K))-QC(I,K))/CDT1
+ 334           CONTINUE
+            ENDIF
+*
+            do k=1,nk
+*VDIR NODEP
+               do i=1,ni
+                  ik = (k-1)*ni+i-1
+                  if(ilab(i,k).eq.2) then
+*                    nuages de convection profonde (Kuo)
+                     f(FN +ik) = F(CCK+IK)
+                  else 
+*                    nuages de convection restreinte
+                     F(CCK+ik) = f(fn+ik)/2.0
+                  endif
+               end do
+            end do
+*
+*
+         ELSE IF (ICONVEC.EQ.4) THEN
+*
+*           SECTION CONVECTIVE DE SKOCON (VOIR PLUS LOIN)
+*           ----------------------------
+*
+         ELSE IF (ICONVEC.EQ.6 .or. ICONVEC.EQ.12) THEN
+*
+*           KAIN-FRITSCH
+*           ------------
+*
+            CALL KFCP3 ( NI,NK,F(FCPFLG),V(KKFC),PSB,T,Q,
+     +                   UU,VV,SCR3,
+     +                   F(TFCP),F(HUFCP),F(UFCP),F(VFCP),
+     +                   F(QCKFC),F(QRKFC),
+     +                   AVERT,DXDY2,F(RCKFC),GZM,
+     +                   KFCTRIG,KFCRAD,KFCDEPTH,KFCDLEV,
+     +                   KFCDET,KFCTIMEC,KFCTIMEA,
+     +                   F(CAPEKFC),F(AU),CCFCP,F(DMFKFC),
+     +                   F(PEFFKFC),F(UMFKFC),F(ZBASEKFC),
+     +                   F(ZTOPKFC),F(WUMAXKFC),
+     +                   F(RLIQKFC),F(RICEKFC),
+     +                   FCPMASK                          )
+*
+*
+         ELSE IF (ICONVEC.EQ.7) THEN
+*
+*           KUOSTD (REECRITURE DE L'OPTION OLDKUO)
+*           ------
+*
+            CALL LSCTROL ( ILAB, OMEGAP2, S, NI, NK )
+*
+            CALL KUOSTD (ZCTE,ZCQE,ILAB,F(CCK),BETA,
+     +                   T,TTM,Q,TQM,GZM,PS,PSM,
+     +                   S, CDT1, NI, NK )
+****************************************************
+         ENDIF
+*****************************************************
+         IF (ICONVEC.EQ.8.OR.ICONVEC.EQ.11.OR.
+     +                            ICONVEC.EQ.12) THEN
+*
+*           KUO SYMETRIQUE  (ORIGINE : CODE DE L'OPTION OLDKUO
+*           --------------             CONTENU DANS LE S/P KUO2)
+*
+*           ICONVEC=11 CORRESPOND A KUOSYM (EN PERIPHERIE) +
+*           FRITSCH-CHAPPELL (AU COEUR DU DOMAINE)
+*
+            IF ((ICONVEC.EQ.11.OR.ICONVEC.EQ.12) 
+     +      .AND.NIR.EQ.0) GO TO 100
+*
+*           ALLOCATION DES POINTEURS
+*
+            STK_ALLOC(izcter , ni*nk)
+            STK_ALLOC(izcqer , ni*nk)
+            STK_ALLOC(iilabr , ni*nk)
+            STK_ALLOC(icucov , ni*nk)
+            STK_ALLOC(itr    , ni*nk)
+            STK_ALLOC(ittmr  , ni*nk)
+            STK_ALLOC(iqqr   , ni*nk)
+            STK_ALLOC(itqmr  , ni*nk)
+            STK_ALLOC(igzmr  , ni*nk)
+            STK_ALLOC(isr    , ni*nk)
+            STK_ALLOC(ipsr   , ni   )
+            STK_ALLOC(ipsmr  , ni   )
+            STK_ALLOC(ibetar , ni   )
+            STK_ALLOC(iomegar, ni*nk)
+            STK_ALLOC(izfmr  , ni*nk)
+            STK_ALLOC(ikclr  , ni*nk)
+            STK_ALLOC(isr    , ni*nk)
+            STK_ALLOC(itlcr  , ni   )
+            STK_ALLOC(itscr  , ni   )
+*
+*           initialiser a zero les champs alloues
+*
+            do i=1,ni
+               psr  (i) = 0.0
+               psmr (i) = 0.0
+               betar(i) = 0.0
+               tlcr (i) = 0.0
+               tscr (i) = 0.0
+               kclr (i) = 0.0
+            end do
+*
+            do ik=1,ni*nk
+               ilabr (ik) = 0
+               gzmr  (ik) = 0.0
+               qqr   (ik) = 0.0
+               sr    (ik) = 0.0
+               tqmr  (ik) = 0.0
+               tr    (ik) = 0.0
+               ttmr  (ik) = 0.0
+               cucov (ik) = 0.0
+               zcqer (ik) = 0.0
+               zcter (ik) = 0.0
+               omegar(ik) = 0.0
+               zfmr  (ik) = 0.0
+            end do
+*
+*
+            if (nir.eq.ni) then
+*
+*              transvidage simple
+*              ------------------
+*
+               do i=1,ni
+                  psmr(i) = psm(i)
+                  psr (i) = ps (i)
+               end do
+*
+               do k=1,nk
+                  do i=1,ni
+                     ik = (k-1)*ni + i
+                     gzmr  (ik) = gzm    (i,k)
+                     qqr   (ik) = q      (i,k)
+                     sr    (ik) = s      (i,k)
+                     tqmr  (ik) = tqm    (i,k)
+                     tr    (ik) = t      (i,k)
+                     ttmr  (ik) = ttm    (i,k)
+                     omegar(ik) = omegap2 (i,k)
+                     zfmr  (ik) = max(0., qc (i,k) )
+                  end do
+               end do
+*
+            else
+*
+*              gather
+*              ------
+*
+               do i=1,nir
+                  psmr(i) = psm(index(i))
+                  psr (i) = ps (index(i))
+               end do
+*
+               do k=1,nk
+                  do i=1,nir
+                     ik = (k-1)*nir +i
+                     omegar(ik) = omegap2(index(i),k)
+                     zfmr  (ik) = max(0., qc (index(i),k) )
+                     gzmr  (ik) = gzm    (index(i),k)
+                     qqr   (ik) = q      (index(i),k)
+                     sr    (ik) = s      (index(i),k)
+                     tr    (ik) = t      (index(i),k)
+                     tqmr  (ik) = tqm    (index(i),k)
+                     ttmr  (ik) = ttm    (index(i),k)
+                  end do
+               end do
+*
+            endif
+*
+            IF (ICONVEC.EQ.12) THEN
+*
+              CALL KUO2 (zcter,zcqer,tlcr, tscr,
+     $                 ilabr,cucov,omegar,zfmr,
+     $                 tr,ttmr,qqr,tqmr,
+     $                 gzmr,psr,psmr,kclr,
+     $                 sr, CDT1, nir, nir, NK,
+     $                 DBGKUO, SATUCO)
+*
+*
+               if (nir.eq.ni) then
+*
+*              transvidage simple
+*
+*VDIR NODEP
+                 do i=1,ni
+                    F(tlc+i-1) = tlcr(i)
+                    F(tsc+i-1) = tscr(i)
+                 END DO
+*
+                 do k=1,nk
+                   do i=1,ni
+                     ik = (k-1)*ni + i
+                     f(cck+ik-1) = cucov(ik)
+                     ilab(i,k)   = ilabr (ik)
+                     zcte(i,k)   = zcter (ik)
+                     zcqe(i,k)   = zcqer (ik)
+                     zfm (i,k)   = zfmr  (ik)
+                   end do
+                 end do
+*
+               else
+*
+*             scatter
+*             ------- 
+*
+*VDIR NODEP
+                 do i=1,nir
+                   F(tlc+index(i)-1) = tlcr(i)
+                   F(tsc+index(i)-1) = tscr(i)
+                 end do
+*
+                 do k=1,nk
+                   do i=1,nir
+                     ik = (k-1)*nir +i
+                     f(cck+(k-1)*ni+index(i)-1)    = cucov(ik)
+                     ilab   (index(i),k)           = ilabr (ik)
+                     zcqe   (index(i),k)           = zcqer (ik)
+                     zcte   (index(i),k)           = zcter (ik)
+                     zfm    (index(i),k)           = zfmr  (ik)
+                   end do
+                 end do
+               endif 
+*
+            ELSE IF (ICONVEC.EQ.8.OR.ICONVEC.EQ.11) THEN
+*
+             CALL KUOSYM (ZCTER,ZCQER,ILABR,CUCOV,BETAR,
+     $                   TR,TTMR,QQR,TQMR,GZMR,PSR,PSMR,
+     $                   SR, CDT1, NIR, NK )
+*
+               if (nir.eq.ni) then
+*
+                 do i=1,ni
+                   beta(i) = betar(i)
+                 end do
+*
+                 do k=1,nk
+                   do i=1,ni
+                     ik = (k-1)*ni + i
+                     f(cck+ik-1) = cucov(ik)
+                     ilab(i,k)   = ilabr (ik)
+                     zcte(i,k)   = zcter (ik)
+                     zcqe(i,k)   = zcqer (ik)
+                    end do
+                 end do
+*
+               else
+*
+*              scatter
+*              -------
+*
+*VDIR NODEP
+                 do i=1,nir
+                   beta(index(i))    = betar(i)
+                 end do
+*
+                 do k=1,nk
+                   do i=1,nir
+                     ik = (k-1)*nir +i
+                     f(cck+(k-1)*ni+index(i)-1)    = cucov(ik)
+                     ilab   (index(i),k)           = ilabr (ik)
+                     zcqe   (index(i),k)           = zcqer (ik)
+                     zcte   (index(i),k)           = zcter (ik)
+                   end do
+                 end do
+*
+               endif
+            endif
+*
+            STK_DEALL(IZCTER)
+*
+         ELSE IF (ICONVEC.EQ.9) THEN
+*
+*           KUOSUN  (REECRITURE DE L'OPTION NEWKUO CONTENU DANS
+*           ------   LE SOUS-PROGRAMME SKOCON)
+*
+*           option Kuo symetrique possible si symsun = .true.
+*
+            CALL KUOSUN ( ZCTE, ZCQE, ILAB, F(CCK), BETA,
+     +                    T, TTM, Q, TQM, QC,
+     +                    PS, PSM, S, NI, NK,
+     +                    CDT1, SATUCO, SYMSUN )
+*
+         ELSE IF (ICONVEC.EQ.10) THEN
+*
+            call mkcldtop (kctp,s,ni,nk)
+            nkr=nk-(kctp-1)
+            fnr=FN+(kctp-1)*ni
+            cckr=CCK+(kctp-1)*ni
+*
+            call mras0(ZCTE(1,kctp),ZCQE(1,kctp),F(TLC),F(fnr),
+     +                 f(cckr),ilab(1,kctp),beta,istcond.eq.4,
+     +                 t(1,kctp),q(1,kctp),ps,se(1,kctp-1),
+     +                 cdt1,j,cpd,grav,chlc,cappa,
+     +                 nkr,ni,ni*(nkr+1))
+*
+         ENDIF
+*
+100      CONTINUE
+*
+         IF (ICONVEC.EQ.5.OR.ICONVEC.EQ.11) THEN
+*
+*           FRITSCH-CHAPPELL
+*           ----------------
+*
+            CALL FCPARA2( NI,NK,PRESTOP,FACTDT,DELT,
+     $                    NCA,PSB,T,Q,CCFCP,
+     $                    UU,VV,SCR3,F(AU),
+     $                    F(TFCP),F(HUFCP),RAINCV,
+     $                    AVERT,SIGMA,DXDY2,
+     $                    FCPMASK,ICONVEC,F(RCKFC))
+*
+*           TRANSVIDER LES TENDANCES DE T ET HU
+*           AINSI QUE LA FRACTION NUAGEUSE
+            IF (ICONVEC.EQ.5) THEN
+*VDIR NODEP
+               DO I=1,NI
+                  F(TLC+I-1) = F(RCKFC+I-1)
+               END DO
+*
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     IK = (K-1)*NI+I-1
+                     ZCTE (I,K) = F( TFCP + IK)
+                     ZCQE (I,K) = F(HUFCP + IK)
+                     IF(ISTCOND.NE.4) THEN
+                        F (CCK+IK) = CCFCP(I,K)
+                     ENDIF
+                  END DO
+               END DO
+*
+            ELSE IF (ICONVEC.EQ.11) THEN
+*
+*              TRANSVIDER LES TENDANCES DE T ET HU QUI
+*              SERONT APPLIQUEES AVANT L'APPEL A CONSUN
+*              
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     IF(NINT( FCPMASK(I) ).EQ.2 ) THEN
+*                       FCPMASK = 2 LA OU FRITSCH-CHAPPELL EST UTILISE
+                        IK = (K-1)*NI+I-1
+                        ZCTE (I,K) = F( TFCP + IK)
+                        ZCQE (I,K) = F(HUFCP + IK)
+                     ENDIF
+*
+                  END DO
+*
+               END DO
+*
+            ENDIF
+*
+         ENDIF
+*
+*
+         IF (ICONVEC.EQ.6.OR.ICONVEC.EQ.12) THEN
+            IF(ISTCOND.GE.2) THEN
+*              CALCUL DE LA TENDANCE CONVECTIVE DE QC
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     ZCQCE(I,K)=(ZFM (I,K)+MIN(0.,QC(I,K)) - QC(I,K) )/CDT1
+                  END DO
+               END DO
+            ENDIF
+*
+*VDIR NODEP
+            DO I=1,NI
+               F(TLC+I-1) =   (1. - FCPOIDS(I)) * F(TLC+I-1)         +
+     $                        (FCPOIDS(I) * F(RCKFC+I-1))
+            END DO
+*
+*           TRANSVIDER - AMALGAMMER  LES TENDANCES DE T ET HU
+*
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,NI
+                  IK = (K-1)*NI+I-1
+                  ZCTE (I,K) = (1. - FCPOIDS(I)) * ZCTE (I,K)     +
+     $                                  FCPOIDS(I)  * F( TFCP + IK)
+                  ZCQE (I,K) = (1. - FCPOIDS(I)) * ZCQE (I,K)     +
+     $                                  FCPOIDS(I)  * F(HUFCP + IK)
+                  F (CCK+IK) = (1. - FCPOIDS(I)) * F (CCK+IK)     +
+     $                                  FCPOIDS(I)  * CCFCP(I,K)
+                  ZCQCE(I,K) = (1. - FCPOIDS(I)) * ZCQCE(I,K)     +
+     $                                  FCPOIDS(I)  * F(QCKFC + IK)
+                  ZCQRE(I,K) = (1. - FCPOIDS(I)) * ZCQRE(I,K)     +
+     $                                  FCPOIDS(I)  * F(QRKFC + IK)
+               END DO
+*
+            END DO
+         ENDIF
+*
+*
+         IF (ICONVEC.EQ.5.OR.ICONVEC.EQ.11) THEN
+            IF (KOUNT.GT.0) THEN
+               DO I=1,NI
+*                 RETURN REAL VALUES FOR THE CONVECTIVE COUNTER NCA
+                  F(FCPFLG+I-1) = FLOAT( NCA(I) ) + 0.2
+               END DO
+            ENDIF
+         ENDIF
+*
+*
+*******************************************************************
+*        APPLICATION DES TENDANCES CONVECTIVES                    *
+*        -------------------------------------                    *
+*******************************************************************
+*
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+*
+               T(I,K) =  T(I,K) + CDT1 *  ZCTE (I,K)
+               Q(I,K) =  Q(I,K) + CDT1 *  ZCQE (I,K)
+              QC(I,K) = QC(I,K) + CDT1 *  ZCQCE(I,K)
+*
+            END DO
+         END DO
+*
+         IF (ICONVEC.EQ.6.OR.ICONVEC.EQ.12) THEN
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,N
+                 QR(I,K) = QR(I,K) + CDT1 *  ZCQRE(I,K)
+               END DO
+            END DO
+         ENDIF
+*
+*******************************************************************
+*        CONDENSATION STRATIFORME                                 *
+*        ------------------------                                 *
+*******************************************************************
+*
+         IF(ISTCOND.EQ.1) THEN
+*
+*           SCHEME SIMPLIFIE
+*           ----------------
+*
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,N
+                  IK = (K-1)*NI+I-1
+                  F(CCK+IK) =  F(FN+IK)
+               END DO
+            END DO
+*
+            CALL CONDS(ZSTE,ZSQE,F(TLS),F(TSS),
+     +                 F(FN),T,Q,PS,V(KCL),
+     +                 S, CDT1, NI, NI, NK,
+     +                 DBGCOND, SATUCO)
+*
+*
+         ELSE IF(ISTCOND.EQ.2) THEN
+*
+*           SUNDQVIST (PREMIERE VERSION)
+*           ----------------------------
+*
+            DO K=1,NK
+*
+               DO I=1,NI
+                  ZFM1 (I,K) = MAX (0., QCM(I,K) )
+                  ZFM  (I,K) = MAX (0., QC (I,K) )
+               END DO
+*
+            END DO
+*
+            CALL STFSLB3 (ZFM1,ZFM,ZBUF,
+     +                    ZSTE,ZSQE,F(TLS),F(TSS),
+     +                    ILAB, TTM,TQM,
+     +                    T,Q,PS,PSM,J,
+     +                    S,NI,NI,NK,
+     +                    CDT1,DBGSUN,SATUCO)
+*
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,NI
+                  IK = (K-1)*NI+I-1
+*
+*                 CALCUL DE LA TENDANCE DE QC. GARDER LES VALEURS NEG.
+*                 POUR NE PAS INTRODUIRE UNE SOURCE FICTIVE D'HUMIDITE.
+                  ZSQCE(I,K) = (ZFM(I,K)+MIN(0.,QC(I,K)) - QC(I,K))/CDT1
+*
+                  V(CCS+IK) =  ZBUF(I,K)
+*
+               END DO
+            END DO
+*
+*
+         ELSE IF(ISTCOND.EQ.6) THEN
+*
+*           SCHEME EXPLICITE
+*           ----------------
+*
+*           STORE THE INITIAL VALUES OF QC AND QR
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,NI
+                  QC0(I,K) = QC(I,K)
+                  QR0(I,K) = QR(I,K)
+               END DO
+            END DO
+*
+*
+            CALL EXMOIS ( T,Q,ZSTE,ZSQE,PS,S,CDT1,QRFALL,ZSQCE,ZSQRE,
+     $                    F(TLS),F(TSS),QC,QR,SIGD,NI,NK)
+*
+*
+*           CALCULATE THE QC+ AND QR+ VARIABLES
+*           AFTER THE EXPLICIT TENDENCIES
+*
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,NI
+*
+                 QC(I,K) = QC(I,K) + CDT1 * ZSQCE(I,K)
+                 QC(I,K) = AMAX1( QC(I,K) , 0.0 )
+*
+                 QR(I,K) = QR(I,K) + CDT1 * ZSQRE(I,K)
+                 QR(I,K) = AMAX1( QR(I,K) , 0.0 )
+*
+               END DO
+            END DO
+*
+*
+*           MAKE THE RAIN WATER/SNOW (QR) FALL TO THE GROUND WITH A
+*           TERMINAL VELOCITY QRFALL
+*
+            CALL FALL(QR,WORK5,PS,S,T,Q,QRFALL,
+     +                CDT1,NI,NK)
+*
+*           APPLY A VERTICAL DIFFUSION ON THE CLOUD WATER/ICE (QC)
+*           VARIABLE
+*
+            CALL VERTDIFF(QC,WORK5,NI,NK)
+*
+*           CALCULATE THE FINAL TENDENCIES DUE TO
+*           STRATIFORM CONDENSATION FOR QC AND QR
+*
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,NI
+                  ZSQCE(I,K) = ( QC(I,K) - QC0(I,K) ) / CDT1
+                  ZSQRE(I,K) = ( QR(I,K) - QR0(I,K) ) / CDT1
+               END DO
+            END DO
+*
+         ENDIF
+*
+*
+         IF (ICONVEC.EQ.4 .OR. ISTCOND.EQ.3) THEN
+*
+*              SUNDQVIST (DEUXIEME VERSION) :
+*              ------------------------------
+*              CONVECTION ET CONDENSATION COMBINEES
+*              ------------------------------------
+*
+*              NOTE : TTM ET TQM SONT DETRUITS APRES L'APPEL A SKOCON
+*
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     ZFM1 (I,K) = MAX (0., QCM(I,K) )
+                     ZFM  (I,K) = MAX (0., QC (I,K) )
+                  END DO
+               END DO
+*
+               CALL SKOCON ( ZCTE, ZCQE, ZCQCE, F(TLC), F(TSC), F(TLS),
+     +                       F(TSS), V(CCS), F(CCK), T, TTM, Q,
+     +                       TQM, f(TSURF), ZFM, ZFM1, PS,
+     +                       PSM, ILAB, S, NI, NK,
+     +                       FACTDT, DT, SATUCO, ICONVEC, ISTCOND,
+     +                       V(RNFLX), V(SNOFLX) )
+*
+*
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     IK = (K-1)*NI+I-1
+*
+*                    TRANSVIDER LES TENDANCES STRATIFORMES
+                     ZSTE  (I,K) = TTM (I,K)
+                     ZSQE  (I,K) = TQM (I,K)
+                     ZSQCE (I,K) = ZFM1(I,K)
+*
+                  END DO
+               END DO
+*
+          ELSE IF(ISTCOND.EQ.4) THEN
+*
+*           ALLOCATION DES POINTEURS UTILISES PAR CONSUN
+            STK_ALLOC( IZCTER , NI*NK)
+            STK_ALLOC( IZCQER , NI*NK)
+            STK_ALLOC( ITLCR  , NI   )
+            STK_ALLOC( ITSCR  , NI   )
+*
+*           INITIALISATION DES CHAMPS ALLOUES
+            DO I=1,NI
+               TLCR(I) = 0.
+               TSCR(I) = 0.
+            END DO
+*
+            DO IK=1,NI*NK
+               ZCTER(IK) = 0.
+               ZCQER(IK) = 0.
+            END DO
+*
+            IF (ICONVEC.GE.7.AND.ICONVEC.LE.11) THEN
+*
+*              TRANSVIDER LES TENDANCES CONVECTIVES
+*              POUR KUOSTD, KUOSYM, KUOSUN ET RAS.
+*              PAR CONTRE, ON NE VEUT PAS D'INTERACTION
+*              ENTRE LES SCHEMAS FCP (OU KFC) ET CONSUN.
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     IK = (K-1)*NI + I
+                     IF (NINT( FCPMASK(I) ).LE.0 ) THEN
+                        ZCTER(IK) = ZCTE(I,K)
+                        ZCQER(IK) = ZCQE(I,K)
+                     ENDIF
+                  END DO
+               END DO
+*
+            ENDIF
+*
+*           ELIMINER LES VALEURS NEGATIVES D'EAU NUAGEUSE
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,NI
+                  ZFM1 (I,K) = MAX (0., QCM(I,K) )
+                  ZFM  (I,K) = MAX (0., QC (I,K) )
+               END DO
+            END DO
+*
+*
+            CALL CONSUN1(ZSTE , ZSQE , ZSQCE , F(TLS), F(TSS), V(CCS),
+     $                   ZCTER, ZCQER, ZCQCE , TLCR  , TSCR  , F(CCK),
+     $                   T  , TTM  , Q     , TQM   , ZFM   , ZFM1  ,
+     $                   PS , PSM  , ILAB  , BETA  , S     , CDT1  ,
+     $                   V(RNFLX), V(SNOFLX), V(F12) , V(FEVP)  ,
+     $                   F(FICE), V(CLR), V(CLS), NI , NK  )
+
+*
+*
+*           TRANSVIDER LES TENDANCES CONVECTIVES ET LES TAUX 
+*           DES PRECIPITATIONS POUR KUOSTD, KUOSYM, KUOSUN, RAS
+*           ET FCPKUO
+            IF (ICONVEC.GE.7.AND.ICONVEC.LE.11) THEN
+*
+*VDIR NODEP
+               DO I=1,NI
+*                 FCP NE CALCULE PAS "TSC" (PRECIP. SOLIDES)
+                  F(TSC+I-1) =   (1. - FCPOIDS(I)) * TSCR(I)
+                  F(TLC+I-1) =   (1. - FCPOIDS(I)) * TLCR(I)            +
+     $                           (FCPOIDS(I) * F(RCKFC+I-1))
+               END DO
+*
+*              TRANSVIDER LES TENDANCES DE T ET HU AINSI QUE 
+*              LA FRACTION NUAGEUSE.
+*              AMALGAMER LES CHAMPS DE SORTIE DE KUOSYM ET DE FCP.
+*
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     IK = (K-1)*NI+I-1
+*                    FCP NE CALCULE PAS DE TENDANCE DE QC
+                     ZCQCE(I,K) = (1. - FCPOIDS(I)) * ZCQCE(I,K)
+                     ZCTE (I,K) = (1. - FCPOIDS(I)) * ZCTER(IK+1)      + 
+     $                             FCPOIDS(I) * F(TFCP+IK)
+                     ZCQE (I,K) = (1. - FCPOIDS(I)) * ZCQER(IK+1)      +
+     $                             FCPOIDS(I) * F(HUFCP+IK)
+                     F (CCK+IK) = (1. - FCPOIDS(I)) * F(CCK+IK)        +
+     $                             FCPOIDS(I) * CCFCP(I,K)
+*
+                  END DO
+*
+               END DO
+*
+            ELSE IF (ICONVEC.EQ.5.OR.ICONVEC.EQ.6) THEN
+*
+               DO K=1,NK
+*VDIR NODEP
+                  DO I=1,NI
+                     IK = (K-1)*NI+I-1
+                     F (CCK+IK) = CCFCP(I,K)
+                  END DO
+               END DO
+*
+            ENDIF
+*
+*           RELACHER LES POINTEURS (CONSUN)
+            STK_DEALL(IZCTER)
+*
+         ELSE IF(ISTCOND.EQ.5) THEN
+*
+*           MIXED-PHASE MICROPHYSICS SCHEME
+*           -------------------------------
+*
+            CALL MIXPHASE4(T,Q,QC,S,PS,FICE2,F(TLS),F(TSS),
+     $                     V(TLIP),ZSTE,ZSQE,ZSQCE,GZM,V(CCS),
+     $                     V(FLAGMXP),CDT1,NI,NK)
+*
+*VDIR NODEP
+               DO I=1,NI
+                  F(TSC+I-1) = FICE2(I,NK)*F(TLC+I-1)
+                  F(TLC+I-1) = max(0., F(TLC+I-1)-F(TSC+I-1))
+               END DO
+*
+         ELSE IF(ISTCOND.EQ.7) THEN
+*
+*           EXPLICIT SCHEME FOR WARM RAIN (Kong & Yau, 1996)
+*           ------------------------------------------------
+*
+            CALL EMICROW ( T,Q,QC,QR,PS,TTM,TQM,QCM,QRM,PSM,SATUCO,S,
+     $                     F(TLS),ZSTE,ZSQE,ZSQCE,ZSQRE,CDT1,NI,N,NK,
+     $                     J,KOUNT )
+*
+         ELSE IF(ISTCOND.EQ.8) THEN
+*
+*           EXPLICIT SCHEME (1) FOR MIXED-PHASE (Kong & Yau, 1996)
+*           (in which only one single ice category QI is predicted)
+*           ------------------------------------------------------
+*
+            CALL EMICROI(OMEGAP2, T,Q,QC,QR,QI,PS,TTM,TQM,QCM,QRM,QIM,
+     $                   PSM,SATUCO,S, F(TLS),F(TSS),ZSTE,ZSQE,ZSQCE,
+     $                   ZSQRE,QITEND,CDT1,NI,N,NK,J,KOUNT)
+*
+         ELSE IF(ISTCOND.EQ.9) THEN
+*
+*           EXPLICIT SCHEME (2) FOR MIXED-PHASE (Kong & Yau, 1996)
+*           (two ice categories: QI & QGP are explicitly predicted)
+*           ------------------------------------------------------
+*
+            CALL EMICROG(OMEGAP2,T,Q,QC,QR,QI,QGP,PS,TTM,TQM,QCM,QRM,QIM,
+     $                   QGM,PSM,SATUCO,S,F(TLS),F(TSS),ZSTE,ZSQE,ZSQCE,
+     $                   ZSQRE,QITEND,QGTEND,CDT1,NI,N,NK,J,KOUNT)
+*
+         ENDIF
+*
+*VDIR NODEP
+         DO I=1,NI
+*
+*  TRANSFORMATION EN HAUTEUR D'EAU (M) - DIVISER PAR DENSITE EAU
+*
+            F(TSC   +I-1) = F(TSC+I-1)   * 1.E-03
+            F(TSS   +I-1) = F(TSS+I-1)   * 1.E-03
+            F(TLC   +I-1) = F(TLC+I-1)   * 1.E-03
+            F(TLS   +I-1) = F(TLS+I-1)   * 1.E-03
+            F(RCKFC +I-1) = F(RCKFC+I-1) * 1.E-03
+*
+         END DO
+*
+      ENDIF
+*
+*******************************************************************
+*     APPLICATION DES TENDANCES CONVECTIVES DE QC (POUR CONSUN)   *
+*     -------------------------------------------                 *
+*******************************************************************
+*
+      IF (ISTCOND.EQ.4..AND. (ICONVEC.GE.7.AND.ICONVEC.LE.11)) THEN
+*
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+*
+              QC(I,K) = QC(I,K) + CDT1 *  ZCQCE(I,K)
+*
+            END DO
+         END DO
+*
+      ENDIF
+*
+*
+*******************************************************************
+*     APPLICATION DES TENDANCES STRATIFORMES                      *
+*     --------------------------------------                      *
+*******************************************************************
+*
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,N
+*
+               T(I,K) =  T(I,K) + CDT1 *  ZSTE (I,K)
+               Q(I,K) =  Q(I,K) + CDT1 *  ZSQE (I,K)
+              QC(I,K) = QC(I,K) + CDT1 *  ZSQCE(I,K)
+*
+            END DO
+         END DO
+*
+         IF (ISTCOND.GE.6) THEN
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,N
+                 QR(I,K) = QR(I,K) + CDT1 *  ZSQRE(I,K)
+               END DO
+            END DO
+         ENDIF
+*
+         IF(ISTCOND.ge.8) THEN
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,N
+                  QI(I,K) = QI(I,K) + CDT1 *  QITEND(I,K)
+               END DO
+            END DO
+         endif
+         IF(ISTCOND.ge.9) THEN
+            DO K=1,NK
+*VDIR NODEP
+               DO I=1,N
+                  QGP(I,K) = QGP(I,K) + CDT1 *  QGTEND(I,K)
+               END DO
+            END DO
+         endif
+
+
+*
+*******************************************************************
+*
+* DEBUT DU BLOC D'INSTRUCTIONS PROVENANT DU CODE DE ANNA GLAZER
+* PERMETTANT ENTRE AUTRE LE CALCUL DE CTP LORSQUE SCHEMA SUND
+* EST UTILISE
+*
+* CALCUL DE LWC ET IWC(pour Sundqvist scheme comme dans CLDOPTX)
+*
+      IF (ISTCOND.EQ.3 .OR. ISTCOND.EQ.4) THEN
+         DO K=1,NK
+            DO I=1,NI
+               IF (T(I,K) .GE. TCDK) THEN
+                  liquid(i,k) =  QC(I,K)
+                  solid(i,k)  =  0.
+               ELSE
+                  tcel = T(i,k) - TCDK
+                  frac = .0059 + .9941 * exp(-.003102 * tcel*tcel)
+                  liquid(i,k) = frac*QC(I,K)
+                  solid(i,k)  = (1.-frac)*QC(I,K)
+               END IF
+            END DO
+         END DO
+      END IF
+*
+      IF (ISTCOND.EQ.5) THEN
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,NI
+               IK = (K-1)*NI+I-1
+*
+*              TRANSVIDER LES NUAGES
+               airdenm1 = rgasd *T(i,k)/(s(i,k)*ps(i))
+***            IF (QC(I,K) .GT. airdenm1 * 1.E-5) V(CCS+IK) = 1.
+*
+               liquid(i,k) = QC(I,K)*(1.-FICE2(I,K))
+               solid(i,k)  = QC(I,K)*FICE2(I,K)
+*
+            END DO
+         END DO
+      ELSE IF (ISTCOND.EQ.6 .OR. ISTCOND.EQ.7) THEN
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,NI
+               IK = (K-1)*NI+I-1
+*              TRANSVIDER LES NUAGES
+               airdenm1 = rgasd *T(i,k)/(s(i,k)*ps(i))
+               IF ((QC(I,K)+QR(I,K)) .GT. airdenm1 * 1.E-5) THEN
+                  V(CCS+IK) = 1.
+               ENDIF
+*
+               IF (T(I,K) .GE. TCDK) THEN
+                  liquid(i,k) = QC(I,K)+QR(I,K)
+                  solid(i,k)  = 0.
+               ELSE
+                  liquid(i,k) = 0.
+                  solid(i,k)  = QC(I,K)+QR(I,K)
+               END IF
+*
+            END DO
+         END DO
+      ELSE IF (ISTCOND.EQ.8) THEN
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,NI
+               IK = (K-1)*NI+I-1
+*
+*              TRANSVIDER LES NUAGES
+               airdenm1 = rgasd *T(i,k)/(s(i,k)*ps(i))
+               IF ((QC(I,K)+QR(I,K)+QI(I,K)) .GT. airdenm1 * 1.E-5) THEN
+                  V(CCS+IK) = 1.
+               ENDIF
+*
+               liquid(i,k) = QC(I,K)+QR(I,K)
+               solid(i,k)  = QI(I,K)
+*
+            END DO
+         END DO
+      ELSE IF (ISTCOND.EQ.9) THEN
+         DO K=1,NK
+*VDIR NODEP
+            DO I=1,NI
+               IK = (K-1)*NI+I-1
+*
+*              TRANSVIDER LES NUAGES
+               airdenm1 = rgasd *T(i,k)/(s(i,k)*ps(i))
+               IF((QC(I,K)+QR(I,K)+QI(I,K)+QGP(I,K)).GT.airdenm1*1.E-5)THEN
+                  V(CCS+IK) = 1.
+               ENDIF
+*
+               liquid(i,k) = QC(I,K)+QR(I,K)
+               solid(i,k)  = QI(I,K)+QGP(I,K)
+*
+            END DO
+         END DO
+      ENDIF
+*
+*******************************************************************
+*     CALCUL DE QUANTITES INTEGREES
+*
+      IF (ISTCOND.GE.3) THEN
+*
+         CALL INTWAT3(V(ICW),V(IWV),V(IWV700),V(IWP),V(LWP2),
+     $               V(SLWP),V(SLWP2),V(SLWP3),V(SLWP4),
+     $               T,Q,liquid,solid,S,PS,NI,NK)
+      ENDIF
+*
+*
+*******************************************************************
+*     EN MODE CLIMAT OU STRATOS, IL N'Y A PAS DE PROCESSUS DE     *
+*     CONVECTION/CONDENSATION AU-DESSUS DE TOPC OU BIEN SI        *
+*     HUMOINS EST PLUS PETIT QUE MINQ                             *
+*     --------------------------------------------------------    *
+*******************************************************************
+      if (CLIMAT .OR. STRATOS) then
+*
+         do k = 1,nk
+*VDIR NODEP
+            do i = 1,ni
+               ik = (K-1)*NI+I-1
+*
+               hum        = d(humoins+ik)
+               press      = d(sigm   +ik) * d(pmoins+i-1)
+*
+               keep = 1.
+               if (press.lt.TOPC .or. hum.le.MINQ) keep = 0.
+*
+               ZCTE (I,K) = ZCTE (I,K) * keep
+               ZSTE (I,K) = ZSTE (I,K) * keep
+*
+               ZCQE (I,K) = ZCQE (I,K) * keep
+               ZSQE (I,K) = ZSQE (I,K) * keep
+*
+               ZCQCE(I,K) = ZCQCE(I,K) * keep
+               ZSQCE(I,K) = ZSQCE(I,K) * keep
+*
+               ZCQRE(I,K) = ZCQRE(I,K) * keep
+               ZSQRE(I,K) = ZSQRE(I,K) * keep
+*
+            enddo
+         enddo
+*
+      endif
+*
+*******************************************************************
+*     SOMMER LES TENDANCES CONVECTIVES ET STRATIFORMES            *
+*     ------------------------------------------------            *
+*******************************************************************
+*
+      DO K=1,NK
+*VDIR NODEP
+         DO I=1,NI
+            TTM   (I,K) = ZCTE (I,K) + ZSTE(I,K)
+            TQM   (I,K) = ZCQE (I,K) + ZSQE(I,K)
+            QCTEND(I,K) = ZCQCE(I,K) + ZSQCE(I,K)
+            QRTEND(I,K) = ZCQRE(I,K) + ZSQRE(I,K)
+            T     (I,K) =  T0  (I,K)
+            Q     (I,K) =  Q0  (I,K)
+            QC    (I,K) = QC0  (I,K)
+            QR    (I,K) = QR0  (I,K)
+*
+            GZM(I,K) = ILAB(I,K)
+         END DO
+      END DO
+*
+*     TENDANCES MOYENNEES
+      IF ((MOYHR.GT.0).AND.(KOUNT.GT.0)) THEN
+*VDIR NODEP
+         DO I = 0, NI*NK-1
+            F(ZCTEM  + i) = F(ZCTEM  + i) + ZCTE (I+1,1)
+            F(ZSTEM  + i) = F(ZSTEM  + i) + ZSTE (I+1,1)
+            F(ZCQEM  + i) = F(ZCQEM  + i) + ZCQE (I+1,1)
+            F(ZSQEM  + i) = F(ZSQEM  + i) + ZSQE (I+1,1)
+            F(ZSQCEM + i) = F(ZSQCEM + i) + ZSQCE(I+1,1)
+         END DO
+      ENDIF
+*
+*******************************************************************
+*     EXTRACTION DE DIAGNOSTICS                                   *
+*     -------------------------                                   *
+*******************************************************************
+*
+*     NUAGES STRATIFORMES
+      CALL SERXST (V(FLAGMXP),'FG',J, NI, 0.,     1.,  -1      )
+      CALL SERXST (V(CCS)  , 'NS', J, NI, 0.,     1.,  -1      )
+      CALL MZONXST(V(CCS)  , 'NS', J, NI, HEURSER,1.,  -1, ICPU)
+*
+      IF (ICONVEC.GE.3) THEN
+*
+*        TENDANCES CONVECTIVES
+         CALL SERXST  (ZCTE, 'TK' , J , NI, 0.0 ,    1.,      -1      )
+         CALL MZONXST (ZCTE, 'TK' , J , NI, HEURSER, PS,      -2, ICPU)
+         CALL SERXST  (ZCQE, 'QK' , J , NI, 0.0 ,    1.,      -1      )
+         CALL MZONXST (ZCQE, 'QK' , J , NI, HEURSER, PS,      -2, ICPU)
+*
+      ENDIF
+*
+      IF (ISTCOND.EQ.3 .OR. ISTCOND.EQ.4) THEN
+*
+*        FLUX DES PRECIPITATIONS
+         CALL SERXST (V(RNFLX),  'WF', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(RNFLX),  'WF', J, NI, HEURSER, 1.,   -1, ICPU)
+*
+         CALL SERXST (V(SNOFLX), 'SF', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(SNOFLX), 'SF', J, NI, HEURSER, 1.,   -1, ICPU)
+*
+*        EPAISSEUR ET CHEMIN OPTIQUE
+         CALL SERXST (V(ICW),    'IE', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(ICW),    'IE', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(IWV),    'IH', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(IWV),    'IH', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(LWP2),   'IC', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(LWP2),   'IC', J, NI, HEURSER, 1.,   -1, ICPU)
+*
+      ELSE IF (ICONVEC.EQ.3) THEN
+*
+*         NUAGES DE CONVECTION RESTREINTE + NUAGES DE CONVECTION PROFONDE
+*         POUR LE SCHEMA "OLDKUO" (SI NON UTILISE AVEC "NEWSUND")
+          CALL SERXST  (F(FN) ,'NC', J, NI,  0.0    , 1.,      -1      )
+          CALL MZONXST (F(FN) ,'NC', J, NI,  HEURSER, 1.,      -1, ICPU)
+*
+      ENDIF
+*
+************************************************************************
+      IF (ISTCOND.EQ.5) THEN
+*        LES INTEGRALES VERTICALES DU CONDENSE(ICW), DE LA VAPEUR (IWV),
+*        DE PHASES LIQUIDE (LWP2) ET SOLIDE (IWP), SURFONDUE (SLWP)
+*        ET SURFONDUE PAR COUCHES (SLWP2 DU s1 A s2, SLWP3 DE s2 A s3
+*        ET SLWP4 DE s3 A s4, OU s1, s2, s3 ET s4 LES NIVEAUX SIGMA
+*        DEFINIS EN INTWAT3).
+         CALL SERXST (V(ICW),    'IE', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(ICW),    'IE', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(IWV),    'IH', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(IWV),    'IH', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(LWP2),   'IC', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(LWP2),   'IC', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(IWP),    'II', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(IWP),    'II', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(SLWP),   'IB', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(SLWP),   'IB', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(SLWP2),  'B2', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(SLWP2),  'B2', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(SLWP3),  'B3', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(SLWP3),  'B3', J, NI, HEURSER, 1.,   -1, ICPU)
+         CALL SERXST (V(SLWP4),  'B4', J, NI, 0.,      1.,   -1      )
+         CALL MZONXST(V(SLWP4),  'B4', J, NI, HEURSER, 1.,   -1, ICPU)
+*
+      ENDIF
+************************************************************************
+*
+      IF (KOUNT.EQ.0) THEN
+*        METTRE A ZERO LES TAUX DES PRECIPITATIONS
+         DO I=0,NI-1
+            F(TLC  +I) = 0.
+            F(TLS  +I) = 0.
+            F(TSC  +I) = 0.
+            F(TSS  +I) = 0.
+            F(RCKFC+I) = 0.
+         END DO
+      ENDIF
+*
+*
+*******************************************************************
+*     RELACHER LES POINTEURS                                      *
+*     ----------------------                                      *
+*******************************************************************
+*
+*     RELACHER TOUT L'ESPACE DE TRAVAIL
+      STK_FREE
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@La version 3.8 de la physique a ete creee le 12 mars 2003
+
+Principaux changements par rapport a la version 3.72 :
+----------------------------------------------------
+
+	* contenu de la rustine r2 de la version 3.72
+	* code developpe pour le modele regional a 15 km
+		- MOISTKE (refonte)
+		- MIXPHASE (avec BLG)
+		- KTRSNT
+		- proprietes optiques des nuages
+	* option ADVECTKE reactivee
+	* BOUJO disponible dans eturbl
+	* ajouts importants au code de physique linearisee
+	* nouvelles cles : AS,BETA,KKL,KFCPCP,SHLCVT(2),QCO2
+	* nombreux diagnostics supplementaires
+	* optimisation des series temporelles
+	* diagnostics supplementaires pour CHRONOS et AURAMS
+	* correction d'une multitude de bogues mineurs
+@
+text
+@a884 1
+              QR(I,K) = QR(I,K) + CDT1 *  ZCQRE(I,K)
+d889 8
+a1254 1
+              QR(I,K) = QR(I,K) + CDT1 *  ZSQRE(I,K)
+d1258 9
+@

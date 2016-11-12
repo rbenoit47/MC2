@@ -1,0 +1,207 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*** s/r geopini
+      subroutine geopini (ni,nj)
+      implicit none
+*
+      integer ni,nj
+*
+*AUTHOR
+*          M. Desgagne (Oct 1995)
+*
+*REVISION
+* 001      J. Mailhot  (Mar 1999) - Changes for new SURFACE interface
+* 002      S. Belair (Mar 1999) - Changes for new SURFACE interface
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (geopini)
+*          Establishes requirement in terms of geophysical variables 
+*          in bus 'GEOBUS'.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*   ni          I    I     S       horizontal dimension along-x
+*   nj          I    I     S       horizontal dimension along-y
+*
+*IMPLICITES
+*
+#include "lesbus.cdk"
+#include "geobus.cdk"
+#include "physnml.cdk"
+#include "yomdyn.cdk"
+*
+*MODULES
+**
+      integer i
+**
+*----------------------------------------------------------------------
+*     
+      geotop = 0
+      geospc = 0
+*
+      if (gnmaphy.gt.0) then
+*
+***  Adding variables on GEOBUS
+*
+*                                 Surface variables to be read for
+*                                 every surface schemes
+*
+      call mgsdict (ni, nj, dlat,    'VN=dlaten  ; SN=00;      VS=row')
+      call mgsdict (ni, nj, dlon,    'VN=dlonen  ; SN=00;      VS=row')
+      call mgsdict (ni, nj, mf,      'VN=mf      ; SN=00;      VS=row')
+
+      call mgsdict (ni, nj, mt,      
+     $'VN=mt      ; SN=mt;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, mg,      
+     $'VN=mgen    ; SN=mg;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, al,      
+     $'VN=alen    ; SN=al;      VS=row   ; INTERP=LINEAR  ; SEQ=AC')
+      call mgsdict (ni, nj, twater,  
+     $'VN=twateren; SN=tm;      VS=row   ; INTERP=CUBIC   ; SEQ=A')
+      call mgsdict (ni, nj, lhtg,    
+     $'VN=lhtgen  ; SN=lh;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, dhdx,  
+     $'VN=dhdxen  ; SN=y7;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, dhdy,  
+     $'VN=dhdyen  ; SN=y8;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, dhdxdy,  
+     $'VN=dhdxdyen; SN=y9;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, glacier, 
+     $'VN=glacen  ; SN=ga;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, icedp,   
+     $'VN=icedpen ; SN=i8;      VS=row   ; INTERP=LINEAR  ; SEQ=C')
+      call mgsdict (ni, nj, tglacier,
+     $'VN=tglacen ; SN=i9;      VS=row*2 ; INTERP=CUBIC   ; SEQ=A')
+      call mgsdict (ni, nj, tmice,   
+     $'VN=tmicen  ; SN=i7;      VS=row*3 ; INTERP=CUBIC   ; SEQ=A')
+      call mgsdict (ni, nj, z0,      
+     $'VN=z0en    ; SN=z0;      VS=row   ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, snodp,   
+     $'VN=snodpen ; SN=sd;      VS=row   ; INTERP=LINEAR  ; SEQ=AV')
+      call mgsdict (ni, nj, tsoil, 
+     $'VN=tsoilen ; SN=I0;      VS=row*2 ; INTERP=CUBIC   ; SEQ=AV')
+      call mgsdict (ni, nj, vegf,    
+     $'VN=vegfen  ; SN=vf;      VS=row*26; INTERP=NEAREST ; SEQ=G')
+      call mgsdict (ni, nj, glsea,   
+     $'VN=glseaen ; SN=lg;      VS=row   ; INTERP=LINEAR  ; SEQ=AV')
+*
+*                                 For the FORCE-RESTORE option
+*
+      if ((schmsol.eq.'FCREST') .or.(schmsol.eq.'fcrest')) then
+      call mgsdict (ni, nj, wsoil, 
+     $'VN=hs      ; SN=hs;      VS=row  ; INTERP=LINEAR  ; SEQ=AV')
+      call mgsdict (ni, nj, vegindx, 
+     $'VN=veginden; SN=vg;      VS=row  ; INTERP=NEAREST ; SEQ=G')
+      end if
+*
+*                                 For ISBA or CLASS
+*
+      if ((schmsol.eq.'ISBA') .or.(schmsol.eq.'isba').or.
+     1    (schmsol.eq.'CLASS').or.(schmsol.eq.'class')) then
+      call mgsdict (ni, nj, wsoil, 
+     $'VN=wsoilen;   SN=i1;   VS=row*2 ; INTERP=LINEAR  ; SEQ=A')
+      call mgsdict (ni, nj, sand,   
+     $'VN=sanden ;   SN=j1;   VS=row*5 ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, clay,   
+     $'VN=clayen ;   SN=j2;   VS=row*5 ; INTERP=LINEAR  ; SEQ=G')
+      call mgsdict (ni, nj, snoro,  
+     $'VN=snoroen;  SN=dn;    VS=row   ; INTERP=LINEAR  ; SEQ=A')
+      if (snoalb) then
+      call mgsdict (ni, nj, snoal,  
+     $'VN=snoalen;  SN=i6;    VS=row   ; INTERP=LINEAR  ; SEQ=A')
+      else
+      call mgsdict (ni, nj, snoag,  
+     $'VN=snoagen;  SN=xa;    VS=row   ; INTERP=LINEAR  ; SEQ=A')
+      endif
+      end if
+*
+*                                 For ISBA
+*
+      if ((schmsol.eq.'ISBA').or.(schmsol.eq.'isba')) then
+      call mgsdict (ni, nj, isoil,  
+     $'VN=isoilen; SN=i2;   VS=row   ; INTERP=LINEAR  ; SEQ=A')
+      call mgsdict (ni, nj, wveg,   
+     $'VN=wvegen;  SN=i3;     VS=row ; INTERP=LINEAR  ; SEQ=A')
+      call mgsdict (ni, nj, wsnow,  
+     $'VN=wsnowen; SN=i4;     VS=row ; INTERP=LINEAR  ; SEQ=A')
+      end if
+*
+*
+      if ((schmsol.eq.'CLASS').or.(schmsol.eq.'class')) then
+      call mgsdict (ni, nj, tveg,  'VN=tveg;    SN=tc;      VS=row')
+      call mgsdict (ni, nj, tsoil, 'VN=tsoil;   SN=ts;    VS=row*3')
+      call mgsdict (ni, nj, snoro, 'VN=snoro;   SN=bs;      VS=row')
+      call mgsdict (ni, nj, vegro, 'VN=vegro;   SN=gr;      VS=row')
+      call mgsdict (ni, nj, wveg,  'VN=wveg;    SN=rc;      VS=row')
+      call mgsdict (ni, nj, iveg,  'VN=iveg;    SN=sc;      VS=row')
+      call mgsdict (ni, nj, tsno,  'VN=tsno;    SN=to;      VS=row')
+      call mgsdict (ni, nj, wsoil, 'VN=wsoil;   SN=hs;    VS=row*3')
+      call mgsdict (ni, nj, isoil, 'VN=isoil;   SN=oi;    VS=row*3')
+      call mgsdict (ni, nj, gc,    'VN=gc;      SN=gc;      VS=row')
+      call mgsdict (ni, nj, z0,    'VN=z0;      SN=zp;    VS=row*5')
+      call mgsdict (ni, nj, laimax,'VN=laimax;  SN=mx;    VS=row*4')
+      call mgsdict (ni, nj, laimin,'VN=laimin;  SN=mn;    VS=row*4')
+      call mgsdict (ni, nj, vegma, 'VN=vegma;   SN=as;    VS=row*4')
+      call mgsdict (ni, nj, alnir, 'VN=alnir;   SN=iw;    VS=row*5')
+      call mgsdict (ni, nj, color, 'VN=color;   SN=s1;      VS=row')
+      call mgsdict (ni, nj, sand,  'VN=sand;    SN=s2;    VS=row*3')
+      call mgsdict (ni, nj, clay,  'VN=clay;    SN=s3;    VS=row*3')
+      call mgsdict (ni, nj, drain, 'VN=drain;   SN=s4;      VS=row')
+      endif
+*
+      geospc = geopar (geotop,1)+geopar(geotop,2)-1
+*
+      write (6,101) 'GEO',ni,nj
+      write (6,130)
+      write (6,110)
+      write (6,130)
+      do i=1,geotop
+         write (6,120) geonm(i,1),geonm(i,2),geopar(i,1),
+     $        geopar(i,2),geopar(i,3),geonm(i,6),geonm(i,5)
+      end do
+      write (6,130)
+*
+      else
+*
+         geospc = 1
+*
+      endif
+*
+ 101  format (10x,'+',35('-'),'+'/10x,'|  **',a3,'BUS**  ni= ',i5,
+     $        ' nj= ',i5,'  |')
+ 110  format ('|',2x,'Names',2x,'|',' STD ',
+     $        '|  Start | Length | Mul | SEQ | H.INTRP  |')
+ 120  format ('|',1x,a8,'|',1x,a2,'  |',2(i7,' |'),i3,'  |',1x,a3,
+     $        ' |',1x,a7,'  |')
+ 130  format ('+',9('-'),'+',5('-'),'+',8('-'),'+',8('-'),'+',5('-'),
+     $        '+',5('-'),'+',10('-'),'+')
+*
+*----------------------------------------------------------------------
+      return
+      end 
+@

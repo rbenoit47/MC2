@@ -1,0 +1,48 @@
+#
+#   Common recipes for models
+#
+include $(MODEL_PATH)/Makefile_$(EC_ARCH)
+RCOMPIL = r.compile $(MPI) $(OMP)
+PATCH   =
+OPTF    =
+#FCOMPF  = -debug
+#DEBUG   = -debug
+EXTOBJ  = 
+#
+#MPI = rpn_comm_stubs
+#CODEBETA =
+
+MODLIBPATH  = $(ARMNLIB)/modeles/$(FULL_MODEL)/v_$(MODEL_VERSION)/lib/$(EC_ARCH)$(ABI)
+
+V4D         =        #RB2016 v4d_stubs
+#V4D         = "v4d modulopt prof_003"
+
+#RB2016  PHY_VERSION = 5.0.2
+# A climate-specific libphy.a can be found in the GEM-CLIMATE library directory
+#PHYLIBPATH  = $(ARMNLIB)/modeles/PHY/v_$(PHY_VERSION)/lib/$(EC_ARCH)$(ABI)
+PHYLIBPATH  = $(MODLIBPATH)
+#PHY        = phy_stubs
+PHY         = phy #RB2016 class
+
+CHM_VERSION = 0.0
+CHMLIBPATH = $(ARMNLIB)/modeles/CHM/v_$(CHM_VERSION)/lib/$(EC_ARCH)$(ABI)
+CHM         =   #RB2016 chm_stubs
+#CHM        = chm
+
+#. r.ssmuse.dot surf2
+CPLLIBPATH  = $(EC_LD_LIBRARY_PATH)
+#CPL         = cpl_100 cpl netcdf
+CPL         =    #RB2016 cpl_stubs
+
+OTHERS   = $(COMM) $(TOOLS) lapack blas massvp4 $(BINDC) $(LLAPI) $(IBM_LD)
+LIBPATH  = $(MODLIBPATH) $(PHYLIBPATH) $(CHMLIBPATH) $(CPLLIBPATH)
+LIBS     = $(MODEL) $(V4D) $(PHY) $(PATCH) $(CHM) $(CPL) $(OTHERS)
+
+LCLPO   = malib$(EC_ARCH)
+mainntr = main$(MODEL)ntr_$(BASE_ARCH)_${MODEL_VERSION}.Abs
+maindm  = main$(MODEL)dm_$(BASE_ARCH)_${MODEL_VERSION}.Abs
+rmpo:
+	/bin/rm -f $(LCLPO)/*.o
+#
+libdyn: rmpo $(OBJECTS)
+#

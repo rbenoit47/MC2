@@ -1,0 +1,91 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_tr
+*
+      subroutine out_tr (cl,prtm,rf,trname,ng,lnk,nksor,ip2,unf)
+      implicit none
+*
+      integer ip2,ng,lnk,nksor,unf
+      character*8 trname(*)
+      real cl(ng,lnk,*),rf(nksor),prtm(ng,lnk)
+*
+*AUTHOR     Michel Desgagne     Dec 2002
+*
+#include "lcldim.cdk"
+#include "levels.cdk"
+#include "yomdyn.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+#include "partopo.cdk"
+*
+      integer i,j,k,n,nkref,gltr,err
+      real, dimension (:,:), allocatable :: w1
+      real posv
+      pointer (paposv, posv(ng,nksor,2,3))
+*
+*----------------------------------------------------------------------
+*
+      if (myproc.eq.0) print*, '=====> OUT_TR'
+*
+      paposv = papositd
+*
+      nkref = nksor
+      if (levtyp.eq.'G') nkref = lnk
+      if ((nkref.lt.1).or.(ntr.lt.1)) goto 999
+* 
+      if (levtyp.ne.'G') allocate (w1(ng,nkref))
+*
+      do n=1,ntr
+*
+         gltr=-1
+         do i=1,nvardyn
+            if (udolist(i).eq.trname(n)) gltr=i
+         end do
+*
+         if (gltr.gt.0) then
+*
+         if (levtyp.ne.'G') then
+             call inv_vertint (w1,cl(1,1,n),posv(1,1,1,3),htt_od,
+     $                                              ng,nkref,lnk)
+             call ecris_fst (w1,minx,maxx,miny,maxy,rf,trname(n),1.0,
+     $               ip2,out_kind,nkref,table_out(1,gltr),'DYN',unf)
+         else
+             call ecris_fst(cl(1,1,n),minx,maxx,miny,maxy,ztr,trname(n),
+     $              1.0,ip2,out_kind,nkref,table_out(1,gltr),'DYN',unf)
+         endif
+*
+         endif
+*
+         end do
+*
+      if (levtyp.ne.'G') deallocate (w1)
+*
+*----------------------------------------------------------------------
+ 999  return
+      end
+
+
+
+
+@

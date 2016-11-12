@@ -1,0 +1,135 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.30;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P FALL
+#include "phy_macros_f.h"
+      SUBROUTINE FALL(QR,WORK,PS,S,T,Q,VT,DT,NI,NK)
+#include "impnone.cdk"
+*
+      INTEGER NI,NK
+      INTEGER I,K,L
+      INTEGER MITER
+*
+      REAL QR(NI,NK),WORK(NI,NK),PS(NI),Q(NI,NK)
+      REAL S(NI,NK),T(NI,NK),VT(NI,NK),DT
+*
+      REAL G,R,DELT
+*
+*
+*Author
+*          Stephane Belair (1994)
+*
+*Revision
+* 001      B. Bilodeau (January 2001) - Automatic arrays
+*
+*Object
+*          to calculate the new values for the rainwater/snow (QR)
+*          after fall over a certain time period DT...
+*
+*Arguments
+*
+*          - Input/Output -
+* QR       rainwater/snow variable
+* WORK     work field
+*
+*          - Input -
+* PS       surface pressure
+* S        sigma level
+* T        temperature
+* Q        specific humidity
+* VT       terminal velocity of the rainwater/snow
+* DT       time period given for calculation of fall in seconds
+* NI       1st dimension of variables
+* NK       2nd dimension of variables
+*
+*Notes
+*
+**
+
+*
+      AUTOMATIC ( RHO , REAL , (NI,NK) )
+      AUTOMATIC ( P   , REAL , (NI,NK) )
+      AUTOMATIC ( TV  , REAL , (NI,NK) )
+*
+*
+*
+      R = 287.05
+      G = 9.81
+      MITER = 20
+      DELT = DT / FLOAT(MITER)
+*
+*...PRELIMINARY CALCULATIONS...
+*
+      DO 10 K=1,NK
+      DO 10 I=1,NI
+        P(I,K) = S(I,K)*PS(I)
+        TV(I,K) = T(I,K)*( 1.0+0.608*Q(I,K) )
+        RHO(I,K) = P(I,K) / ( R*TV(I,K) )
+ 10   CONTINUE
+*
+*...FOR EACH SMALLER TIME STEPS 'DELT'...
+*
+      DO 20 L=1,MITER
+*
+      DO 30 I=1,NI
+        WORK(I,1) = 0.0
+ 30   CONTINUE
+*
+      DO 40 K=2,NK
+      DO 40 I=1,NI
+        WORK(I,K)=QR(I,K)-G*DELT*(RHO(I,K)*QR(I,K)*VT(I,K)-
+     1            RHO(I,K-1)*QR(I,K-1)*VT(I,K-1) ) /
+     1            ( P(I,K)-P(I,K-1) )
+*       WORK(I,K) = AMAX1( 0.0 , WORK(I,K) )
+ 40   CONTINUE
+*
+      DO 50 K=1,NK
+      DO 50 I=1,NI
+        QR(I,K) = WORK(I,K)
+ 50   CONTINUE
+*
+ 20   CONTINUE
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

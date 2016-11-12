@@ -1,0 +1,95 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r radiaf  -- Initialisation of climatological ozone data
+*                   and radiation table
+*
+      subroutine radiaf (fichier, chemin, cible, n, flag)
+      implicit none
+*
+      character* (*) fichier, chemin
+      logical flag
+      integer n
+      real cible (n)
+*
+#include "partopo.cdk"
+      include 'mpif.h'
+      character*26 datatype(2)
+      logical ielocal,iela,isfst
+      integer iun,ilir,inbr,indice,long,status,ityp
+      integer fnom,fstouv,fstopc,fstfrm,fclos,fstnbr,wkoffit
+      data iun /26/
+      data datatype /'CLIMATOLOGICAL OZONE FILE ',
+     $               'RADIATION TABLE FILE '/
+*-----------------------------------------------------------------
+*
+      inbr   = fstopc ('MSGLVL','SYSTEM',.false.)
+      status = -1
+      ityp = 1
+      if (.not.flag) ityp=2
+*
+      if (myproc.eq.0) then
+*
+         inquire (FILE=fichier,EXIST=ielocal)
+         if (ielocal) then
+            chemin = fichier
+            iela   = .true.
+            indice = 0
+            long   = len (fichier)
+         else
+            indice = index(chemin,' ')
+            long   = len(fichier)
+            chemin(indice:indice+long-1) = fichier
+            inquire (FILE=chemin,EXIST=iela)
+         endif
+*
+         if (iela) then
+            ilir = wkoffit(chemin)
+            if (ilir.eq.1) then
+               ilir  = fnom (iun,chemin,'STD+RND+OLD',0)
+               ilir  = fstouv (iun,'RND')
+               isfst = .true.
+            else
+               open(iun,file=chemin,access='SEQUENTIAL',
+     $                             form='UNFORMATTED')
+               isfst = .false.
+            endif
+*
+            print*
+            if (isfst) then
+               print *, datatype(ityp),'(FST): ',chemin(1:indice+long)
+               inbr   = fstopc ('MSGLVL','INFORM',.false.)
+            else
+               print *, datatype(ityp),'(SEQ): ',chemin(1:indice+long)
+            endif
+*
+            call rdradf (cible,iun,isfst,n,flag,status)
+*
+            if (isfst) then            
+               inbr = fstfrm (iun)
+               inbr = fclos  (iun)    
+            else
+               close (iun)
+            endif
+*
+         else
+*
+            print*
+            print *,'********************************************'
+            print *,'   CAN NOT FIND ',datatype(ityp)
+            print *,'********************************************'
+*
+         endif
+*     
+      endif
+*
+      call MPI_bcast (status,1,MPI_INTEGER,0,MPI_COMM_WORLD,inbr)
+      if (status.eq.0) then
+         call MPI_bcast (cible,n,MPI_REAL,0,MPI_COMM_WORLD,inbr)
+      else
+         if (myproc.eq.0) print*, 'COULD NOT READ ',datatype(ityp)
+         stop
+      endif
+*
+*-----------------------------------------------------------------
+*
+      return
+      end

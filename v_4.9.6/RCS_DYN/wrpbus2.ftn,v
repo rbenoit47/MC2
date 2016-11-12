@@ -1,0 +1,92 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wrpbus2
+*
+      subroutine wrpbus2 (outbus,prt,topo,lvls,nm,par,n,npar,sizobus,
+     $                                 ni,nj,nk,flag3d,stepno,unphy)
+      implicit none
+*
+      integer n,npar,sizobus,ni,nj,nk,flag3d,stepno,unphy
+      character* (*) nm (n)
+      integer par (npar,n)
+      real outbus (sizobus),prt(ni,nj,nk),topo(ni,nj,2),lvls(nk)
+
+*
+*AUTHOR     Michel Desgagne                Nov   1995
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (wrpbus2)
+*    Writes a header and the whole content of the pre-prepared
+*    physics output bus (outbus) on disk. Writes also hydrostatic
+*    pressure on thermodynamic levels if flag3d = 1.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    outbus     I    R    A    bus containing physics output variables
+*    prt        I    R    A    hydrostatic pressure on thermo. lvls
+*    lvls       I    R    A    thermodynamic levels
+*    nm         I    C    A    names on outbus
+*    par        I    I    A    attributes of variables on outbus
+*    n          I    I    S    number of output variables on outbus
+*    npar       I    I    A    number of attributes per variable
+*    sizobus    I    I    S    length of bus OUTBUS
+*    ni         I    I    S    horizontal dimension along X
+*    nj         I    I    S    horizontal dimension along Y
+*    nk         I    I    S    vertical dimension
+*    flag3d     I    I    S    flag to write hydro. pressure (prt)
+*    stepno     I    I    S    step number
+*    unphy      I    I    S    fortran unit number for physics output
+*
+*IMPLICIT
+*
+#include "lesbus.cdk"
+*
+*MODULES
+*
+**
+      integer i
+*----------------------------------------------------------------------
+*
+      write (unphy) n,npar,stepno
+      write (unphy) nk,sizobus
+      write (unphy) (lvls(i),i=1,nk)
+*
+      write (unphy) topo
+      write (unphy) nm,par
+      write (unphy) outbus
+      write (unphy) flag3d
+      if (flag3d.gt.0) write (unphy) prt
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+@

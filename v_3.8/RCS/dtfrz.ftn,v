@@ -1,0 +1,88 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** FUNCTION DTFRZ
+      FUNCTION DTFRZ (T,P,Q,SD,D273)
+#include "impnone.cdk"
+      REAL DTFRZ,T,P,Q,SD,D273
+*
+*Author
+*          Fritsch and Chappell  (Sept 25, 1986)
+*
+*Revision
+*
+*Object
+*     to calculate the difference of T due to freezing
+*
+*Arguments
+*
+*          - Input -
+* T        temperature
+* P        pressure
+* Q        specific humidity
+* SD       difference of moisture
+* D273     = 1/273.16
+*
+*Notes
+*
+*
+**
+*
+      REAL RLC,RLS,TOTRU,BT,DT,QS1,QS2,QS,X
+*
+C 
+C...COMPUTE FREEZING EFFECT.
+C 
+      RLC = 2.5E6-2369.276*(T-273.16) 
+      RLS = 2833922.-259.532*(T-273.16) 
+      TOTRU = SD+Q
+      BT = 1./T 
+      DT = D273-BT
+      QS1 = 611.*EXP(RLC*DT/461.) 
+      QS2 = 611.*EXP(RLS*DT/461.) 
+      QS = .622*RLS*QS2/(P-QS2) 
+      X = 2.1672E-3*RLS*QS*BT*BT
+      DTFRZ = (SD*(RLS-RLC)+.622*RLS*QS1/(P-QS1)-QS)/(1004.+1952.*TOTRU+
+     *   X) 
+      RETURN
+      END 
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

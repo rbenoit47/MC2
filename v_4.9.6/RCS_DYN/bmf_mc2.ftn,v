@@ -1,0 +1,150 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.08.15.19.08;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+
+      integer function open_bmf (filename,ni,nj,nk,galsig,halon)
+      implicit none
+*
+      character* (*) filename
+      integer ni,nj,nk,galsig,halon
+*
+#include "partopo.cdk"
+#include "tracers.cdk"
+      logical qxv,p0v
+      integer i,dim_bmf,err
+      character*4 , dimension (:) , allocatable :: bmf_nom
+      integer, dimension (:), allocatable ::
+     $        bmf_ni,bmf_istart,bmf_iend,bmf_nj,bmf_jstart,bmf_jend,
+     $        bmf_nk,bmf_kstart,bmf_kend,bmf_time1,bmf_time2,bmf_hgrid,
+     $        bmf_vgrid,bmf_dtyp,bmf_scat,bmf_ndata
+      integer bmf_gobe,bmf_get,wkoffit
+      external bmf_gobe,bmf_get,wkoffit
+*
+*-----------------------------------------------------------------------
+*
+      open_bmf = -1
+*
+      err = wkoffit(filename)
+      if (err < 0) then
+         print*, 'CANNOT OPEN BMF FILE: ',filename,' --- ABORT ---'
+         return
+      endif
+*
+      call bmf_init
+      dim_bmf=bmf_gobe(filename)
+*
+      allocate (bmf_nom (dim_bmf),bmf_ni(dim_bmf),bmf_istart(dim_bmf),
+     $          bmf_iend(dim_bmf),bmf_nj(dim_bmf),bmf_jstart(dim_bmf),
+     $          bmf_jend(dim_bmf),bmf_nk(dim_bmf),bmf_kstart(dim_bmf),
+     $          bmf_kend(dim_bmf),bmf_time1(dim_bmf),bmf_time2(dim_bmf),
+     $          bmf_hgrid(dim_bmf),bmf_vgrid(dim_bmf),bmf_dtyp(dim_bmf),
+     $          bmf_scat (dim_bmf),bmf_ndata(dim_bmf))
+      call bmf_catalog (bmf_nom,bmf_ni,bmf_istart,bmf_iend,bmf_nj,
+     $             bmf_jstart,bmf_jend,bmf_nk,bmf_kstart,bmf_kend,
+     $             bmf_time1,bmf_time2,bmf_hgrid,bmf_vgrid,bmf_dtyp,
+     $             bmf_scat,bmf_ndata)
+*
+      nj=0
+      ni=0
+      nk=0
+      n_tracers = 0
+      do i = 1, maxntrpil
+         trpil(i) = '  '
+      end do
+      qxv = .false.
+      p0v = .false.
+      print*
+      do i=1,dim_bmf
+         if ((bmf_nom(i).ne.'UU  ').and.(bmf_nom(i).ne.'VV  ').and.
+     $       (bmf_nom(i).ne.'TT  ').and.(bmf_nom(i).ne.'VT  ').and.
+     $       (bmf_nom(i).ne.'HU  ').and.(bmf_nom(i).ne.'PREG').and.
+     $       (bmf_nom(i).ne.'GZ  ').and.(bmf_nom(i).ne.'P0  ').and.
+     $       (bmf_nom(i).ne.'MX  ').and.(bmf_nom(i).ne.'BUOY').and.
+     $       (bmf_nom(i).ne.'HALO')) then
+            n_tracers = n_tracers + 1
+            trpil(n_tracers) = bmf_nom(i)
+         endif
+         if (bmf_nom(i).eq.'UU  ') then
+            nj=bmf_nj(i)
+            ni=bmf_ni(i)
+         endif
+c         write (6,102) myproc,filename,bmf_nom(i),bmf_ni(i),bmf_nj(i),
+c     $    bmf_istart(i),bmf_iend(i),bmf_jstart(i),bmf_jend(i),bmf_nk(i)
+         if (bmf_nom(i).eq.'PREG') qxv = .true.
+         if (bmf_nom(i).eq.'P0  ') p0v = .true.
+         nk = max(nk,bmf_nk(i))
+      end do
+c      print*
+*
+      err = bmf_get ('HALO',0,0,halon,-1,-1,1,1,1,1,1,1)
+*
+      deallocate (bmf_nom,bmf_ni,bmf_istart,bmf_iend,bmf_nj,bmf_jstart,
+     $          bmf_jend,bmf_nk,bmf_kstart,bmf_kend,bmf_time1,bmf_time2,
+     $          bmf_hgrid,bmf_vgrid,bmf_dtyp,bmf_scat,bmf_ndata)
+*
+      galsig = 0
+      if (qxv) then
+         galsig = 1
+      else
+         if (p0v) galsig = 2
+      endif
+*
+      open_bmf = 0
+*
+ 102  format ('PE: ',i4,2x,a30,a5,7i6)
+*
+*-----------------------------------------------------------------------
+      return
+      end
+*
+      integer function get_bmf (nv,d1,d2,f,i0,in,j0,jn,nk,ni,nj)
+      implicit none
+      character* (*) nv
+      integer d1,d2,i0,in,j0,jn,nk,ni,nj
+      real f(*)
+*
+      integer i,j,k,cnt,bmf_get,err
+      real w1(ni,nj,nk)
+*
+      if ((ni.eq.in-i0+1).and.(nj.eq.jn-j0+1)) then
+         err= bmf_get(nv,d1,d2,-1, f,-1,1,ni,1,nj,1,nk)
+      else
+         err= bmf_get(nv,d1,d2,-1,w1,-1,1,ni,1,nj,1,nk)
+         if (err.eq.0) then
+         cnt = 0
+         do k=1,nk
+         do j=j0,jn
+         do i=i0,in
+            cnt = cnt + 1
+            f(cnt) = w1(i,j,k)
+         end do
+         end do
+         end do
+         endif
+      endif
+*     
+      get_bmf = err
+*
+      return
+      end
+@

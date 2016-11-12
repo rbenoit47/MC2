@@ -1,0 +1,194 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***s/p litozon2
+*
+      subroutine litozon2 (varenv,sousrep,fichier,mois,jour,prout,
+     $                                                  rdradf_d)
+*
+#include "impnone.cdk"
+*
+      logical prout
+      character *(*) varenv, fichier, sousrep
+      integer mois,jour
+      external rdradf_d
+*
+*Author
+*          B. Bilodeau (April 1994) - From lirozon
+*
+*Revision
+*
+* 001      M. Desgagne (Oct 98) - call back to rdradf_d (from dynamics)
+*
+*Object
+*          to read in the ozone climatology table
+*
+*Arguments
+*
+*          - Input -
+* varenv   environment variable giving the data file path
+* sousrep  sub-directory where the file is located
+* fichier  name of the radiation table file
+* mois     month of ozone record
+* jour     day of the month 
+* prout    logical switch to print on stdout
+* rdradf_d call back routine from the dynamics to manage the file
+*
+*Notes
+*     1 -  The ozone climatology file provided by J.P.Blanchet
+*          is based on Kita and Sumi 1986.
+*     2 -  Interpolation to the day of the month is done and all
+*          monthly climatological values are supposed to be valid
+*          on the 15th. No interpolation is needed (done) when
+*          the input jour is 15
+*
+**
+*
+*
+*  CES DIMENSIONS CORRESPONDENT AUX CHAMPS SUIVANTS
+*
+*
+#include "radparam.cdk"
+*
+#include "ozopnt.cdk"
+#
+#include "raddata.cdk"
+*
+      REAL ZLAT(NLACL),PREF2(NPCL),CDZPOT2(NPCL)
+*
+      character chemin*512
+*
+      real      total,ecoule
+      integer   basem,destm,courm
+      integer   i,J,K,indice,lemois,long,NLP,annee(12)
+*
+      DATA ZLAT/-90.,-80.,-70.,-60.,-50.,-40.,-30.,-20.,-10.,  0.,
+     %           10., 20., 30., 40., 50., 60., 70., 80., 90./
+*
+*  CDZPOT CONVERTIT LES DONNEES EN CM-STP
+      DATA CDZPOT2 /6.79E-7, 9.52E-7, 1.56E-6, 2.32E-6, 2.95E-6,
+     %        3.81E-6, 1.02E-5, 7.14E-6, 8.78E-6, 1.60E-5, 2.35E-5,
+     %        2.88E-5, 3.88E-5, 1.01E-4, 7.24E-5, 8.88E-5, 1.57E-4,
+     %        2.37E-4, 2.80E-4, 3.86E-4, 1.04E-3, 7.21E-4, 9.03E-4,
+     %        1.54E-3, 2.35E-3, 2.20E-3, 2.97E-3, 9.11E-3, 1.35E-2,
+     %        3.66E-2, 6.18E-2, 7.07E-2, 1.05E-1, 1.56E-1, 1.52E-1,
+     %        1.76E-1, 0.00   /
+*
+      DATA PREF2 /.3, .4, .5, .7, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0,
+     %     7.0, 10., 15., 20., 30., 40., 50., 70., 100., 150.,
+     %     200., 300., 400., 500., 700., 1000., 1500., 2000.,
+     %     3100., 4400., 8800., 17600., 26000., 37800., 53700.,
+     %     75000., 101325./
+*
+      DATA annee / 31,28,31,30,31,30,31,31,30,31,30,31 /
+*
+      NLP=NLACL*NPCL
+*
+*     doit-on interpoler ?
+      if (jour.lt.15) then
+         if (mois.eq.1) then
+            destm = 1
+            basem = 12
+         else
+            destm = mois
+            basem = destm-1
+         endif
+         ecoule   = jour+annee(basem)-15
+      else if (jour.gt.15) then
+         if (mois.eq.12) then
+            basem = 12
+            destm = 1
+         else
+            basem = mois
+            destm = basem+1
+         endif
+         ecoule   = jour-15
+      else
+         basem    = mois
+         destm    = basem
+      endif
+*
+      if (basem.ne.destm) total = 1./annee(basem)
+*
+      chemin = ' '
+      call getenvc (varenv,chemin)
+      if (chemin.ne.' ') then
+         indice = index(chemin,' ')
+         long   = len(sousrep)
+         chemin(indice:indice+long-1) = sousrep
+      endif
+*
+      call rdradf_d (fichier, chemin, gozon12, NLACL*NPCL*12, .true.)
+*
+      if (destm.ne.basem) then
+*
+*        interpoler pour le jour courant.
+         DO J=1,NLP
+            goz(J) =  gozon12(J,basem) + 
+     $               (gozon12(J,destm)-gozon12(J,basem))*total*ecoule
+         ENDDO
+*
+      else
+*
+         DO J=1,NLP
+            goz(J)= gozon12(J,destm)
+         ENDDO
+*
+      endif
+*
+*     sauver les donnees lues.
+*
+      DO J=1,NLACL
+         goz(NLP+J)=ZLAT(J)
+      ENDDO
+*
+CDIR$ IVDEP
+*VDIR NODEP
+      DO K=1,NPCL
+         goz(NLP+NLACL+     K)=PREF2(K)
+         goz(NLP+NLACL+NPCL+K)=CDZPOT2(K)
+      ENDDO
+*
+      RETURN
+      END
+*
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

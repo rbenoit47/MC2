@@ -1,0 +1,301 @@
+#! /bin/ksh
+#___________________________________________________________________________________
+# Usage:
+#
+#   gem_config -h    : list arguments
+#   gem_config hist  : list configuration files in ${HOME}/.gem_config_rc
+#   gem_config oldExp: start with oldExp   configuration file from ${HOME}/.gem_config_rc
+#   gem_config       : start with the last configuration file from ${HOME}/.gem_config_rc
+#
+# Notes:
+#   This script: 
+#      updates  file  ${exp}.cfg in ${HOME}/.gem_config_rc
+#      produces files ${exp}.dot.cfg, gem_settings.nml and outcfg.out
+#                     in directory ${exp}_configs
+#___________________________________________________________________________________
+#
+mach_default=`hostname`
+listing=$CRAYOUT
+#
+# get last configuration
+. r.ccfg.dot
+. r.lcfg.dot
+#
+eval `cclargs_lite $0  "[ Gem Configuration ]" \
+                                                                                           \
+ -xxxxxxa     "xxxxxxxxxxxxxxxxxxxxxxx   NAMELIST PARAMETERS   xxxxxxxxxxxxxxxxxxxxxxxxx"  \
+                                                                                           \
+ -settings        "${settings}"              ""       "[full pathname of file gem_settings.nml; it will be used without modifications]"\
+ -usr_settings    "${usr_settings}"          ""       "[full pathname of file containing extra user setting;file will be dotted"]\
+ -gridname        "${gridname}"              ""       "[use hor.  grid in [gridname].grd]"\
+ -etaname         "${etaname}"               ""       "[use vert. grid in [etaname].grd]"\
+ -etik            "${etik:-DBG1}"            "GEM"    "[STD file etikette]"\
+ -Step_total      "${Step_total:-6}"         "8"      "[total number of timesteps for run]"\
+ -Step_rsti       "${Step_rsti:-6}"          "8"      "[number of timesteps to save a restart]"\
+ -Cstv_dt_8       "${Cstv_dt_8:-3600.}"      "900."   "[timestep length in seconds]"\
+ -Cstv_uvdf_8     "${Cstv_uvdf_8:-48000.}"   "20000." "[FACT. horiz. diffusion coef. for horiz. winds]"\
+ -Cstv_phidf_8    "${Cstv_phidf_8:-48000.}"  "20000." "[FACT. horiz. diffusion coef. for phi, T, etc.]"\
+ -Hzd_pwr         "${Hzd_pwr:-6}"            "4"      "[HO. horiz. diffusion order]"\
+ -Hzd_lnr         "${Hzd_lnr:-0.2}"          "0.6"    "[HO. horiz. diffusion 2 delta-x damping]"\
+ -Schm_phyms_L    "${Schm_phyms_L:-.false.}" ".true." "[.true./.false for physics scheme]"\
+ -P_pbl_schsl_s   "${P_pbl_schsl_s:-FCREST}" "ISBA"   "[surface scheme for physics]"\
+ -Ptopo_npex      "${Ptopo_npex:-1}"         "1"      "[number of processors along X]"\
+ -Ptopo_npey      "${Ptopo_npey:-1}"         "1"      "[number of processors along Y]"\
+ -P_rad_knt       "${P_rad_knt:-3}"          "3"      "[interval in timesteps between radiation computations]"\
+ -Init_balgm_L    "${Init_balgm_L:-.false.}" ".true." "[.true./.false for digital filter initialization]"\
+ -Init_dfnp       "${Init_dfnp:-5}"          "5"      "[number of points for digital filt init]"\
+ -Init_dfpl_8     "${Init_dfpl_8:-21600.}"   "21600." "[period limit of digital filter (secs.)]"\
+ -Mem_mx3db       "${Mem_mx3db:-83}"         "83"     "[number of 3D VMM vectors in memory]"\
+                                                                                        \
+ -xxxxxxb     "xxxxxxxxxxxxxxxxxxxxxxx  INPUT/OUTPUT FILES   xxxxxxxxxxxxxxxxxxxxxxx"  \
+										       \
+ -outputcfg "${outputcfg}" ""                                     "[ full pathname of the output configuration file ]"\
+ -analfl    "${analfl}"    "$gem/dfiles/bcmk/1996071900_000"      "[ full pathname of the analysis file]"\
+ -anclim    ""             ""                                     "[ full pathname of analyzed climatology]"\
+ -v4dobs    "${v4dobs}"    ""                                     "[ full pathname of observation file]"\
+ -climfl    "${climfl}"    "$gem/dfiles/bcmk/clim_gef_400_mars96" "[ full pathname of the climatology file]"\
+ -geopfl    "${geopfl}"    "$gem/dfiles/bcmk/geophy_400"          "[ full pathname of the geophysical file]"\
+ -outrep    "${outrep}"    ""                                     "[ full pathname of output directory]"\
+ -xfer      "${xfer}"      ""                                     "[ machine:directory where to transfer output]"\
+ -prefix    "${prefix}"    ""                                     "[ prefix to add to output filenames]"\
+ -d2z       "${d2z:-0}"    "1"                                    "[ to re-assemble # files]"\
+ -d2z_dplusp "${d2z_dplusp:-0}" "1"                               "[ assemble dynamics and physics # files]"\
+ -fst89     "${fst89:-0}"  "1"                                    "[ to produce 89 FST file format]"\
+                                                                                      \
+ -xxxxxxc     "xxxxxxxxxxxxxxxxxxxxxxxxxx   MACHINE ITEMS   xxxxxxxxxxxxxxxxxxxxxxxxx" \
+                                                                                       \
+ -exp       "${exp:-dbg1}"    "dbg2"            "[ experiment name: lower case letters and digits ]"\
+ -mach      "${mach}" "${mach_default}" "[ execution machine]"\
+ -execdir   "${execdir}"      ""                "[ running directory]"\
+ -xchgdir   "${xchgdir}"      ""                "[ exchange directory]"\
+ -xmu       "${xmu:-0}"       "1"               "[ xmu usage]"\
+ -mpi       "${mpi:-0}"       "1"               "[ mpi special class]"\
+ -cm        "${cm:-400000}"   "2000000"         "[ central memory requirement for submit]"\
+ -t         "${t:-7200}"      "3600"            "[ cpu time requirement for submit]"\
+ -clone     "${clone:-0}"     "1"               "[ automatic re-summit -cloning-]"\
+ -_job      "${_job}"         ""                "[ user define job name ]"\
+                                                                                       \
+ -xxxxxxd     "xxxxxxxxxxxxxxxxxx CODE, LIBRARIES AND ABSOLUTES   xxxxxxxxxxxxxxxxxx"  \
+                                                                                       \
+ -f          "${f:-0}"       "1"   "[ compiling local objects]"\
+ -abs        "${abs:-0}"     "1"   "[ loading]"\
+ -absaddres  "${absaddres}"  ""    "[ full pathname of a pre-loaded executable]"\
+                                                                                       \
+ -xxxxxxe     "xxxxxxxxxxxxxxxxxxxxxxxxx   MISCELLANEOUS   xxxxxxxxxxxxxxxxxxxxxxxxx"  \
+                                                                                       \
+ -debug      "${debug:-0}"       "1"         "[ debug mode -no cleanup-]"\
+ -launchit   "${launchit:-0}"    "1"         "[ launch the execution]"\
+ -listing    "${listing}"        "$CRAYOUT}" "[ full pathname for job listings]"\
+ -copy_rst   "${copy_rst:-no}"   "yes"       "[ see documentation section ]"\
+ -prevjob    "${prevjob}"        ""          "[ see documentation section ]"\
+ -tailscript "${tailscript}"     ""          "[ script to execute on $mach after the model]"\
+ -tailjob    "${tailjob}"        ""          "[ job to qsub from pollux after xfer]"\
+                                                                                       \
+ -xxxxxxf    "xxxxxxxxxxxxxxxxxxxxxxxxx   OUTPUT FREQUENCY  xxxxxxxxxxxxxxxxxxxxxxx"  \
+                                                                                       \
+ -debout     "${debout:-0}"      ""          "[ first timestep considered for output ]"\
+ -endout     "${endout:-1440}"   ""          "[ last timestep considered for output ]"\
+ -outint     "${outint:-36}"     ""          "[ output timestep interval ]"\
+                                                                                 \
+ -xxxxxxg    "xxxxx CLIMATIC MODE. Always uses format YYYY MM DD HH for dates xxxxx"\
+                                                                                 \
+ -climat     "${climat:-0}"      "0"         "[ activate climate mode]"\
+ -startdate  "${startdate}"      ""          "[ Date of first step, from input file ]"\
+ -newdate    "${newdate}"        ""          "[ New startdate when using prevjob ]"\
+ -enddate    "${enddate}"        ""          "[ Stop climate study at this date ]"\
+ -interval   "${interval}"       ""          "[ Subdivide job in blocs of n months]"\
+                                                                                 \
+ -diagnos    "${diagnos}"        "1"         "[ Run make_diag diagnostics ]"\
+ -strip_phy  "${strip_phy}"      "1"         "[ Convert multi-level outputs in physics to pressure]"\
+ -fularch    "${fularch}"        "gemarch"   "[ Name of archive for restart ]"\
+ -archdir    "${archdir:-.}"     "."         "[ Directory for cfs archiving ]"\
+ -arch_mach  "${arch_mach:-pollux}" ""       "[ Achive destination ]"\
+ -clean      "${clean:-0}"       "1"         "[ Clean after archiving ]"\
+ -prntdiag   "${prntdiag}"      "${PRINTER}" "[Printer for metacode. Archive diag if set]"\
+         \
+ ++ "$@"`
+#
+ETIK=`echo ${etik} | tr "[a-z]" "[A-Z]"`
+etik=`echo ${etik} | tr "[A-Z]" "[a-z]"`
+if [ ${climat} -gt 0 ]; then
+  _job=gem
+  ppid=$etik
+else
+  ppid=""
+fi
+#
+#==========> First Update of file ${exp}.cfg in ${HOME}/.gem_config_rc
+#
+######################MDMDMDMD ==> WHY?
+. r.ecfg.dot  $exp
+#
+rep_config=${exp}_configs
+mkdir $rep_config 2> /dev/null
+gem_settings_file=$rep_config/gem_settings.nml
+output_cfg_file=$rep_config/outcfg.out
+config_file=$rep_config/configexp.dot.cfg
+/bin/rm -f $gem_settings_file $output_cfg_file
+#
+#==========> Producing file gem_settings.nml
+#
+echo "\n_____________________________________________________________"
+if [ ${settings} ] ; then
+  if [ ! -f ${settings} ] ; then
+    settings=$gem/dfiles/canvas/$settings
+  fi
+  if [ ! -f ${settings} ] ; then
+    echo  "\n ERROR: File $settings is not available -- ABORT --\n"
+    exit 1
+  else
+    debut=`head -1 ${settings} | cut -c1-3`
+    if [ "$debut" != "cat" ] ; then
+      echo "\n Using user $settings without modification" 
+      cp ${settings} $gem_settings_file ; chmod 644 $gem_settings_file
+    fi
+  fi
+fi
+if [ ! ${settings} -o "$debut" = "cat" ] ; then
+  if [ ! "$gridname" ] ; then
+    echo "\n Using default horizontal grid: ${gem}/dfiles/grids_h/debug_23x12u.grd"
+    cp ${gem}/dfiles/grids_h/debug_23x12u.grd $gem_settings_file
+  elif [[ -f ${gridname}.grd ]] ; then
+    echo "\n Using horizontal grid: ${gridname}.grd"
+    cp ${gridname}.grd $gem_settings_file
+  elif [[ -f ${gem}/dfiles/grids_h/${gridname}.grd ]] ; then 
+    echo "\n Using horizontal grid: ${gem}/dfiles/grids_h/${gridname}.grd"
+    cp ${gem}/dfiles/grids_h/${gridname}.grd $gem_settings_file
+  else
+    echo "\n ERROR: File ${gridname}.grd is not available -- ABORT --\n"
+    exit 1
+  fi
+  chmod 644 $gem_settings_file
+#
+  if [ ! "${settings}" ] ; then
+    echo "\n Using default ${gem}/dfiles/canvas/gem_settings_canvas_gudbg for canvas"
+    . ${gem}/dfiles/canvas/gem_settings_canvas_gudbg >> $gem_settings_file
+  else
+    echo "\n Using ${settings} for canvas"
+    #
+    # adding setting specified by users with key usr_settings
+    if [ $usr_settings ] ; then
+      if [ -f $usr_settings ] ; then 
+        echo " with namelist variable assignment from file: ${usr_settings}"
+        . ${usr_settings}
+      else
+        echo "\n ERROR: usr_settings $usr_settings is not available -- ABORT --\n"
+        exit 1
+      fi
+    fi
+    . ${settings} >> $gem_settings_file
+  fi
+#
+##2) Establishing vertical grid
+#
+  cat $gem_settings_file | awk 'BEGIN{p=1}{if ($1 == "&gem_cfgs") (p=0) ;
+	               if (p==1) print}' > .zzztemp1
+  cat $gem_settings_file | awk 'BEGIN{p=0}{if ($1 == "&gem_cfgs") (p=1) ;
+	               if (p==1) print}' > .zzztemp2
+  cat .zzztemp2 | sed 's/&gem_cfgs//' > .zzztemp3
+  mv .zzztemp1 $gem_settings_file ; /bin/rm -f .zzztemp2
+  echo " &gem_cfgs" >> $gem_settings_file
+  if [ ! "$etaname" ] ; then
+    echo "\n Using default vertical grid: ${gem}/dfiles/dbgu_28.grd"
+    cat ${gem}/dfiles/grids_v/dbgu_28.grd >> $gem_settings_file
+  elif [[ -f ${etaname}.grd ]] ; then
+    echo "\n Using vertical grid: ${etaname}.grd"
+    cat ${etaname}.grd >> $gem_settings_file
+  elif [[ -f ${gem}/dfiles/grids_v/${etaname}.grd ]] ; then 
+    echo "\n Using vertical grid : ${gem}/dfiles/grids_v/${etaname}.grd"
+    cat ${gem}/dfiles/grids_v/${etaname}.grd >> $gem_settings_file
+  else
+    echo "\n ERROR: File ${etaname}.grd is not available -- ABORT --\n"
+    exit 1
+  fi
+  cat .zzztemp3 >> $gem_settings_file ; /bin/rm -f .zzztemp3
+fi
+#
+#==========> Producing file outcfg.out
+#
+if [ ! "${outputcfg}" ] ; then
+ echo "\n Using default output cfg file: ${gem}/dfiles/out_configs/output_dbg"
+ cp ${gem}/dfiles/out_configs/output_dbg $output_cfg_file
+elif [ -f ${outputcfg} ] ; then
+ echo "\n Using output cfg file: ${outputcfg}"
+ cp ${outputcfg} $output_cfg_file
+elif [ -f ${gem}/dfiles/out_configs/${outputcfg} ] ; then
+ echo "\n Using output cfg file: ${gem}/dfiles/out_configs/${outputcfg}"
+ cp ${gem}/dfiles/out_configs/${outputcfg} $output_cfg_file
+else
+ echo "\n ERROR: file ${outputcfg} is not available -- ABORT --\n"
+ exit 1
+fi
+chmod 644 $output_cfg_file
+#
+#==========> Producing file ${config_file)
+#
+xfer=`echo $xfer | sed 's/ /\:/'`
+cat << EOD4 > ${config_file}
+exp=$exp;
+model=gem;
+version=${gem_dynversion};
+t=$t;
+cm=$cm;
+restart=0;
+xfer=\"$xfer\";
+d2z=$d2z;
+d2z_dplusp=$d2z_dplusp;
+fst89=$fst89;
+prefix=$prefix;
+clone=$clone;
+f=$f;
+objexp=0;
+abs=$abs;
+absaddres=$absaddres;
+mach=$mach;
+execdir=$execdir;
+xchgdir=$xchgdir;
+mpi=$mpi;
+xmu=$xmu;
+anal=$analfl;
+v4dobs="$v4dobs";
+climato=$climfl;
+geophy=$geopfl;
+outrep=$outrep;
+debug=$debug;
+listing=$listing;
+_job=$_job;
+ppid=$ppid;
+prevjob=$prevjob;
+tailscript=$tailscript;
+tailjob=$tailjob;
+etaname=$etaname;
+climat=$climat;
+diagnos=$diagnos;
+strip_phy=$strip_phy;
+nosubmit=$nosubmit;
+startdate=\"$startdate\";
+newdate=\"$newdate\";
+enddate=\"$enddate\";
+interval=$interval;
+step_total=$Step_total;
+deltat=$Cstv_dt_8;
+fularch=$fularch;
+archdir=$archdir;
+arch_mach=$arch_mach;
+clean=$clean;
+prntdiag=$prntdiag;
+EOD4
+#
+if [ $launchit -gt 0 ] ; then
+  echo "\n LAUNCHING EXPERIENCE >> ${exp} <<"
+  . r.call.dot Um_launch $rep_config
+else
+  echo "\n EXPERIENCE >> ${exp} << READY TO LAUNCH IN DIRECTORY $rep_config"
+fi
+launchit=0
+#
+#==========> Updating file ${exp}.cfg in ${HOME}/.gem_config_rc
+#
+. r.ecfg.dot  $exp
+#
+echo "\n_____________________________________________________________"

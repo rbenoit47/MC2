@@ -1,0 +1,71 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer npolist
+      parameter (npolist = 3000)
+*
+      character*16  radia,fluvert,schmsol,convec,stcond,gwdrag,
+     $              mixing,shlcvt(2),pfbtyp,radftp,upolist(npolist),
+     $              upolist_tmp(npolist),kfcpcp,endphync
+      logical dbgmem,wet,drag,chauf,evap,advectke,diffuw,kfcmom_l,
+     $        satuco,inilwc,snowmelt,stomate,typsol,incore,
+     $        bkgalb,snoalb,cortm,drylaps,agregat,strato,endphynl
+      integer kntrad, moyhr, mxadj, lheat, runlgt,
+     $        gnpfb, nstepsor_p, nsloflux, endphyni
+      real hcad, hfad, hmad, hrclip, ktdflt, dzsedi, as, beta, kkl,
+     $     kfctrig,kfcrad,kfcdepth,kfcdlev,kfcdet,kfctimec,kfctimea,
+     $     endphynr
+*
+      common /physn_c/ radia,fluvert,schmsol,convec,stcond,gwdrag,
+     $                 mixing,shlcvt,radftp,upolist,kfcpcp,endphync
+      common /physn_l/ dbgmem,wet,drag,chauf,evap,advectke,snoalb,
+     $                 diffuw,kfcmom_l,satuco,inilwc,snowmelt,stomate,
+     $                 typsol,incore,bkgalb,cortm,drylaps,agregat,
+     $                 strato,endphynl
+      common /physn_i/ kntrad, moyhr, mxadj, lheat, runlgt,
+     $                 gnpfb, nstepsor_p, nsloflux, endphyni
+      common /physn_r/ hcad, hfad, hmad, hrclip, ktdflt,dzsedi,
+     $                 kfctrig,kfcrad,kfcdepth,kfcdlev,kfcdet,kfctimec,
+     $                 kfctimea,as,beta,kkl,endphynr
+*
+      namelist /physics/ radia,fluvert,schmsol,convec,stcond,upolist,
+     $                   dbgmem,wet,gwdrag,mixing,shlcvt,drag,chauf,
+     $                   evap,advectke,diffuw,satuco,inilwc,snowmelt,
+     $                   stomate,typsol,incore,radftp,nstepsor_p,
+     $                   kntrad,mxadj,lheat,runlgt,pfbtyp,
+     $                   hcad,hfad,hmad,hrclip,ktdflt,moyhr,snoalb,
+     $                   nsloflux,cortm,dzsedi,kfcmom_l,agregat,
+     $                   kfctrig,kfcrad,kfcdepth,kfcdlev,kfcdet,
+     $                   kfctimec,kfctimea,strato,kfcpcp,as,beta,kkl
+      namelist /physics_print/ radia,fluvert,schmsol,convec,stcond,
+     $                   dbgmem,wet,gwdrag,mixing,shlcvt,drag,chauf,
+     $                   evap,advectke,diffuw,satuco,inilwc,snowmelt,
+     $                   stomate,typsol,incore,radftp,nstepsor_p,
+     $                   kntrad,mxadj,lheat,runlgt,pfbtyp,
+     $                   hcad,hfad,hmad,hrclip,ktdflt,moyhr,
+     $                   nsloflux,cortm,dzsedi,kfcmom_l,agregat,
+     $                   kfctrig,kfcrad,kfcdepth,kfcdlev,kfcdet,
+     $                   kfctimec,kfctimea,strato,kfcpcp,as,beta,kkl
+
+         
+@

@@ -1,0 +1,45 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine adjtblo (table_out,nkout,n)
+      implicit none
+*
+      integer nkout,n
+      integer table_out(3,n)
+*
+      integer i
+*
+      do i = 1, n
+         if (table_out(1,i).le.0) then
+            table_out(1,i) = 1
+            table_out(2,i) = nkout
+            table_out(3,i) = 1
+         endif
+         table_out(1,i) = min(nkout,table_out(1,i))
+         table_out(2,i) = max(1,min(nkout,table_out(2,i)))
+         if (table_out(3,i).eq.0) table_out(3,i)=1
+      end do
+*
+      return
+      end
+@

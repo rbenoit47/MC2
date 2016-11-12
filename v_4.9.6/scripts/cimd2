@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+eval `cclargs $0 \
+       -r ",,,," ",,,," "[Numero de la revision a creer]"\
+       -m "gem" "mc2" "[message]"\
+       -inrep "" ""   "[directory containing the newcode]"\
+  ++ $*`
+#
+branch=${r%%\.*}.0
+r=`echo $r | sed 's/[0-9]//'`
+#
+ici=`pwd`
+cd RCS 2> /dev/null
+if [ $? -ne 0 ] ; then
+  echo "\n Directory RCS do not exist -- ABORT --\n"
+  exit
+fi
+cd $ici
+#
+echo "\nCode to check in at version $r of branch $branch."
+ls -l $inrep
+#
+echo " " > bidon
+m=${m}"_"$branch
+#
+echo "\n Checking in empty file at version $branch for new decks.\n"
+for i in $inrep/* ; do
+  file=${i##*/}
+  if [ ! -s RCS/$file,v ] ;then
+    echo " " > $file
+    ci -r$branch -tbidon -m$m $file
+  fi
+done
+#
+m=${m}"_"$r
+echo "\n Checking out under lock last version of decks to check in.\n"
+for i in $inrep/* ; do
+  file=${i##*/}
+  /bin/rm -f $file ; co -l $file ; /bin/rm -f $file
+  cp $inrep/$file ./ ; chmod 644 $file
+done
+echo "\n Checking in code at version $r of branch $branch\n."
+#
+ci -r$r -tbidon -m$m *.cdk *.ftn *.c *.h *.f
+/bin/rm -f bidon

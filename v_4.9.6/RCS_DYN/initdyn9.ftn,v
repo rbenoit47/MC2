@@ -1,0 +1,113 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r initdyn9 Initialisation dynamique des variables initiales
+*
+      subroutine initdyn9 (trname,nt)
+      implicit none
+*
+      integer nt
+      character*8 trname(nt)
+*
+*AUTHOR     Andre Robert                    Sep   1983
+*
+*REVISION
+*
+*LANGUAGE:  fortran 77
+*
+*OBJECT (initdyn8)
+*
+*FILES 
+*
+*ARGUMENTS 
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*IMPLICIT     
+#include "rec.cdk"
+#include "yomdyn1.cdk"
+#include "nesting.cdk"
+#include "dynmem.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+      real s,d
+      pointer (pas1 ,s(*)), (pad1 ,d(*))
+      integer id,i,m,dim,pndtime
+      real prdts,prepsi
+*---------------------------------------------------------------------
+*
+*     * Is total initialization time greater than interval
+*     * between 2 consecutive sets of nesting data?
+*
+      if ((grninit*gndtini).gt.(Pil_nesdt)) then
+         if (myproc.eq.0) write (6,400) grninit*gndtini,real(Pil_nesdt)
+         call mc2stop(-1)
+      endif
+*
+      dim      = ndynvar*dim3d+dim2d
+      prepsi   = grepsi
+      grepsi   = 1.0
+      prdts    = grdt
+      grdt     = grninit
+      pndtime  = vmh_stime
+      vmh_stime= 2*gndtini
+*
+      do 20 id=1,2
+         do 10 m=1,gndtini
+            gnstepno=m
+            if (myproc.eq.0) write (6,910) (id*m)+(id-1)*(gndtini-m),
+     $                                     2*gndtini
+*
+            call step8(0,trname,nt)
+*
+            call hordiff (.false.)
+*
+            call tfilt5 (myproc.eq.0)
+*PDIR RELEASE
+ 10      continue
+*
+         pas1 = paqpp
+         pad1 = paqpm
+         do i = 1, dim
+            d(i) = s(i)
+         end do
+         grdt = -grdt
+*
+ 20   continue
+*
+      grdt      = prdts
+      grepsi    = prepsi
+      gnstepno  = 0
+      vmh_stime = pndtime
+*
+ 400  format (/1x,'Dynamic initialization period (',f10.0,' sec.)'/
+     $         1x,'is longer than Pil_nesdt (',f10.0,' sec.)'
+     $        /,' --ABORT--ABORT--ABORT-- in initdyn9'/)
+ 910  format (/' INITIALISATION: TIMESTEP #',i3,'  OUT OF',i3)
+*---------------------------------------------------------------------
+      return
+      end
+@

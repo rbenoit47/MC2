@@ -1,0 +1,97 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P PNTG123
+*
+      SUBROUTINE PNTG123
+*
+*Author
+*          J.Mailhot RPN(July 1989)
+*
+*Revision
+* 001      Louis Garand - Add CO2 wing bands
+* 002      B. Bilodeau  - (JUL93) Add the common block RADPNT
+*          and the common block RADPARAM to eliminate
+*          parameters in the call of this routine.
+*
+*Object
+*          to determine the position of pointers (including the
+*          ones in common block RADPNT) to the radiation
+*          table
+*
+*Arguments
+*          None.
+*
+*
+**
+*
+#include "impnone.cdk"
+*
+#include "radpnt.cdk"
+*
+#include "radparam.cdk"
+*
+*
+*     POINTEURS
+*
+      G1=5+1
+      G2=G1+MXX*NTT
+      G3=G2+MXX*NTT
+      TH2O=G3+MXX*NTT
+      TRO3=TH2O+MXX*NCO2
+      YG3=TRO3+MXX
+      BCN=YG3+NCO2*MXX*NCX
+      DBCN=BCN+NCO2*NTT
+      BO3=DBCN+NTT*NCO2
+      DBO3=BO3+NTT
+      TO3=DBO3+NTT
+      UU=TO3+NO3
+      TT=UU+MXX
+*
+      IF(TT+NTT-1 .NE. NTOTAL) THEN
+         WRITE(6,*) 'S/R PNTTG123. ERREUR DANS LES POINTEURS. STOP'
+         CALL QQEXIT(1)
+      ENDIF
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

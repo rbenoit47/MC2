@@ -1,0 +1,72 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r smth2d
+*
+      subroutine smth2d (fd,wk,lminx,lmaxx,lminy,lmaxy,lnk,nu,is,js)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk,is,js
+      real fd (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     wk(lminx:lmaxx,lminy:lmaxy,lnk)
+      real nu(lnk)
+*
+*OBJECT
+*      cette routine lisse un champ fd
+*      avec l'aide d'un filtre a 9 points.
+*
+*METHOD
+*      fd(i,j) = fd(i,j)*(1-con)**2
+*               +con*(1-con)*0.5*
+*                (fd(i+1,j)+fd(i-1,j)+fd(i,j+1)+fd(i,j-1))
+*               +0.25*con**2*
+*                (fd(i+1,j+1)+fd(i-1,j+1)+fd(i-1,j+1)+fd(i-1,j-1))
+*
+*         con  = 2*nu
+*
+*      Shuman, M.W.R. #57, p.357-361, eq #5.
+*      voir aussi le livre de Haltiner & Williams, section 11-8
+*
+*EXTERNALS
+#include "lcldim.cdk"
+#include "nbcpu.cdk"
+*
+*AUTHOR   Michel Giguere                        May   1993
+*
+*HISTORY
+*
+**
+      integer i,j,k,id,jd,iff,jf
+      real*8 c1,c2,c3,one,two,four
+      parameter(one=1.d0,two=2.d0,four=4.d0)
+*----------------------------------------------------------------------
+*
+      id = 1+is*west
+      jd = 1+js*south
+      iff= ldni-east
+      jf = ldnj-north
+*
+      do k=1,lnk
+         c1= (one-two*nu(k))*nu(k)
+         c2= nu(k)**2
+         c3= four*(nu(k)-one)*nu(k)
+         do j=1,ldnj
+         do i=1,ldni
+            wk(i,j,k)= c1*(fd(i  ,j+1,k)+fd(i+1,j  ,k) +
+     $                     fd(i  ,j-1,k)+fd(i-1,j  ,k))+
+     $                 c2*(fd(i-1,j+1,k)+fd(i+1,j+1,k) +
+     $                     fd(i-1,j-1,k)+fd(i+1,j-1,k))+
+     $                 c3* fd(i  ,j  ,k)
+         end do
+         end do
+         do j=jd,jf
+         do i=id,iff
+            fd(i,j,k)= fd(i,j,k) + wk(i,j,k)
+         end do
+         end do
+      end do
+*     
+*----------------------------------------------------------------------
+      return
+      end
+
+
+

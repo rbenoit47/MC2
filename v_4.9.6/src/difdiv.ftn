@@ -1,0 +1,97 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine difdiv
+      implicit none
+*
+#include "grd.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "phymem.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+#include "dtmdtp.cdk"
+*
+      integer i, j, k, n, id, jd, iff, jf, km1, kp1
+      real*8  p25, pt5, one, alfdiv
+      real*8 q3 (minx:maxx,miny:maxy,gnk),div(minx:maxx,miny:maxy,gnk)
+      parameter (p25=0.25d0, pt5=0.5d0, one=1.0d0)
+*----------------------------------------------------------------------
+*
+      alfdiv = 0.25d0 / odx(1)**2
+*
+      id =1-hx*west
+      jd =1-hy*south
+      iff=ldni+(hx-1)*east
+      jf =ldnj+(hy-1)*north
+*
+      do k = gnk-1, 1, -1
+         km1 = max( k-1 , 1 )
+         kp1 = min( k+1 , gnk-1 )
+         if (k.eq.gnk-1) then
+            do j = jd, jf
+            do i = id, iff
+               q3(i,j,gnk) = 0.0
+            end do
+            end do
+         end if
+         do j = jd, jf
+         do i = id, iff
+            q3(i,j,k) = sbxy(i,j) * pt5 *
+     $                ( gg1(i+1,j,k) * ( um(i+1,j,k) - um(i+1,j,km1) )
+     $                + gg1(i  ,j,k) * ( um(i  ,j,k) - um(i  ,j,km1) )
+     $                + gg2(i,j+1,k) * ( vm(i,j+1,k) - vm(i,j+1,km1) )
+     $                + gg2(i,j  ,k) * ( vm(i,j  ,k) - vm(i,j  ,km1) ) )
+           div(i,j,k) = sbxy(i,j)*(( um(i+1,j,k) - um(i,j,k)) * odx(1) +
+     $                             ( vm(i,j+1,k) - vm(i,j,k)) * ody(j) )
+     $             + gg0r(i,j,k) * (swm(i,j,k+1) -swm(i,j,k) +
+     $                             ( q3(i,j,k+1) + q3(i,j,k)) * pt5)
+         end do
+         end do
+      end do
+*
+      do k = 1, gnk-1
+         km1 = max( k-1 , 1 )
+         kp1 = min( k+1 , gnk-1 )
+         if(k.ne.1) then
+            do j = jd, jf
+            do i = id, iff
+               swp(i,j,k) = swp(i,j,k) + alfdiv * 
+     $                         (div(i,j,k)-div(i,j,km1))*gg0wr(i,j,k)
+            end do
+            end do
+         endif
+         do j = jd, jf
+         do i = id+west, iff
+             up(i,j,k) = up(i,j,k) + alfdiv * (
+     $                    ( div(i,j,k  ) - div(i-1,j,k) ) * odxu(1) +
+     $           g0ur(i,j,k) * p25 * ( gg1(i,j,k+1) *
+     $                    ( div(i,j,kp1) + div(i-1,j,kp1)
+     $                    - div(i,j,k  ) - div(i-1,j,k  ) ) +
+     $                                 gg1(i,j,k  ) *
+     $                    ( div(i,j,k  ) + div(i-1,j,k  )
+     $                    - div(i,j,km1) - div(i-1,j,km1) )) )
+         end do
+         end do
+         do j = jd+south, jf
+         do i = id, iff
+             vp(i,j,k) = vp(i,j,k)  + alfdiv * (
+     $                    ( div(i,j,k  ) - div(i,j-1,k) ) * odyv(j) +
+     $           g0vr(i,j,k) * p25 * ( gg2(i,j,k+1) *
+     $                    ( div(i,j,kp1) + div(i,j-1,kp1)
+     $                    - div(i,j,k  ) - div(i,j-1,k  ) ) +
+     $                                 gg2(i,j,k  ) *
+     $                    ( div(i,j,k  ) + div(i,j-1,k  )
+     $                    - div(i,j,km1) - div(i,j-1,km1) )) )
+         end do
+         end do
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end

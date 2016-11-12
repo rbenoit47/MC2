@@ -1,0 +1,308 @@
+#!/bin/ksh
+#
+script=${0##*/}
+args="$@"
+#
+arguments=$*
+#
+echo 'date_start: '`date`
+exper_name=${1}
+#
+if [ -s ${HOME}/exper_configs/${exper_name}.generic/.config_file.dot.cfg ] ; then
+  set -x
+  . r.get_config.dot -exper ${exper_name} -file .config_file.dot
+  set +x
+fi
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+     -s          ""            ""        "[source]"                               \
+     -d          "${xfer}"     ""        "[destination]"                          \
+     -fst89      "${fst89:-0}" "1"       "[produce older 89 FST files]"           \
+     -d2z        "${d2z:-0}"   "1"       "[re-assemble output if -gt 0]"          \
+     -d2z_dplusp "${d2z_dplusp:-0}"  "1" "[assemble dynamics and physics output]" \
+     -prefix     "${prefix}"   ""        "[prefix to filenames]"                  \
+     -tailjob    "${tailjob}"  ""        "[Tail job to be qsubed at the end]"     \
+     -npe        "1"           "1"       "[number of subdomains]"                 \
+     -listm      ""            ""        "[xfer model listing along with model output]" \
+  ++ $arguments`
+#
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+d=`echo $d | sed 's/:/ /g'`
+#
+export src_mach=${s%% *}
+src_rept=${s##* }
+export dest_mach=${d%% *}
+dest_rept=${d##* }
+lehost=`hostname`
+#
+if [ "${dest_mach}" = "cfs" ] ; then
+  d2z=0
+fi
+#
+if [ -d ${HOME}/huge/travail ]; then
+  reptmp=${HOME}/huge/travail/$$
+else
+  reptmp=${BIG_TMPDIR}/$$
+fi
+#
+/bin/rm -rf ${reptmp} 2> /dev/null
+mkdir -p ${reptmp} ; cd ${reptmp}
+#
+HHi=`hfract 0`
+#
+. r.call.dot Um_xfer_mach -attempts 2
+if [ "$_status" = "ABORT" ] ; then
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n" ; exit 5
+fi
+#
+if [ "${listm}" ] ; then
+  rsh ${src_mach} -n "mv ${listm}* ${src_rept}"
+fi
+#
+attempts=2
+nbfiles=`rsh ${src_mach} -n ls -x ${src_rept} | wc -w`
+laliste="dm dp dh pm pp ph"
+#
+if [ ${nbfiles} -eq 0 ] ; then
+#
+  echo ${ECHOARG} "\n No file to transfert from ${src_mach}:${src_rept}\n"
+#
+else
+#
+  mailf=" "
+  if [ ${fst89} -gt 0 ] ; then
+    delamine=delamineur_89
+    feseri=feseri.Abs
+  else
+    delamine=${DELAMINEUR:-delamineur2000}
+    feseri=feseri_2000.Abs
+  fi
+#
+  echo ${ECHOARG} "\n ${src_mach}:${src_rept} ===> ${lehost} ===> ${dest_mach}:${dest_rept}\n"
+  nf_cnt=0
+  lalistepm=""
+  lalistepp=""
+  lalisteph=""
+  lalistedm=""
+  lalistedp=""
+  lalistedh=""
+#
+  for i in ${laliste} ; do
+#
+    f2t=${i}\*
+    nf2t=`rsh ${src_mach} -n "cd ${src_rept} ; ls -x ${f2t} 2> /dev/null" | wc -w`
+    nf2t=${nf2t##* }
+    if [ ${nf2t} -gt 0 ] ; then
+      let nf_cnt=${nf_cnt}+${nf2t}
+      echo "\n Transferring ${f2t} from ${src_mach} to ${dest_mach} via a bump on ${lehost}"
+      flag_rm1=0
+      flag_rm2=0
+#
+      _status=ABORT
+      . r.call.dot Um_xfer_mvf -f ${f2t} -machs ${src_mach} -reps ${src_rept} -machd ${lehost} -repd ${reptmp} -attempts $attempts
+      if [ "$_status" = "OK" ] ; then
+        pivot_rept=${src_rept##*/}"_"${i}
+        dest_rept_tmp=${dest_rept}/${pivot_rept}
+        mkdir ${pivot_rept}
+        for ii in ${f2t} ; do
+          r.filetype ${ii} 1> /dev/null 2> /dev/null
+          filetype=$?
+          mv ${ii} ${pivot_rept}/${prefix}${ii} 2> /dev/null
+          if [ "${i}" = "dm" ] ; then
+            lalistedm=${lalistedm}" "${ii##*_}
+          fi
+          if [ "${i}" = "dp" ] ; then
+            lalistedp=${lalistedp}" "${ii##*_}
+          fi
+          if [ "${i}" = "dh" ] ; then
+            lalistedh=${lalistedh}" "${ii##*_}
+          fi
+          if [ "${i}" = "pm" ] ; then
+            lalistepm=${lalistepm}" "${ii##*_}
+          fi
+          if [ "${i}" = "pp" ] ; then
+            lalistepp=${lalistepp}" "${ii##*_}
+          fi
+          if [ "${i}" = "ph" ] ; then
+            lalisteph=${lalisteph}" "${ii##*_}
+          fi
+        done
+        if [ ${filetype} -ne 1 -a ${filetype} -ne 33 ] ; then
+          echo "delam ${pivot_rept} $delamine \n"
+          ulimit -m 500000
+          ulimit -s 500000
+          ulimit -d 500000
+          _status=ABORT
+        . r.call.dot delam -reps ${pivot_rept} -wdelam $delamine 1> /dev/null 2> /dev/null
+	else
+	  _status=OK
+        fi
+        if [ "$_status" = "OK" ] ; then
+          flag_rm1=1
+          _status=ABORT
+          rsh ${dest_mach} -n mkdir -p ${dest_rept} 2> /dev/null
+          . r.call.dot Um_xfer_rsync -machs ${lehost} -reps ${reptmp}/${pivot_rept} -machd ${dest_mach} -repd ${dest_rept} -attempts $attempts 
+          if [ "$_status" = "OK" ] ; then flag_rm2=1 ; fi
+        else
+	  echo 'DELAMINEUR DID NOT WORK PROPERLY'
+        fi
+        /bin/rm -rf ${pivot_rept}
+      fi
+#
+      if [ $(( ${flag_rm1} * ${flag_rm2} )) -eq 1 ] ; then
+        echo " Transfer succeeded - Removing ${src_rept}/${f2t} on ${src_mach}"
+        rsh ${src_mach} -n rm ${src_rept}/${f2t}
+        if [ ${d2z} -gt 0 ] ; then
+          echo "\n d2z -rep ${dest_rept_tmp} -fst89 ${fst89} -prefix ${prefix}\n"
+          echo " \
+          . r.sm.dot ${MODEL} ${MODEL_VERSION} ; \
+          d2z -rep ${dest_rept_tmp} -fst89 ${fst89} -prefix ${prefix}; \
+              /bin/mv ${dest_rept_tmp}/* ${dest_rept} ; rmdir ${dest_rept_tmp}" | \
+          rsh ${dest_mach} /usr/local/env/-ksh 1> ${TMPDIR}/d2z_${i}.out 2> ${TMPDIR}/d2z_${i}.err &
+          echo "d2z on $i launched in &\n"
+        else
+          echo "/bin/mv ${dest_rept_tmp}/* ${dest_rept} ; \
+          rmdir ${dest_rept_tmp}" | rsh $dest_mach /usr/local/env/-ksh
+        fi
+      else
+        mailf=${mailf}" "${f2t}
+      fi
+#
+      attempts=1
+#
+    else
+      echo " NO ${f2t} files to transfer from from ${src_mach}"
+    fi
+#
+  done
+#
+  if [ ${nbfiles} -gt ${nf_cnt} ] ; then
+    echo "\n Transferring remaining files from ${src_mach} to ${dest_mach} via a bump on ${lehost}"
+    rsh ${src_mach} "cd ${src_rept} ; ls -l"
+    flag_rm1=0
+    flag_rm2=0
+#
+    _status=ABORT
+    mkdir ${reptmp}/others 2> /dev/null
+    . r.call.dot Um_xfer_cpac -machs ${src_mach} -reps ${src_rept} -machd ${lehost} -repd ${reptmp}/others -attempts $attempts
+    mv ${reptmp}/others/* ${reptmp} 2> /dev/null
+    /bin/rm -rf ${reptmp}/others
+    if [ "$_status" = "OK" ] ; then
+      flag_rm1=1
+      if [ -f time_series.bin ] ; then
+        echo " ${feseri} -iserial time_series.bin -omsorti time_series.fst \n"
+        ${feseri} -iserial time_series.bin -omsorti time_series.fst 1> /dev/null
+        if [ $? -ne 0 ]; then
+          echo ${ECHOARG} "\n ${feseri} aborted on ${i} which is"
+          echo ${ECHOARG}   " being kept for further processing\n"
+          /bin/rm -f time_series.fst 2> /dev/null
+        else
+          /bin/rm -f time_series.bin
+        fi
+      fi 
+      _status=ABORT
+      pivot_rept=${src_rept##*/}"_others"
+      dest_rept_tmp=${dest_rept}/${pivot_rept}
+      mkdir ${pivot_rept}
+      for ii in * ; do
+        mv ${ii} ${pivot_rept}/${prefix}${ii} 2> /dev/null
+      done
+      rsh ${dest_mach} -n mkdir -p ${dest_rept} 2> /dev/null
+      . r.call.dot Um_xfer_rsync -machs ${lehost} -reps ${reptmp}/${pivot_rept} -machd ${dest_mach} -repd ${dest_rept} -attempts $attempts 
+      if [ "$_status" = "OK" ] ; then flag_rm2=1 ; fi
+      /bin/rm -rf ${pivot_rept}
+    fi
+    if [ $(( ${flag_rm1} * ${flag_rm2} )) -eq 1 ] ; then
+      echo " Transfer succeeded "
+      echo "/bin/mv ${dest_rept_tmp}/* ${dest_rept} ; \
+      rmdir ${dest_rept_tmp}" | rsh $dest_mach /usr/local/env/-ksh
+    else
+      mailf=${mailf}" "all_the_files
+    fi
+  fi
+#
+  nsec=`hfract 1 $HHi`
+  nmin=$(echo "scale=10; $nsec/60" | bc -l)
+  echo "\nTOTAL transfer&delamineur time: $nmin minutes"
+#
+  echo "Waiting for d2z jobs completions"
+  wait
+  for i in ${TMPDIR}/d2z_* ; do
+    if [ -s $i ] ; then
+      echo "\n############## $i listing ##############"
+      cat $i
+      /bin/rm -f $i
+    fi
+  done
+#
+  if test `echo ${mailf} | wc -w` -ge 1 ; then
+     cat > unmail << eofmail
+  
+     Problem transferring the following files from 
+     ${src_mach}:${src_rept}:
+     ${mailf}
+
+     YOU SHOULD TRY TO EXECUTE THE COMMAND:
+     $script $args
+     OR DEAL OTHERWISE WITH THOSE FILES IN ORDER TO EMPTY
+     THE DIRECTORY ${src_rept} ON ${src_mach} 
+                 =====> AS SOON AS POSSIBLE. <=====
+  
+eofmail
+     mail $USER < unmail
+     cat unmail ; rm unmail
+  else
+     echo ${ECHOARG} "\n All pending transfers succeeded"
+     echo ${ECHOARG} " Removing ${src_rept}/ on ${src_mach} \n"
+     rsh ${src_mach} -n /bin/rm -rf  ${src_rept}
+     if [ ${d2z_dplusp} -gt 0 ] ; then
+       pmliste=""
+       ppliste=""
+       phliste=""
+       for i in ${lalistepm} ; do
+         step=${i##*_}
+         dejala=`echo $pmliste | grep $step | wc -l`
+         if [ $dejala -lt 1 ] ; then
+           pmliste="${pmliste} $step"
+         fi
+       done
+       for i in ${lalistepp} ; do
+         step=${i##*_}
+         dejala=`echo $ppliste | grep $step | wc -l`
+         if [ $dejala -lt 1 ] ; then
+           ppliste="${ppliste} $step"
+         fi
+       done
+       for i in ${lalisteph} ; do
+         step=${i##*_}
+         dejala=`echo $phliste | grep $step | wc -l`
+         if [ $dejala -lt 1 ] ; then
+           phliste="${phliste} $step"
+         fi
+       done
+       echo "\n dplusp -rep ${dest_rept} -fst89 ${fst89} -pm $pmliste -pp $ppliste -ph $phliste \n"
+       echo " \
+       . r.sm.dot ${MODEL} ${MODEL_VERSION} ; \
+       dplusp -rep ${dest_rept} -fst89 ${fst89}" -dm ${lalistedm} -dp ${lalistedp} -dh ${lalistedh} -pm $pmliste -pp $ppliste -ph $phliste | \
+       rsh ${dest_mach} /usr/local/env/-ksh
+       echo "\n dplusp done... \n"
+     fi
+  fi
+#
+fi
+#
+#====> Remove temporary workdir and submit tailjob
+#
+cd ; /bin/rm -rf ${reptmp} 2> /dev/null
+#
+if test `echo ${mailf} | wc -w` -lt 1 ; then
+if [ "$tailjob" ] ; then
+  echo ${ECHOARG} "\n Submitting $tailjob \n"
+  soumet_lajob $tailjob
+#  $tailjob
+fi
+fi
+#
+echo 'date_end: '`date`

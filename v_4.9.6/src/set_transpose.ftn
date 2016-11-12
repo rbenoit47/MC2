@@ -1,0 +1,35 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine set_transpose
+      implicit none
+*
+*AUTHOR   Michel Desgagne                   Feb   2001
+*
+#include "lcldim.cdk"
+#include "transpose.cdk"
+#include "yomdyn.cdk"
+*
+      integer rpn_comm_topo 
+      external rpn_comm_topo 
+*
+      integer err, dum1, dum2, dum3, n0
+*
+*---------------------------------------------------------------------
+*
+      nk_solv = gnk - 1
+      if (flextop) nk_solv = gnk
+*
+      err = rpn_comm_topo ( gni, dum1, nh_maxx, dum2, dum3,
+     $                            0, n0, .true.  , .true. )
+      err = rpn_comm_topo ( gnj, dum1, nh_maxy, dum2, dum3,
+     $                            0, n0, .false. , .true. )  
+      err = rpn_comm_topo ( nk_solv, dum1, t1maxk , t1n , dum3,
+     $                               0, n0, .true.  , .true. )
+      err = rpn_comm_topo ( gni, dum1, t2maxx , t2n , dum3,
+     $                            0, t2n0,.false., .true. )
+      teast=0
+      if (t2n0+t2n-1.eq.gni) teast=1
+*
+*---------------------------------------------------------------------
+*
+      return
+      end

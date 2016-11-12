@@ -1,0 +1,589 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.09.11.12.40.27;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@***************************************************************
+**** MC2 VERSION 4.9.6 - DESCRIPTION OF CONTROL PARAMETERS ****
+***************************************************************
+Namelists are defined in:
+	mc2nml.cdk, physnml.cdk, serinml.cdk, diagnml.cdk    
+
+Default values are set in: 
+	grdcfg.ftn, pilctrl.ftn, mc2ctrl.ftn, phyctrl.ftn 
+	serctrl.ftn, diactrl.ftn, sorctrl.ftn
+
+========================================================================
+MC2NTR (Preprocessor Program) - Parameters in Namelist "grille"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+
+  Grd_proj_S    grid projection type 				'M'
+                               (M=Mercator)
+                               (P=Polar Stereo.)
+			       (L=Spherical [lat-lon ])
+  Grd_dx	grid resolution					50000.
+		units: [m]   if grid_proj=M or P
+		       [deg] if grid_proj=L
+  Grd_ni	total number of grid points in X		50
+  Grd_nj	total number of grid points in Y                40
+  Grd_iref	first  index of reference point			25
+  Grd_jref	second index of reference point 		20
+  Grd_latr	latitude  of reference point			32.1
+  Grd_lonr	longitude of reference point			137.8
+
+  Grd_dgrw	grid rotation for Polsr stereo. projection      135.
+  Grd_phir	reference latitude for Mercator projection      22.5
+
+  Grd_xlat1	rotated equator - 1st point Lat (M & L grids)	0.
+  Grd_xlon1	rotated equator - 1st point Lon (M & L grids)	180.
+  Grd_xlat2	rotated equator - 2nd point Lat (M & L grids)	0.
+  Grd_xlon2	rotated equator - 2nd point Lon (M & L grids)	270.
+------------------------------------------------------------------------
+
+
+
+========================================================================
+MC2NTR (Preprocessor Program) - Parameters in Namelist "pil_cfgs"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+
+#-Time related: Start time, tiem step, nb of step (total/partial run)
+  gnnt		total number of timesteps			0
+  grdt     	timestep (sec)					1800.
+  gnnrstrt 	MC2 will write a restart file and stop		gnnt
+		every gnnrstrt timesteps
+  Pil_runstrt_S starting time (YYYYMMDD.HHMMSS)			'19990201.000000'
+  Pil_nesdt	nesting interval (sec.)                         null
+  ctebcs	switch for constant boundary conditions		.false.
+   
+
+#-nesting: zone extents (x,y,z), interpolation type, optional fields
+  hblen_x       number of grid points for the horizontal	10
+                nesting along-x
+  hblen_y	number of grid points for the horizontal	10
+                nesting along-y
+
+  gnpilver 	number of levels for the vertical nesting	 0
+
+  h_interp	type of horizontal interpolation		 'CUBIC'
+		('CUBIC','LINEAR','NEAREST')
+
+  trpil        	optional quantities to nest			"@@#"
+
+#-other
+  gnmtn		switch to include topography			 1
+		(0=no topography, 1=with topography)
+  maxcfl	MAX CFL allowed, used to set halo size           1
+------------------------------------------------------------------------
+
+
+
+========================================================================
+MC2 (Main Program) - Parameters in Namelist "pe_topo"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+  npex		the number of processors along x		 1
+  npey  	the number of processors along y		 1
+  npeOpenMP	number of cpu used for multitasking on SX	 1
+------------------------------------------------------------------------
+
+
+
+========================================================================
+MC2 (Main Program) - Parameters in Namelist "mc2_cfgs"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+
+#-Dynamic Initalisation
+  gndtini  	total number of timesteps for the		 0
+		forward part of initialisation
+  grninit  	timesteps for the initialisation		 0
+
+#-Statistics
+  gndstat  	dynamics run-time statistics			 1
+		every gndstat timesteps
+  gnpstat  	physics run-time statistics			 1
+		every gnpstat timesteps
+  gnstatdp 	switch for double precision statistics		 0
+		(0=no,1=yes).
+
+#-Output options
+  gnnls    	dynamics output every gnnls timesteps		 1
+  nstepsor_d	number of timesteps after which a dynamics	gnnt
+		progfile (zmc2.prog_nnnnnn) will be closed
+  g_id,g_jd	lower left corner of output domain		1,1
+  g_if,g_jf	upper right corner of output domain		gni,gnj
+  staguv	UU and VV are horizontaly staggered		.false.
+		in the input files
+  launchsor     launching scripts "runsor" in background	.false.
+		directly from MC2 after nstepsor_d timesteps
+
+#-OUTPUT - Self Nesting options, time sampling and grid definiton  
+  Grdc_ndt	Frequency of output [in timestep]
+                (independent from the frequency of output
+                 of the normal output)
+  Grdc_nsor	Frequency in timestep at which an
+                output file will be closed [in timestep]
+  Grdc_proj_S   grid projection type 				'M'
+                               (M=Mercator)
+                               (P=Polar Stereo.)
+			       (L=Spherical [lat-lon ])
+  Grdc_dx	grid resolution					50000.
+		units: [m]   if grid_proj=M or P
+		       [deg] if grid_proj=L
+  Grdc_ni	total number of grid points in X		50
+  Grdc_nj	total number of grid points in Y                40
+  Grdc_iref	first  index of reference point			25
+  Grdc_jref	second index of reference point 		20
+  Grdc_latr	latitude  of reference point			32.1
+  Grdc_lonr	longitude of reference point			137.8
+
+  Grd_dgrw	grid rotation for Polsr stereo. projection      135.
+  Grd_phir	reference latitude for Mercator projection      22.5
+
+  Grd_xlat1	rotated equator - 1st point Lat (M & L grids)	0.
+  Grd_xlon1	rotated equator - 1st point Lon (M & L grids)	180.
+  Grd_xlat2	rotated equator - 2nd point Lat (M & L grids)	0.
+  Grd_xlon2	rotated equator - 2nd point Lon (M & L grids)	270.
+
+
+#-Diffusion and top sponge
+  hord_type	Type of horizontal diffusion			"explicit"
+		(implicit/explicit)
+  hord_del	order (2 or 4) for explicit horizontal		 2
+	        diffusion
+  hord_lnr	% of 2 delta-x wave one wishes to		 
+		eliminate every timestep (same as in GEMDM)
+		replaces hord_kh [horizontal diffusion coefficient (m**2/s)]
+  hord_nutop	horizontal diffusion coefficient (nu) 	         2.
+		at the model top for the 
+		upper dissipative sponge layer		
+  hord_zspng	number of levels from the top for the		 0
+		upper dissipative sponge layer
+  hord_fuv   	multiplicative factor on hord_kh for UU and VV 	 1.
+  hord_fww  	multiplicative factor on hord_kh for WW		 1.
+  hord_fhu  	multiplicative factor on hord_kh for HU		 1.
+  hord_ftt  	multiplicative factor on hord_kh for TT		 1.
+  hord_ftr 	multiplicative factor on hord_kh for		 0.
+		TR (tracers)
+
+#-Vertical Nesting (at the domain top)
+  gnpvw		number of levels from the top on		 0
+		which to nest vertical motion to 0.
+  grpilver 	maximum value of weighting function for		.5
+		vertical nesting (values at the model lid)
+
+#-Solver options
+  precond       preconditioners for the fgmres elliptic		'jacobi'
+		solver: 'JACOBI' = vertical line relaxation
+			'ADI_3D' = 3D ADI
+  hsolvpre	solver convergence parameter			1.0e-4
+  maxite	solver maximum number of iterations		200
+  diagres	output in unit 6 the convergence behavior	.false.
+  grepsi   	uncentered time and spatial			0.1
+                average parameter.
+  grtf		coefficient for temporal filter			0.05
+
+  gnnohyd  	switch to include vertical			 1
+	        acceleration: non-hyd, (0=no,1=yes)
+  nofcms        switch for no Coriolis nor map scale factor	.false.
+
+#-Montain growth options
+  vmh_stime	time step # at which topography			 0
+	        will start varying in time
+  vmh_ndt	number of time step during which		20
+	        topography will	vary in time	
+		(recommended to stay below 1km/3hours
+  nesmt_bgx	starting grid point along-x at which hor.	10
+		nesting of ME with MX will start
+  nesmt_bgy	starting grid point along-y at which hor.	10
+		nesting of ME with MX will start
+  nesmt_ndx	number of grid points along-x on which to	10
+		horizontally nest ME with MX
+  nesmt_ndy	number of grid points along-y on which to	10
+		horizontally nest ME with MX
+
+#-Vertical levels definition
+  gnk           number of computational levels			 21
+  nktop		number of levels to remove from the lower	-1
+		levels and uniformly redistributed within 
+		the top levels to create an upper layer with 
+	        constant depth
+  htop		height of the lid of the model			30000.
+  gnnpbl   	number of levels in the boundary layer		-1 (automatic)
+		(below 1500 m)
+  zt      	Vertical layering of Gal-Chen levels		-1
+                (zt=-1:automatic distribution - stretched
+		 zt= 0:automatic distribution - equally spaced 
+		 zt= 1:automatic distribution - fully equal
+		 zt= 0., lev_2, lev_3, lev_4, ... lev_nk (m):
+					user defined levels)
+  iscal		Truly Hybrid Vertical Coordinate param.	       1000000,1000000
+		follows a paper by Leuenberger et al.
+		It is used to control the flattening of 
+		the vertical levels
+		The default values revert to the old plain 
+		Gal-Chen levels
+		iscal(1) : height at which the "large scale" 
+                           signal of the topography has been 
+			   reduced by an e fold (e.g. 10000)
+		iscal(2) : height at which the "small scale" 
+			   signal of the topography has been 
+			   reduced by an e fold (e.g. 3000)
+
+#-Basic state definition (see qntstar.ftn for details): 
+  grtstar	basic state for the temperature			273.16
+		Becoming obsolete, replaced by the following
+  tzero_star	isothermal basic state				273.16
+		(288.15 : surf temp - non-isothermal basic state)
+  ttop_star	isothermal basic state				-1.
+		(210.15 : top  temp - non-isothermal basic state)
+  ntrop_star	isothermal basic state				-1.
+  htrop_star	tropopause : non-isothermal basic state		10000
+  nstrat_star	isothermal basic state stratosphere		-1.
+
+#-Physic switches
+  gnmaphy  	switch to activate the RPN/CMC			 0
+		physics package (0=no,1=yes)
+  gnload        switch to activate the water loading 		 0
+		(0=no,1=yes)
+  v_interp      vertical interpolation scheme			'CUBIC_UQAM'
+
+#-Other options
+  semi_lag      Semi-Lag advection scheme                       .true.
+                (Eulerian scheme if set to .false.)
+  Tsl_ic	Semi-Lag Transport, cubic interpolation		.false.
+  Tsl_iter	Semi-Lag Transport, nb. iter for		1
+		trajectory computation
+  glconta  	tracer showing contamination from		.false.
+		boundary conditions.
+  theocase	identifies the theoretical case to run		" "
+		(available: BUBBLE, MOUNTAIN)
+  period_x	periodicity in x				.false.
+  period_y	periodicity in y				.false.
+
+* Redundant parameters from pil_cfgs
+  gnnt		total number of timesteps			 0
+  gnnrstrt 	MC2 will write a restart file and stop		gnnt
+		every gnnrstrt timesteps
+
+* Parameters reseved for future use, not yet fully functional:
+  trig_rstrt							.false.
+  time2stop							-1
+  glcpld	
+  gncpld	
+  tmg		                    				.false.
+------------------------------------------------------------------------
+
+
+
+========================================================================
+MC2 (Main Program) - Parameters in Namelist "restart"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+  gnnrstrt 	MC2 will write a restart file and stop		gnnt
+		every gnnrstrt timesteps
+
+#-Stats
+  gndstat  	dynamics run-time statistics			 1
+		every gndstat timesteps
+  gnpstat  	physics run-time statistics			 1
+		every gnpstat timesteps
+  gnstatdp 	switch for double precision statistics		 0
+		(0=no,1=yes).
+
+#-output
+  gnnls    	dynamics output every gnnls timesteps		 1
+  nstepsor_d	number of timesteps after which a dynamics	gnnt
+		progfile (zmc2.prog_nnnnnn) will be closed
+  nstepsor_p	number of timesteps after which a physics	gnnt
+		progfile (zmc2.phys_nnnnnn) will be closed
+  g_id,g_jd	lower left corner of output domain		1,1
+  g_if,g_jf	upper right corner of output domain		gni,gnj
+  z_out		index of levels to output (1 is bottom)		-1
+		(-1 means all levels)	
+
+  upolist       physics output					" "
+                 ex: "SCREEN:6","RAIN:6"
+  launchsor     launching scripts "runsor" in background	.false.
+		directly from MC2 after nstepsor_d timesteps
+
+#-solver options
+  diagres	output in unit 6 the convergence behavior	.false.
+
+* Parameters reseved for future use, not yet fully functional:
+  trig_rstrt							.false.
+  time2stop							-1
+------------------------------------------------------------------------
+
+
+
+========================================================================
+PHYSICS - Parameters in Namelist "physics"
+parameters are described in    : options.cdk
+optional values are defined in : phyopt.ftn
+========================================================================
+
+  Parameters			Description                       Default
+------------------------------------------------------------------------
+#-processors and memory
+  npeMacro      number of cpu used in macrotasking on SX	 1
+  incore   	physics incore (no I/O with Vmm)		.false.
+  runlgt	running length (folding length)
+  dbgmem	debug memory mode (output some statistics)	.false.
+
+		(default: 255 on the NEC, ni on servers)
+
+#-output
+  nstepsor_p	number of timesteps after which a physics	gnnt
+		progfile (zmc2.phys_nnnnnn) will be closed
+  upolist       physics output					" "
+                 ex: "SCREEN:6","RAIN:6"
+
+#-Physic processes
+  radia    	radiation scheme				"newrad"
+                (newrad, oldrad, nil)
+  radftp	type of radiation file (UNF,STD)		"STD"
+  fluvert  	boundary layer and free atmosphere		"clef"
+		vertical fluxes scheme 
+		(moistke, clef, physimp, nil)
+  schmsol  	surface scheme					"fcrest"
+                (fcrest, class, isba)
+  convec   	convection scheme				"oldkuo"
+                "oldkuo"
+		"newkuo"
+		"fcp"	 - Fritsch and Chappell
+		"kfc"    - Kain and Fritsch
+		"kfckuo"
+		"fcpkuo"
+		"manabe" - With this option set: stcond = 'nil'
+		"sec"
+		"kuostd" - Kuo
+		"kuosym" - Kuo, symmetric Kuo-type closure
+                "kuosun"
+		"ras"    - Relaxed Arakawa-Schubert
+		"nil"
+  stcond   	stratiform condensation scheme			"conds"
+		"conds"	   Simple condensation scheme (Kessler)
+		"oldsund"  Old Sundqvist scheme
+		"newsund"  New Sundqvist scheme
+		"consun"   
+		"exc"	   AT-single equation scheme
+		"excr1"	   Zhang simplified scheme (old EXMO)
+		"excr2"	   KY-warm cloud
+		"excri"	   KY-mixed phase with 1 ice
+		"excrig"   KY-mixed phase with 2 ices
+                "nil"
+  gwdrag	gravity wave drag scheme			"gwd86"
+		(gwd86, gwd95, nil)
+		The GWD86 scheme include a new parameterisation
+		that takes the mountain shape into account (Y7,Y8,Y9)
+  shlcvt	shallow convection scheme			"conres"
+		(conres, geleyn, shalow, shalodqc, nil)
+  pfbtyp	physics feedback type				"prosplit"
+		(proslpit, girard1)
+  hrclip	clip relative humidity (HR) of nesting		-1
+		data to hrclip (0. - 1.)
+  ktdflt	multiplicative factor of grkh for		0.0
+		smoothing of the convective tendencies
+		on temperature and humidity
+  kntrad	compute the radiation solar scheme		6
+		every kntrad timestep
+  advectke 	kinetic energy advection			.false.
+  diffuw        vertical diffusion of WW			.false.
+  wet		to include soil moisture and			.true. 
+		evaporation of land
+		.TRUE.  for wet model
+            	.FALSE. for dry model
+  satuco	to compute saturation with respect		.true.
+		to ice below 0 C
+  snowmelt	snow melt switch				.false.
+  stomate	stomatal resistance switch			.false.
+  typsol	soil surface parameters switch			.false.
+  inilwc 	initialize ground water content          	.false.
+  nsloflux	number of timesteps for which surface fluxes	0
+            	"FC" and "FV" are gradually set from zero to
+            	their full value in a "slow start" fashion"
+            	at the beginning of a time integration
+  cortm		.true., TM corrected for difference between	.false.
+            	original and filtered topography
+		.false., no correction
+
+  #available only with  convec = "AJCM"*
+  mxadj		maximum number of iterations for		20
+		convective adjustment
+  lheat		to include latent heat on temp.			 1
+  hcad	        hc humidity threshold (.0-1.)			 1.
+  hfad	        hf humidity threshold (.0-1.)			 1.
+  hmad	        hm humidity threshold (.0-1.)			 1.
+
+  #available only with  fluvert = "SIMP"* 
+  evap          to allow ocean evaporation (SIMP)		.true.
+  drag		to include surface drag				.false.
+  chauf		to include ocean surface flux			.false.
+
+
+  mixing	Mixing lenght formulation			'BLAC62'
+		(BLAC62, BOUJO)
+  moyhr		number of timesteps for temporal averages	0
+  snoalb	.true.  snow albedo (ISBA) read from analysis
+		.false. snow albedo (ISBA) calculated from snow age
+  dzsedi	thickness of the smallest layer (m);  		-1
+            	used to determine sedimentation parameters
+		recommended value= -1 (computed)
+  agregat	switch to control aggregation of 		.true.
+		surface properties
+
+#-Kain and Fritch parameters
+  kfcmom_l	.true. for transfer of momemntum
+  kfctrig	trigger parameter of Kain-Fritsch 
+		convection scheme
+  kfcrad	initial convective updratf radius in  
+	        Kain-Fritsch convection scheme
+  kfcdepth	minimum depth of convective updraft 
+		in Kain-Fritsch
+  kfcdlev	initial level of forced detrainment 
+		in Kain-Fritsch
+  kfcdet	total forced detrainment in Kain-Fritsch
+  kfctimec	convective time scale in Kain-Fritsch
+  kfctimea	convective time adjustment in Kain-Fritsch
+
+------------------------------------------------------------------------
+
+
+
+========================================================================
+SORMC2 (Postprocessor) - Parameters in Namelist "sor_cfgs"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+  out_runt      Switch to turn on the old output		.false.
+		mode using SORMC2
+  out_unit_S    'H' or '' for output in hours, 'P' for in steps 'P'
+                'S'(seconds), 'M'(minutes), 'D'(days)
+  gtetikt  	string identifying each record			"MC2_V4.9.1"
+  fileout       full pathname of the output file		"zmc2.output"
+  levtyp  	output level type:				'P'
+		'P' ==> pressure (mb)
+		'H' ==> height   (m)
+		'G' ==> gal-chen
+  pres_o	explicit list of the pressure
+		levels on which to interpolate
+  height_o	explicit list of the height
+		levels on which to interpolate
+  rndoseq	random or sequential output file		'RND'
+  datyp		data type of output field			5
+		(see armnlib doc for more details)
+  nbit		number of bits for compression			16
+		(see armnlib doc for more details)
+  gnstep1       timesteps between gnstep1 and			 0
+  gnstep2 	gnstep2 will be extracted			 100000
+  v_interp      vertical interpolation scheme			'CUBIC_UQAM'
+  gnip3		ip3=gnstepno if gnip3 < 0			-1
+		(ip3=0 otherwise)
+  udolist       dynamics output (char*15 strings)		" "
+                 ex: "PN","P0","UU","VV","WZ","TT","HU"
+			or
+		     "PN","UU[1,16,2]",TT[1,5,1]
+		     here UU would be output on levels
+	             1 to 16 at every 2 levels (skipping one therefore)
+		     whereas TT would be output on levels 1 to 5 at
+	             every level (no skipping). The levels are those
+		     from pres_o or height_o or the list of gal-chen
+		     levels in the zmc2.prog/zmc2.phys files if output
+		     is on gal-chen levels.
+  ncpusor	number of processor used for sormc2		1
+  staguv	destagger wind (UU,VV) for out put		.true.
+  flipit	output vertival slice instead of horizontal	.false.
+
+-----------------------------------------------------------------------
+
+
+
+========================================================================
+TEMPORAL SERIES - Parameters in Namelist "series_cfg"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+  nstat		number of stations				0
+  statij	station position, i,j coor.
+		(comma separated list)
+  statll	station position, lat,lon coor.
+		(comma separated list)
+  nsurf		number of surface fields to archive		0
+  nprof		number of profile fields to archive		0
+  surface	list of surface fields to extract
+		(comma separated)
+  profil	list of profiled fields to extract
+		(comma separated)
+  serint	output series every 'serint' timesteps		1
+------------------------------------------------------------------------
+
+
+
+========================================================================
+Zonal Diagnostics - Parameters in Namelist "diag_cfg"
+========================================================================
+  Parameters			Description			Default
+------------------------------------------------------------------------
+  diagzon	switch to turn on the zonal diag.		.false.
+  divzon	switch to choose the type of domaine division	0
+                0 - subdivisions for nbbandes j
+                1 - subdivisions for nbbandes zonals
+                2 - subdivisions for nbbandes topographics
+                3 - subdivisions for nstat stations
+  dimi, dimj    if divzon=3, grid point dimensions of the  	1,1
+                borders of the station along i,j i.e. 
+                if dimi=dimj=1, the station will have 3 by 3 points
+  mode          type of extraction				1
+                1 - will extract only the mean
+                2 - will extract only the standard deviation
+                3 - will extract the mean and the standard deviation
+  nstatd	number of stations				0
+  statijd	station position: i,j coor.
+  statlld	station position: lat,lon coor.
+  dznsrf	number of surface fields to archive		0
+  dznprf	number of profile fields to archive		0
+  zsurfac       comma separated list of surface fields to 
+                extract each 2 letter field has a prefix  
+                and a suffix (e.g. '+P0.')
+                + prefix - variable accumulated (temporal mean)
+                . prefix - instantaneous diagnosis
+                > suffix - vectorial field
+                . suffix - scalar field
+  zprofil       comma separated list of profil fields 
+                to extract (as zsurfac)
+  zsurfac	list of surface fields
+  zprofil	list of profiled fields  nbbande	number of bands
+  iinf		i min of the 1st band				2
+  jinf		j min of the 1st band				2
+  isup		i max of the last band				gni-1
+  jsup		j max of the last band				gnj-1
+  nptemps       extract fields each nptemps			0
+  heurfin       last hour of extraction				
+		default = ((gnnt-1)*grdt)/3600.0
+------------------------------------------------------------------------
+@

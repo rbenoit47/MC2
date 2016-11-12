@@ -1,0 +1,111 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine setpntp (phybuf, dim, f2d, f3d)
+      implicit none
+*
+      integer dim, f2d, f3d
+      real phybuf (dim)
+*
+#include "lcldim.cdk"
+#include "phymem.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+      integer i,offset
+*------------------------------------------------------------------
+*
+      do i=1,dim
+         phybuf(i) = 0.
+      end do
+
+      offset = 0
+
+      pafu0  =  loc(phybuf(offset+       1))
+      pafv0  =  loc(phybuf(offset+   f3d+1))
+      pafsw0 =  loc(phybuf(offset+ 2*f3d+1))
+      paft0  =  loc(phybuf(offset+ 3*f3d+1))
+      pafes0 =  loc(phybuf(offset+ 4*f3d+1))
+      pafum  =  loc(phybuf(offset+ 5*f3d+1))
+      pafvm  =  loc(phybuf(offset+ 6*f3d+1))
+      paftm  =  loc(phybuf(offset+ 7*f3d+1))
+      pafesm =  loc(phybuf(offset+ 8*f3d+1))
+      paprt  =  loc(phybuf(offset+ 9*f3d+1))
+      padez  =  loc(phybuf(offset+10*f3d+1))
+      offset =  11*f3d
+
+      pattrad   =  loc(phybuf(offset+      1))
+      patugwd   =  loc(phybuf(offset+  f3d+1))
+      patvgwd   =  loc(phybuf(offset+ 2*f3d+1))
+      pathudifv =  loc(phybuf(offset+ 3*f3d+1))
+      pattdifv  =  loc(phybuf(offset+ 4*f3d+1))
+      patudifv  =  loc(phybuf(offset+ 5*f3d+1))
+      patvdifv  =  loc(phybuf(offset+ 6*f3d+1))
+      pattcond  =  loc(phybuf(offset+ 7*f3d+1))
+      pathucond =  loc(phybuf(offset+ 8*f3d+1))
+      offset    =  offset + 9*f3d
+
+      pasfcpsm  =  loc(phybuf(offset+       1))
+      pazun     =  loc(phybuf(offset+   f2d+1))
+      paztn     =  loc(phybuf(offset+ 2*f2d+1))
+      paarea    =  loc(phybuf(offset+ 3*f2d+1))
+      offset    =  offset + 4*f2d
+
+      patwdifv  = 0
+      pafcl0    = 0
+      pafclm    = 0
+      pacltend  = 0
+      paphyobus = 0
+      paphyobusc= 0
+
+      if (diffuw) then
+         patwdifv = loc(phybuf(offset+      1))
+         offset   = offset + f3d
+      endif
+      
+      if (ntrphy.gt.0) then
+         pafcl0   = loc(phybuf(offset+              1))
+         pafclm   = loc(phybuf(offset+   ntrphy*f3d+1))
+         pacltend = loc(phybuf(offset+ 2*ntrphy*f3d+1))
+         offset   = offset + 3*ntrphy*f3d
+      endif
+
+      if (sizobus.gt.0) then
+         paphyobus = loc(phybuf(offset+              1))
+         offset    = offset + sizobus
+      endif
+      if (sizobusc.gt.0) then
+         paphyobusc = loc(phybuf(offset+              1))
+         offset    = offset + sizobusc
+      endif
+
+      paaum  =  loc(phybuf(offset+         1))
+      paavm  =  loc(phybuf(offset+   dim3d+1))
+      paw1   =  loc(phybuf(offset+ 2*dim3d+1))
+      paw2   =  loc(phybuf(offset+ 3*dim3d+1))
+      offset =  offset + 4*dim3d
+*
+*------------------------------------------------------------------
+      return
+      end
+@

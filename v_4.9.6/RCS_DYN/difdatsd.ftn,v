@@ -1,0 +1,45 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/p difdatsd
+*
+      subroutine difdatsd(diff,date1,date2)
+      implicit none
+      real*8 diff
+      character*16 date1,date2
+
+      real*8 rdate1,rdate2
+      integer sign
+
+      integer yy,mo,dd,hh,mm,ss
+      
+      call prsdate(yy,mo,dd,hh,mm,ss,sign,date1)
+      call pdfjdate(rdate1,yy,mo,dd,hh,mm,ss)
+      call prsdate(yy,mo,dd,hh,mm,ss,sign,date2)
+      call pdfjdate(rdate2,yy,mo,dd,hh,mm,ss)
+
+      diff = rdate2 - rdate1
+
+      return
+      end
+@

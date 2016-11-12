@@ -1,0 +1,33 @@
+# 
+#   Targets to load mc2dm
+#
+mc2ntr:
+	makebidon mc2ntr;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o -libpath $(LESLIB) -arch $(ARCH) -abi $(ABI) -mpi -optf "=$(LFLAGS)" -o $(mainntr) $(OMP) -libappl "mc2 $(PHY) $(PATCH) $(COMM) rtools blas massvp4 $(IBM_LD)" -librmn $(RMN) -libpriv $(PRIV) ;\
+	/bin/cp $(mainntr) $(PWD)/$(mainntr) ; /bin/rm -f $(mainntr)* bidon.o
+
+mc2dm:
+	makebidon mc2dm;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o -libpath $(LESLIB) -arch $(ARCH) -abi $(ABI) -mpi -optf "=$(LFLAGS)" -o $(maindm) $(OMP) -libappl "mc2 $(PHY) $(PATCH) $(COMM) rtools blas massvp4 $(IBM_LD)" -librmn $(RMN) -libpriv $(PRIV) ;\
+	/bin/cp $(maindm) $(PWD)/$(maindm) ; /bin/rm -f $(maindm)* bidon.o
+
+mc2: mc2ntr mc2dm
+
+mc2ntr_nompi:
+	makebidon mc2ntr;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o -libpath $(LESLIB) -arch $(ARCH) -abi $(ABI) -optf "=$(LFLAGS)" -o $(mainntr) $(OMP) -libappl "mc2 $(PHY) $(PATCH) $(COMM) rpn_comm_stubs rtools blas massvp4 $(IBM_LD)" -librmn $(RMN) -libpriv $(PRIV);\
+	/bin/cp $(mainntr) $(PWD)/$(mainntr) ; /bin/rm -f $(mainntr)* bidon.o
+#   oter  -codebeta 'rpn_comm_stubs' et mis dans les libappl
+mc2dm_nompi:
+	makebidon mc2dm;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o -libpath $(LESLIB) -arch $(ARCH) -abi $(ABI) -optf "=$(LFLAGS)" -o $(maindm) $(OMP) -libappl "mc2 $(PHY) $(PATCH) $(COMM) rpn_comm_stubs rtools blas massvp4 $(IBM_LD)" -librmn $(RMN) -libpriv $(PRIV);\
+	/bin/cp $(maindm) $(PWD)/$(maindm) ; /bin/rm -f $(maindm)* bidon.o
+#   oter  -codebeta 'rpn_comm_stubs' et mis dans les libappl
+mc2_nompi: mc2ntr_nompi mc2dm_nompi
+#
+
+

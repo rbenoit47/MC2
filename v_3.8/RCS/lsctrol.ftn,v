@@ -1,0 +1,190 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P LSCTROL
+*
+#include "phy_macros_f.h"
+      SUBROUTINE LSCTROL ( ilab, OMEGAP, SIGMA, NI, NK )
+#include "impnone.cdk"
+*
+C
+      INTEGER ilab(NI,NK)
+      REAL OMEGAP(NI,NK), SIGMA(NI,NK)
+      INTEGER NI , NK
+*
+*Author
+*          Bernard Bilodeau
+*
+*Revision
+* 001      B. Bilodeau (Jan 2001) - Automatic arrays
+*
+*Object
+*
+*Arguments
+*
+*          - Output -
+* ilab     label array from Kuo schemes
+*
+*          - Input -
+* OMEGAP   vertical velocity in pressure coordinates
+* SIGMA    sigma levels
+* NI       1st horizontal dimension
+* NK       vertical dimension
+*
+*Notes
+**
+      LOGICAL LO,LO1
+      INTEGER JK,JL
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( KM1    , INTEGER , (NI))
+      AUTOMATIC ( KM2    , INTEGER , (NI))
+      AUTOMATIC ( KP1    , INTEGER , (NI))
+      AUTOMATIC ( KP2    , INTEGER , (NI))
+*
+      AUTOMATIC ( SIGMAK1, REAL    , (NI))
+      AUTOMATIC ( SIGMAK2, REAL    , (NI))
+      AUTOMATIC ( KWW1   , REAL    , (NI))
+      AUTOMATIC ( KWW2   , REAL    , (NI))
+*
+************************************************************************
+C
+C
+C     ------------------------------------------------------------------
+C
+C
+
+C     The moisture accession is set to zero for all levels when the
+C     vertical velocity in pressure coordinates OMEGAP is positive
+C     (downward) at both sigma levels SIGMAK1 and SIGMAK2.
+C
+C     Since SIGMAK1 and 2 do not necessarly coincide with sigma levels
+C     of the model, OMEGAP is linearly interpolated at levels SIGMAK1 and 2
+C     using weighting factors KWW1 and KWW2. KP1 or KP2 and KM1 or KM2 are
+C     the indices of the model's sigma levels from which the interpolation
+C     takes place.
+
+*
+C     SIGMAK1 and SIGMAK2 are the sigma levels at which OMEGAP is tested
+C
+      DO JK=1,NK
+         DO JL=1,NI
+            ilab(jl,jk) = 1
+         END DO
+      END DO
+C
+      DO JL = 1,NI
+         SIGMAK1(JL) = 0.9
+         SIGMAK2(JL) = 0.7
+         KM1    (JL) = NK
+         KM2    (JL) = NK
+      END DO
+*
+*     general case
+      DO JK = 1,NK
+*
+         DO JL = 1,NI
+*
+            IF (SIGMA(JL,JK) .LE. SIGMAK1(JL)) KM1(JL) = JK
+            IF (SIGMA(JL,JK) .LE. SIGMAK2(JL)) KM2(JL) = JK
+*
+            KP1(JL) = KM1(JL) + 1
+            KP2(JL) = KM2(JL) + 1
+*
+            KWW1(JL)=(SIGMAK1(JL)-SIGMA(JL,KM1(JL)))/
+     +               (SIGMA(JL,KP1(JL))-SIGMA(JL,KM1(JL)))
+*
+            KWW2(JL)=(SIGMAK2(JL)-SIGMA(JL,KM2(JL)))/
+     +               (SIGMA(JL,KP2(JL))-SIGMA(JL,KM2(JL)))
+*
+         END DO
+*
+      END DO
+*
+*     special cases
+      DO JL = 1,NI
+*
+         IF (SIGMA(JL,1).GT.SIGMAK1(JL)) THEN
+            SIGMAK1(JL) = SIGMA(JL,1)
+            KM1(JL)     = 1
+            KP1(JL)     = 1
+            KWW1(JL)    = 1.0
+         ENDIF
+
+         IF (SIGMA(JL,1).GT.SIGMAK2(JL)) THEN
+            SIGMAK2(JL) = SIGMA(JL,1)
+            KM2(JL)     = 1
+            KP2(JL)     = 1
+            KWW2(JL)    = 1.0
+         ENDIF
+
+         IF ( KM1(JL)  .EQ. NK )         THEN
+            KP1(JL)     = KM1(JL)
+            KWW1(JL)    = 1.0
+         ENDIF
+
+         IF ( KM2(JL)  .EQ. NK )         THEN
+            KP2(JL)     = KM2(JL)
+            KWW2(JL)    = 1.0
+         ENDIF
+*
+      END DO
+*
+*
+      DO JK=1,NK
+         DO JL=1,NI
+            LO=(OMEGAP(JL,KP1(JL))*KWW1(JL) +
+     +          OMEGAP(JL,KM1(JL))*(1-KWW1(JL))).GT.0.
+            LO1=(OMEGAP(JL,KP2(JL))*KWW2(JL)+
+     +           OMEGAP(JL,KM2(JL))*(1-KWW2(JL))).GT.0.
+*
+            if( LO.and.LO1 ) ilab(jl,jk) = 0
+*
+         END DO
+      END DO
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,155 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+**s/r doninip
+*
+      subroutine doninip ( pref,lnk,unf,datestp,ip3 )
+      implicit none
+*
+      integer ng,lnk,unf,datestp,ip3
+      real pref(lnk+1,3)
+*
+#include "tracers.cdk"
+#include "yomdyn.cdk"
+#include "hinterpo.cdk"
+*
+      integer maxnvar
+      parameter (maxnvar=500)
+      character*4 trname
+      character*8 nv(500,2)
+*
+      logical flag
+      integer i,k,inv,ip1(lnk+1,3),nkuv
+      character*16 vertcord
+*
+*---------------------------------------------------------------------
+*
+      do i=1,maxnvar
+         nv(i,1) = '!@@#$%^&*'
+      end do
+*
+      nkuv = lnk
+      if (gngalsig.lt.1) then
+         vertcord = 'PRESSURE'
+         do k=1,lnk
+            ip1(k,1) = nint(pref(k,1))
+            ip1(k,2) = nint(pref(k,2))
+            ip1(k,3) = nint(pref(k,3))
+         end do
+      else
+         if (gngalsig.eq.1) then
+            vertcord = 'GAL-CHEN'
+            nkuv = lnk+1
+            do k=1,lnk+1
+               ip1(k,1) = nint(pref(k,1)/5.0)+12001
+               ip1(k,2) = nint(pref(k,2)/5.0)+12001
+               ip1(k,3) = nint(pref(k,3)/5.0)+12001
+            end do
+         endif
+         if (gngalsig.eq.2) then
+            vertcord = 'SIGMA'
+            do k=1,lnk
+               ip1(k,1) = nint(pref(k,1)*10000.0)+2000
+               ip1(k,2) = nint(pref(k,2)*10000.0)+2000
+               ip1(k,3) = nint(pref(k,3)*10000.0)+2000
+            end do
+         endif
+      endif
+*
+      if(h_interp.eq.'NEAREST') then
+*        interpolation scalaire des vents
+         nv(1,2) = 'UU'
+         call rsdata (ip1(1,1),nkuv,unf,'UU  ',datestp,ip3,nv(1,1))
+         call rsdata (ip1(1,1),nkuv,unf,'VV  ',datestp,ip3,nv(1,1))
+      else
+*        interpolation vectorielle des vents
+         nv(1,2) = 'UV'
+         call ruvdata (ip1(1,1),nkuv,unf,datestp,ip3,nv(1,1))
+      endif
+      if (gngalsig.ne.1) then
+      nv(2,2) = 'TT'
+      call rsdata (ip1(1,2),lnk,unf,'TT  ',datestp,ip3,nv(2,1)) 
+      if (nv(2,1).eq.'!@@#$%^&*') then
+         nv(2,2) = 'VT'
+         call rsdata (ip1(1,2),lnk,unf,'VT  ',datestp,ip3,nv(2,1))
+      endif
+      else
+      nv(2,2) = 'BUOY'
+      call rsdata (ip1(1,2),lnk,unf,'BUOY',datestp,ip3,nv(2,1)) 
+      endif
+*
+      nv(3,2) = 'HU'
+      call rsdata (ip1(1,2),lnk,unf,'HU  ',datestp,ip3,nv(3,1))
+      if ((nv(3,1).eq.'!@@#$%^&*').and.(gngalsig.eq.0)
+     $                           .and.(nv(2,1)(1:2).eq.'TT')) then
+         nv(3,2) = 'ES'
+         call rsdata (ip1(1,2),lnk,unf,'ES  ',datestp,ip3,nv(3,1))
+      endif
+*
+      inv = 4
+      if (gngalsig.ne.1) then
+         nv(inv,2) = 'GZ'
+         call rsdata (ip1,lnk,unf,'GZ  ',datestp,ip3,nv(inv,1))
+         if (gngalsig.eq.2) then
+            inv = inv + 1
+            nv(inv,2) = 'P0'
+            call rsdata (0,1,unf,'P0  ',datestp,ip3,nv(inv,1))
+         else
+            call wrpref (pref,lnk)
+         endif
+      else
+         nv(inv,2) = 'PREG'
+         call rsdata (ip1,nkuv,unf,'PREG',datestp,ip3,nv(inv,1))
+         call wrht (unf)
+      endif
+*
+      flag=.false.
+      do i=1,inv
+         if (nv(i,1).eq.'!@@#$%^&*') then
+            write (6,1000) nv(i,2)
+            flag=.true.
+         endif
+      end do
+      if (flag) stop
+*
+      trname='    '
+      do i=1,n_tracers
+         trname = trpil(i)
+         if (trpil(i).eq."WZ") then
+            call rsdata (ip1(1,3),lnk,unf,trname,datestp,
+     $                                   ip3,nv(inv+i,1))
+         else
+            call rsdata (ip1(1,2),lnk,unf,trname,datestp,
+     $                                   ip3,nv(inv+i,1))
+         endif
+      end do
+*
+      write (6,1010)
+*
+ 1000 format (/' Missing data: ',a,'  --- ABORT ---'/)
+ 1010 format (' doninip complete')
+*---------------------------------------------------------------------
+      return
+      end
+
+@

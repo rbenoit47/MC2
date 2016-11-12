@@ -1,0 +1,2571 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*OPTION* -O noreorder
+#include "phy_macros_f.h"
+      SUBROUTINE SKOCON ( ZTE   , ZQE   , ZCWE   , ZCRR  , ZCSR  , ZSRR,
+     &                    ZSSR  , ZSTCOV, ZCUCOV , TP    , TM    , QP  ,
+     &                    QM    , TSS   , CWP    , CWM   , PSP  ,
+     &                    PSM   , ILAB  , S      , NI    , NLEV ,
+     &                    FACTDT, DT    , SATUCO, ICONVEC,ISTCOND,
+     &                    prflx , swflx )
+#include "impnone.cdk"
+*
+      Integer ni , nlev
+      Integer ilab(ni,nlev)
+      Real    ZTE(NI,nlev)    , ZQE(NI,nlev), ZCWE(NI,nlev) , ZCRR(NI),
+     &        ZCSR(NI)        , ZSRR(NI)    , ZSSR(NI)  ,
+     &        ZSTCOV(NI,nlev) , ZCUCOV(NI,nlev) ,
+     &        TP(NI,nlev)   , TM(NI,nlev) , QP(NI,nlev) ,  QM(NI,nlev), 
+     &        TSS(NI)       , CWP(NI,nlev), CWM(NI,nlev),
+     &        PSP(NI)       , PSM(NI)     , S(ni,*)     ,
+     &        PRFLX(ni,nlev+1), SWFLX(ni,nlev+1)
+      Real    FACTDT, DT 
+      Integer ICONVEC, ISTCOND, MODP
+      Logical SATUCO
+
+*Author
+*         Ashu Dastoor (1991)
+*
+*Revision
+* 001     Wei Yu (January 1994) - Code vectorization
+* 002     Wei Yu (June 1994) - Adaptation to MC2, use local sigma
+* 003     Bernard Bilodeau - New physics interface
+* 004     G. Pellerin (June 95) - Different Evaporation Coefficient
+*                                 for convection
+*                               - Bugfix for stable and convective 
+*                                 precipitation
+* 005     R. Sarrazin (June 95) modified stratiform part
+* 006     R. Sarrazin (Nov  95) put very small precip rates to 0 at the end
+*                               to avoid excessive trace of precip
+* 007     B. Bilodeau (Jan 01) - Automatic arrays
+* 008     L. Spacek   (May 03) - IBM conversion
+*             - eliminate NEWKUO code
+*             - eliminate useless calculations
+*             - calls to vsexp routine (from massvp4 library)
+*             
+*
+*Object
+*         parameterization of stratiform and convective condensation
+*
+*Arguments
+*
+* ZTE     tendency of temperature due to convection
+* ZQE     tendency of specific humidity due to convection
+* ZCWE    tendency of cloud water due to convection
+* ZCRR    rate of liquid precipitation
+* ZCSR    rate of solid precipitation due to convection
+* ZSRR    rate of liquid precipitation due to stratiform condensation
+* ZSSR    rate of solid precipitation due to stratiform condensation
+* ZSTCOV  stratiform cloud cover
+* ZCUCOV  cumulus cloud cover
+* TP      temperature
+* TM      environmental T at (T-DT)
+* QP      specific humidity
+* QM      environmental Q at (T-DT)
+* TSS     surface temperature
+* CWP     cloud water content at (T+DT)
+* CWM     cloud water content at (T-DT)
+* PSP     surface pressure at (T+DT)
+* PSM     surface pressure at time (T-DT)
+* ILAB    flag array from subroutine KUO
+* S       sigma levels
+* NI      1st horizontal dimension
+* NLEV    number of model levels
+* FACTDT  2 for 3-time level models
+*         1 for 2-time level models
+* DT      timestep
+* SATUCO  parameter to indicate 
+* ICONVEC convection switch
+* ISTCOND stratiform condensation switch
+* PRFLX   flux of liquid precipitation
+* SWFLX   flux of solid precipitation
+*
+*
+*Note
+*
+*  HDCWAD modified, DO NOT PASS to the main routine (1990)
+*
+*
+*  This routine deals with parameterization of condensation along
+*  a constant J - LINE
+*  Points 1) - 8) Handle parameterization of convection by use of
+*  a modified KUO scheme such that it includes prediction
+*  of cloud water content and diagnostic setting of fractional
+*  cloud cover.
+*  Points 11) - 17) Handle parameterization of stratiform condensa-
+*  tion including prediction of cloud water content and
+*  diagnostic setting of fractional cloud cover.
+*
+*  1)   Find lifting condensation level, LCL, HPB of surface air
+*       and corresponding temperature, TB and Humidity, QB. Calculate
+*       THETAE of HPB
+*  2)   Calculate TC(K) and QC(K) along THETAE = CONSTANT
+*  3)   Calculate (TC-T) and (TC-T)-MAX and (QC-Q). Set lowest level
+*       of convection, KB, and top level, KT, and level of (TC-T)-MAX,
+*       KTMAX.  Calculate (HPB - P(KB)).
+*  4)   Determine top of the convection. If the result is KT.GE.KB,
+*       then further calculations are terminated
+*  5)   Calculate accession of vapour, CQ, and basic proportionality
+*       parameter, KSIO.  If CQ.LE.O  or KSIO.LE.O, KT is set = KB
+*       and jump to POINT 5)
+*  6)   Calculate KSI(K), heating and moistening functions and cloud
+*       cover.
+*  7)   Prediction of cloud water content, CW, by an implicit scheme,
+*       requiring an iterative procedure.
+*  8)   Calculate accumulated precipitation.
+*-----------------------------------------------------------------------
+*
+* 11)   Modification of basic threshold relative humidity, HU00
+* 12)   General requirement for condensation, REQCON = 1 or 0
+* 13)   Setting of specific HU00 and REQCON and EVAP of cloud water
+* 14)   Cloud cover and evaporation of precipitation
+* 15)   Accession of vapour, and final setting of heating/cooling
+* 16)   Prediction of cloud water content, CW, by an implicit scheme,
+*       requiring an iterative procedure.
+* 17)   Calculate accumulated precipitation.
+*
+**
+C-----------------------------------------------------------------------
+C  I)       NAMES OF PARAMETERS AND OTHER QUANTITIES
+C           ------------------------------------------------------------
+C
+C       TABFBF      BERGERON-FINDEISEN EFFECT FROM (DEWI*TABICE)
+C       CUMASK(K)   SET = 0 IF CONVECTION,   OTHERWISE = 1
+C       DLNPDT(K)   = 1/HPK*DP/DT AT LEVEL K
+C       DPK(K)      DELTA-P AROUND LEVEL K
+C       FSCFLD(I,J) FIELD TO MODIFY SC COVER AT LEVEL KSCFLD
+C                   DUE TO ENTRAINMENT
+C       ZCUCOV(K)   CONTAINS CUMULUS CLOUD COVER
+C       HDCWAD(K)   TENDENCY OF CLOUD WATER DUE TO OTHER EFFECTS
+C                   BUT CONDENSATION
+C       HDCWST(K)   TENDENCY OF CLOUD WATER DUE TO STRATIFORM 
+C       HDQAD(K)    TENDENCY OF VAPOUR DUE TO EFFECTS OTHER THAN
+C                   CONDENSATION
+C       HDQST(K)    TENDENCY OF VAPOUR DUE TO STRATIFORM CONDENSATION 
+C       HDTAD(K)    TENDENCY OF TEMPERATURE DUE TO EFFECTS OTHER THAN 
+C                   CONDENSATION
+C       HDTST(K)    TENDENCY OF TEMPERATURE DUE TO STRATIFORM 
+C                   CONDENSATION
+C       TABDE       DIFFERENCE IN SATURATION VAPOUR PRESSURE OVER 
+C                   WATER AND ICE 
+C       HEVAC(K)    EVAPORATION RATE OF CLOUD WATER 
+C       HEVAPR(K)   EVAPORATION RATE OF PRECIPITATION 
+C       HKSIZ(K)    KSI OF KUO SCHEME AS A FUNCTION OF HEIGHT 
+C       FMROFT      TEMPERATURE FUNCTION TO MULTIPLY MR WITH
+C                   FOR T<273 
+C       HPK(K)      = P AT SIGMA(K) 
+C       HPKAP(K)    = (HP0/HPK(JK)) ** KAPPA
+C       HPLOGK(K)   = LOG(P)
+C       HQC(K)      SATURATION MIXING RATIO ALONG THE MOIST ADIABAT 
+C                   THROUGH THE LCL 
+C       HQCMQ(K)    HQC MINUS ENVIRONMENTAL Q 
+C       QM(K)       ENVIRONMENTAL Q AT (T-DT) 
+C       HQP1(K)     ENVIRONMENTAL Q AT (T+DT) 
+C       HQSAT(K)    SATURATION MIXING RATIO WITH RESECT TO
+C                   ENVIRONMENTAL TEMPERATURE 
+C       HSQ(K)      EPS*L**2*QSAT/(R*CP*T**2) 
+C       ZSTCOV(K)   CONTAINS STRATIFORM CLOUD COVER 
+C       HTC(K)      TEMPERATURE ALONG THE MOIST ADIABAT 
+C                   THROUGH THE LCL 
+C       HTCMT(K)    HTC MINUS ENVIRONMENTAL T 
+C       TM(K)       ENVIRONMENTAL T AT (T-DT) 
+C       HTP1(K)     ENVIRONMENTAL T AT (T+DT) 
+C       HU(K)       RELATIVE HUMIDITY OF THE ENVIRONMENT
+C       TABICE      PROBABILITY FOR ICE CRYSTALS AS A FUNCTION OF 
+C                   TEMPERATURE 
+C       PRCPCU(I,J) RATE OF CONVECTIVE PRECIPITATION AT LEVEL K, SUMMED 
+C                   FROM KHT
+C       PRCPST(I,J) RATE OF STRATIFORM PRECIPITATION AT LEVEL K, SUMMED 
+C                   FROM KHT
+C 
+C       ACPRST      ACCUMULATED PRECIPITATION FROM STRATIFORM CLOUDS
+C       ACPRCU      ACCUMULATED PRECIPITATION FROM CONVECTIVE CLOUDS
+C       CFREEZ      INCREASES CONVERSION RATE BELOW TEMP CTFRZ1 
+C       COALES      INCREASES CONVERSION RATE DUE TO PRECIPITATION
+C                   COMING IN FROM ABOVE
+C       CBFEFF      INCREASES CONVERSION RATE DUE TO DUE TO PRESENCE
+C                   OF ICE IN PRECIPITATION COMING IN FROM ABOVE
+C       CONAE       FACTOR TO TUNE TABLE LOOK-UP FOR TETA-AE
+C       CTFRZ1      TEMP BELOW WHICH CONVERSION RATE IS INCREASED 
+C       DT          TIME-STEP 
+C       HCP         SPECIFIC HEAT OF DRY AIR AT CONSTANT PRESSURE 
+C       HCCU        CONVERSION RATE OF CLOUD TO PRECIP DROPS IN 
+C                   CONVECTIVE CLOUD
+C       HCST        CONVERSION RATE OF CLOUD TO PRECIP DROPS IN 
+C                   STRATIFORM CLOUD
+C       HCUNRM      CLOUD COVER DEPENDS ON CLOUD DEPTH COMPARED TO
+C                   HCUNRM
+C       HDPB        = (HPB - HPK(KHB) + 0.5 * DPK(KHB)) 
+C       HELDCP      = HEPS * HLDCP
+C       HELDR       = HEPS * HLV/HRD
+C       HEPS        MOL WEIGHT OF WATER/MOL WEIGHT OF AIR = 0.622 
+C       HEPSE0      = HEPS * HE273
+C       HE273       SATURATION VAPOUR PRESSURE AT T=273K
+C       HG          GRAVITY 
+C       HKAP        = HRD/HCP 
+C       HKMELT      COEFFICIENT FOR MELTING OF ICE IN PRECIPITATION 
+C       HKPI        = 1./HKAP 
+C       HLDCP       = HLV/HCP 
+C       HLV         LATENT HEAT OF VAPORIZATION 
+C       HMRCU       CLOUD WATER MIXING RATIO AT WHICH CONVERSION BECOMES
+C                   EFFICIENT IN CONVECTIVE CLOUD 
+C       HMRST       CLOUD WATER MIXING RATIO AT WHICH CONVERSION BECOMES
+C                   EFFICIENT IN STRATIFORM CLOUD 
+C       HPB         P VALUE AT LCL
+C       HPNORM      = HPS - HPT 
+C       HPS         CURRENT SURFACE PRESSURE
+C       HPSKAP      (HP0/HPS) ** KAPPA
+C       HPT         TOP PRESSURE OF THE MODEL ATMOSPHERE (SIGMA-DOT=0)
+C       HP0         REFERENCE PRESSURE (=100 KPA) 
+C       HQB         MIXING RATIO AT LCL 
+C       HRD         GAS CONSTANT OF DRY AIR 
+C       HRTDEL      = HRD * HT273/(HEPS * HLV)
+C       HTAUCU      CHARACTERISTIC TIME USED IN CONVECTIVE CLOUD COVER
+C                   SCHEME
+C       HTB         TEMPERATURE AT LCL
+C       HTD         DEW POINT TEMPERATURE OF SURFACE AIR
+C       HTETAE      THETAE THROUGH LCL
+C       HT273       = 273 K 
+C       HUZ00       MODIFIED HU00 
+C       HU00        THRESHOLD RELATIVE HUMIDITY FOR STRATIFORM
+C                   CONDENSATION
+C       HVSNOW      TERMINAL VELOCITY OF ICE/SNOW PRECIPITATION 
+C       HVTERM      TERMINAL VELOCITY OF PRECIPITATION
+C       ICLDDT      OPTIONAL NUMBER OF STEPS BETWEEN CONDENSATION CALCU-
+C                   LATIONS; 1 FOR EVERY AND 2 FOR EVERY SECOND STEP ETC
+C                   THE VALUE IS SET IN ROUTINE STEP
+C       KCBTOP      NORMALLY = 1, BUT IF THETAE IS SMALL, KCBTOP IS SET 
+C                   TO .GT. 1, IMPLYING LOWER ALTITUDE IN ORDER TO AVOID
+C                   TC .LT. TVBEG FOR THE VAPSAT TABLE
+C       KHB         FIRST MODEL LEVEL ABOVE LCL 
+C       KHT         TOP LEVEL OF CONVECTION, I.E.,GOING UPWARD IT IS
+C                   THE LAST LEVEL WITH (TC-T).GT.0 
+C       NLEV        NUMBER OF MODEL LEVELS. 
+C       PCUACC      ACCUMULATED PRECIPITATION FROM CONVECTIVE CLOUDS
+C       PSTACC      ACCUMULATED PRECIPITATION FROM STRATIFORM CLOUDS
+C       REQCON      INDICATOR = 1 IF STRATIFORM CONDENSATION IS ALLOWED 
+C                   TO TAKE PLACE,  ELSE REQCON = 0 
+C       SEVAPR      ACCUMULATED  EVAPORATION FROM PRECIPITATION 
+C       SEVAPC      ACCUMULATED EVAPORATION OF CLOUD WATER
+C       SUPSAT      INDICATOR = 1 IF SUPERSATURATION IS AT HAND, I.E.,
+C                   U.GT.1.02,  ELSE SUPSAT = 0 
+C       STPEVP      COEFFICIENT EVAPORATION FOR STRATIFORM PRECIPITATION
+C       CVPEVP      COEFFICIENT EVAPORATION FOR CONVECTION PRECIPITATION
+C       TANVIL      IF T(KHT) .LE. TANVIL A STRATIFORM ANVIL CLOUD IS 
+C                   CALCULATED IN THE TOP CONVECTIVE LAYER
+C       TCMTMX      (TC-T) - MAX
+C       FACTDT      2 FOR 3-TIME LEVEL MODELS
+C                   1 FOR 2-TIME LEVEL M0DELS
+C       DT          TIMESTEP
+C       RTWODT      = 1. / (FACTDT*DT)
+C       U00MAX      MAXIMUN ALLOWABLE VALUE OF MODIFIED HU00
+C-----------------------------------------------------------------------
+C-----------------------------------------------------------------------
+C  II)      DECLARATIONS
+C           ------------------------------------------------------------
+C 
+C 
+      real    TWODT  , hfis   , xdpb   
+      real    YMN    , XXP    , XHJ    , XF     , XFPRIM ,
+     &        XCWP1  , XPRADD , DTMELT , XROV   , XRO    ,
+     &        XMIND  , DMELT  , SQMELT , XMELT  , DSNOW  ,
+     &        EVAPRI , XEVACU , XEVAP  , XPSQ   , xp
+      real    DONESC , XKCOVB , HUZ00  , XDIFSC , DUSTAB ,
+     &        SUPSAT , XTP    , XSP    , DU238  , XCLEAR ,
+     &        XCEVSC , XSCEV  , QPREL  , QINCR  , tmp1   ,
+     &        XSCDIF , XCST   , ICLDDT
+      integer KSCFLD , KSCTOP , IT0    , IT0P1
+      real    FSCFLD , FSCFKZ , HCP    , HEPS   , HG     ,
+     &        rHG    , HLV    , HDL    , HP0    , HRD    ,
+     &        HT273  , HE273  , HEPSE0 , HKAP   , HKPI   ,
+     &        HCPI   , HEDR   , HRTDE  , HLDCP  , HDLDCP ,
+     &        HRTDEL , HELDR  , HELDCP , HEDLDR , HELDRI ,
+     &        SHCUM  , CONAE  , AECON  , CFREEZ , COALES
+      real    CBFEFF , CTFRZ1 , HCCU   , PMOIST , HCUNRM ,
+     &        HMRCU  , HMRST  , HTAUCU , TANVIL , HCST   ,
+     &        HVTERM , CVPEVP , STPEVP , HVSNOW , SQVSNO , HKMELT ,
+     &        U00MAX , HU00   , RTWODT , 
+     &        ICLDDT2dt       , ICLDDTdt , 
+     &        rICLDDT2dt      , rICLDDTdt
+      real    yp, yt, yq, s1, s2, xt, QGTO, xd, xc, yc, ye,
+     &        XQMQS, DUOORL
+      real    tabice, tabde, dpksf, tetae
+      integer nlevm1, nlevp1
+
+      integer khbmax , khtmin , liftst,
+     &        kcbtopmin, ktmp ,
+     &        khbmin
+C
+C 
+      integer il, jk, icount,
+     &        JNR
+      integer lqonof, KHBP1
+      real    temp1         , temp2
+c***
+#include "dintern.cdk"
+#include "consphy.cdk"
+c****
+C 
+      REAL    TVBEG  , REDUES , TVIRTC
+      REAL    T0I    , TCI    , TSCALE , APRI  ,
+     &        TOPEQ0 , TODPMX
+C
+      LOGICAL logic  , logic3
+C
+      INTEGER IVBEG
+*
+      REAL     XDU    , UKSIZ  , EVCWMX , XACCAD , XACCES ,
+     &         XN     , XNPM   , XBNPM  , XQSUPS , TPREL  ,
+     &         QSPREL , XDQ    , XDE    , XPRB   , BFMOD  ,
+     &         XK     , HFCOX  , XFT    , HFREZX , XHMRCU ,
+     &         ANVCOV , X      , Y      , HTD    , TEMPA2 ,
+     &         TEMPAD , TEMPAD1
+*
+* 
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( LOGIC1  , LOGICAL , (NI     ) )
+      AUTOMATIC ( LOGIC2  , LOGICAL , (NI     ) )
+      AUTOMATIC ( SAVEL   , LOGICAL , (NI     ) )
+*
+      AUTOMATIC ( INDCON  , INTEGER , (NI     ) )
+      AUTOMATIC ( IPRTCO  , INTEGER , (NI,NLEV) )
+      AUTOMATIC ( KTCMTX  , INTEGER , (NI     ) )
+      AUTOMATIC ( KHFREE  , INTEGER , (NI     ) )
+      AUTOMATIC ( KHB     , INTEGER , (NI     ) )
+      AUTOMATIC ( KCBTOP  , INTEGER , (NI     ) )
+      AUTOMATIC ( KHT     , INTEGER , (NI     ) )
+      AUTOMATIC ( KHTX    , INTEGER , (NI     ) )
+      AUTOMATIC ( ILKHB   , INTEGER , (NI     ) )
+      AUTOMATIC ( ILKHT   , INTEGER , (NI     ) )
+      AUTOMATIC ( INDCU   , INTEGER , (NI     ) )
+      AUTOMATIC ( INDLIFT , INTEGER , (NI     ) )
+      AUTOMATIC ( INDFLO  , INTEGER , (NI     ) )
+      AUTOMATIC ( LIFTLV  , INTEGER , (NI     ) )
+      AUTOMATIC ( LQCONV  , INTEGER , (NI     ) )
+*
+      AUTOMATIC ( ACCK    , REAL    , (NI,NLEV) )
+CLS      AUTOMATIC ( HPLOGK  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HPKAP   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HTCMT   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HTCMTB  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HQCMQ   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HQCMQB  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDCWST  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HEVAC   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HEVAPR  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDTST   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDQST   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( STHEAT  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HFOORL  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HQSAT   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HSQ     , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HU      , REAL    , (NI,NLEV) )
+      AUTOMATIC ( MOISTN  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDTCU1  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HTC     , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HQC     , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HFDTMX  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( CUMASK  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDCWAD  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HKSIZ   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HKSI    , REAL    , (NI     ) )
+      AUTOMATIC ( HTP1    , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HQP1    , REAL    , (NI,NLEV) )
+      AUTOMATIC ( DPK     , REAL    , (NI,NLEV) )
+      AUTOMATIC ( XDP     , REAL    , (NI     ) )
+      AUTOMATIC ( DLNPDT  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDTAD   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( ELOFT   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HUQSM1  , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HDQAD   , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HPK     , REAL    , (NI,NLEV) )
+      AUTOMATIC ( HPS     , REAL    , (NI     ) )
+      AUTOMATIC ( COVVAP  , REAL    , (NI     ) )
+      AUTOMATIC ( COVBAR  , REAL    , (NI     ) )
+      AUTOMATIC ( DONESC  , REAL    , (NI     ) )
+      AUTOMATIC ( XSCEV   , REAL    , (NI     ) )
+      AUTOMATIC ( XKCOVB  , REAL    , (NI     ) )
+      AUTOMATIC ( DUSTAB  , REAL    , (NI     ) )
+      AUTOMATIC ( XDIFSC  , REAL    , (NI     ) )
+      AUTOMATIC ( SUPSAT  , REAL    , (NI     ) )
+      AUTOMATIC ( XFRCOA  , REAL    , (NI     ) )
+      AUTOMATIC ( XQNET   , REAL    , (NI     ) )
+      AUTOMATIC ( XFIX    , REAL    , (NI     ) )
+      AUTOMATIC ( XCST    , REAL    , (NI     ) )
+      AUTOMATIC ( XCCU    , REAL    , (NI     ) )
+      AUTOMATIC ( YM      , REAL    , (NI     ) )
+      AUTOMATIC ( YMMIN   , REAL    , (NI     ) )
+      AUTOMATIC ( PRCPCU  , REAL    , (NI     ) )
+      AUTOMATIC ( HFMRX   , REAL    , (NI     ) )
+      AUTOMATIC ( PRCPST  , REAL    , (NI     ) )
+      AUTOMATIC ( CUSNOW  , REAL    , (NI     ) )
+      AUTOMATIC ( STSNOW  , REAL    , (NI     ) )
+      AUTOMATIC ( HEVACU  , REAL    , (NI     ) )
+      AUTOMATIC ( HEVRST  , REAL    , (NI     ) )
+      AUTOMATIC ( HEVCST  , REAL    , (NI     ) )
+      AUTOMATIC ( TEMPAR  , REAL    , (NI     ) )
+      AUTOMATIC ( TEMPAD  , REAL    , (NI     ) )
+      AUTOMATIC ( REQCON  , REAL    , (NI     ) )
+      AUTOMATIC ( HTB     , REAL    , (NI     ) )
+      AUTOMATIC ( HUZ00   , REAL    , (NI     ) )
+      AUTOMATIC ( HPB     , REAL    , (NI     ) )
+      AUTOMATIC ( HDPB    , REAL    , (NI     ) )
+      AUTOMATIC ( ILHDPB  , REAL    , (NI     ) )
+      AUTOMATIC ( HQB     , REAL    , (NI     ) )
+      AUTOMATIC ( HTETAE  , REAL    , (NI     ) )
+      AUTOMATIC ( TCMTMX  , REAL    , (NI     ) )
+      AUTOMATIC ( XQSUPS  , REAL    , (NI     ) )
+      AUTOMATIC ( DPSUM   , REAL    , (NI     ) )
+      AUTOMATIC ( PRBMOD  , REAL    , (NI     ) )
+      AUTOMATIC ( XCU     , REAL    , (NI     ) )
+      AUTOMATIC ( XQ      , REAL    , (NI     ) )
+      AUTOMATIC ( SUPKSI  , REAL    , (NI     ) )
+      AUTOMATIC ( CQI     , REAL    , (NI     ) )
+      AUTOMATIC ( XSUMT   , REAL    , (NI     ) )
+      AUTOMATIC ( XSUMQ   , REAL    , (NI     ) )
+      AUTOMATIC ( XSUM    , REAL    , (NI     ) )
+      AUTOMATIC ( WORK    , REAL    , (NI,NLEV) )
+*              
+************************************************************************
+C 
+* 
+
+C  III)     STATEMENT FUNCTIONS 
+C           ----------------------------------------------------------- 
+*
+      REAL Z1, Z2, Z3, Z4, Z5
+* 
+#include "fintern.cdk"
+C 
+C           FORMULA FOR THETHAE FROM A SERIES EXPANSION 
+C 
+C           TAE = PI*T*EXP(L*Q/(CP*T)) = EXP(CONAE)*PI*T*(1+(X*(1+.5*X))
+C           WHERE X = L*Q/(CP*T)-CONAE  AND CONAE IS A CONST APPR = 0.15
+C 
+      TETAE(YP,YT,YQ) = AECON * YP * YT * ( 1. + ( HLDCP * YQ / YT 
+     &                  - CONAE ) * ( 1. + 0.5 * ( HLDCP * YQ / YT 
+     &                  - CONAE ) ) )
+C 
+C           FORMULA FOR DPK/P 
+C 
+      DPKSF(S1,S2) = 2. * (S1-S2) / (S1+S2) 
+C 
+C           DIFFERENCE OF SATURATION PRESSURE BETWEEN WATER AND ICE 
+C           PROBABILITY FOR EXISTENCE OF ICE AND THE PRODUCT OF THOSE 
+C 
+      TABDE(XT)  = MIN((( HE273/XT * EXP(HELDR*(T0I - 1./XT)) *
+     +             (1. - EXP(HEDLDR*(T0I - 1./XT))) ) *9.248487), 1.0)
+*
+*     TABDE(XT)  = HDEWI( IT0P1-INT(XT) ) * ( XT-INT(XT) ) +
+*    &             HDEWI( IT0P1-INT(XT)+1 ) * ( 1.-XT+INT(XT) ) 
+C 
+      TABICE(XT) = MAX(APRI*(EXP(-(((MAX(XT,TCI)-TCI)/TSCALE)**2))
+     +                   -1.)+1. , 0.0)
+*
+*     TABICE(XT) = PRBICE( IT0P1-INT(XT) ) * ( XT-INT(XT) ) + 
+*    &             PRBICE( IT0P1-INT(XT)+1 ) * (1.-XT+INT(XT) )
+C 
+C      TABFBF(XT) = TABICE(XT) * (1.-TABICE(XT)) * TABDE(XT)
+C
+C      TABFBF(XT) = BFEFF(IT0P1-INT(XT))*(XT-INT(XT)) +
+C     1             BFEFF(IT0P1-INT(XT)+1)*(1.-XT+INT(XT)) 
+C 
+C           TEMPERATURE FUNCTION TO MULTIPLY HMRCU AND HMRST FOT T<273
+C 
+      Z1(XT) = MIN(1.33*EXP(-((XT-HT273)*.066)**2) , 1.0)
+*
+      Z2(XT) = ABS (XT - 232.) / 18.
+*
+      Z3(XT) = Z2(XT) * (1. + Z2(XT) * (1. + 1.333 * Z2(XT))) 
+*
+      Z4(XT) = Z3(XT) / (1. + Z3(XT)) * SIGN(1.0,XT-232.)
+*
+      Z5(XT) = 0.5*0.15*(1.07+Z4(XT))
+*
+*      FMROFT(XT) = CVMGT( Z1(XT), Z5(XT), XT.GT.250. )
+*
+*     FMROFT(XT) = HMROFT( IT0P1-INT(XT) ) * (XT-INT(XT) ) + 
+*    &             HMROFT( 1+IT0P1-INT(XT) ) * (1.-XT+INT(XT) )
+C 
+C-----------------------------------------------------------------------
+C         
+*
+c
+*
+C  IV)      VALUES OF CONSTANTS - IN SI UNITS - INCLUDING DERIVED ONES
+C           ----------------------------------------------------------- 
+C 
+      TVBEG  = 100.
+      REDUES = 0.983
+      TVIRTC = 0.61
+      IVBEG  = INT(TVBEG) - 1
+*
+      HT273  = 273.
+      HE273  = 611.
+      T0I    = 1./HT273
+      TCI    = 232.
+      TOPEQ0 = 268. 
+      TODPMX = 256. 
+      TSCALE = (TODPMX - TCI)*SQRT(2.)
+*
+      APRI = 1./(1.-EXP(-((TOPEQ0-TCI)/TSCALE)**2))
+*
+C 
+      ICLDDT = 1. 
+      KSCFLD = 0
+      FSCFLD = 0. 
+      FSCFKZ = 0. 
+      KSCTOP = NLEV + 3 
+      HCP    = CPD
+      HEPS   = EPS1
+      HG     = GRAV
+      rHG    = 1. / hg
+      HLV    = CHLC
+C     HDL   =  CHLF
+      HDL   = 0.
+      HP0    = 1.E5 
+      HRD    = RGASD
+      HEPSE0 = HEPS * HE273 
+      HKAP   = HRD/HCP
+      IT0 = INT(HT273)
+      IT0P1 = IT0 + 1 
+      HKPI   = 1./HKAP
+      HCPI = 1./HCP 
+      HEDR = HEPS/HRD 
+      HRTDE = HRD*HT273/HEPS
+      HLDCP = HLV*HCPI
+      HDLDCP = HDL*HCPI 
+      HRTDEL = HRTDE/HLV
+      HELDR = HEDR*HLV
+      HELDCP = HEPS * HLDCP 
+      HEDLDR = HEPS*HDL/HRD 
+      HELDRI = 1./HELDR 
+      SHCUM = 0.
+C 
+C-----------------------------------------------------------------------
+C 
+C  V)       PARAMATER VALUES IN SI UNITS
+C           ------------------------------------------------------------
+C 
+      CONAE  = 0.15 
+      AECON  = EXP(CONAE) 
+      CFREEZ = 0.12 
+      COALES = 300. 
+      CBFEFF = 7.0
+      CTFRZ1 = 263. 
+      HCCU   = 5.E-4
+      LQONOF = 0
+      PMOIST = 3. 
+      HCUNRM = 0.3
+      HMRCU  = 5.E-4
+      HMRST  = 2.E-4
+      HTAUCU = 3600.
+      TANVIL = 253. 
+      HCST   = 1.8E-4
+      HVTERM = 5. 
+      STPEVP = 1.6E-4
+      CVPEVP = 0.6E-4
+      HVSNOW = 2. 
+      SQVSNO = SQRT(HVSNOW) 
+      HKMELT = 3.E-5
+      U00MAX = 0.99
+      HU00 = 0.85
+      twodt = factdt * dt
+      RTWODT = 1. / TWODT        !AJOUT (WEI YU, 1994)
+      ICLDDT2dt = ICLDDT * TWODT
+      rICLDDT2dt = 1. / ICLDDT2dt
+      ICLDDTdt = ICLDDT * DT
+      rICLDDTdt = 1. / ICLDDTdt
+C 
+C-----------------------------------------------------------------------
+C 
+C  VI)      PREPARATIONS
+C
+      DO 10 JK = 1 , nlev
+      DO 10 IL = 1 , NI
+         PRFLX(IL,JK) = 0.0
+         SWFLX(IL,JK) = 0.0
+10    CONTINUE
+C 
+      NLEVM1 = NLEV - 1 
+      NLEVP1 = NLEV + 1 
+C     ------------------------------------------------------------
+      do 12 il = 1, ni
+         HPS(il) = ( PSP(IL) + PSM(IL) ) * 0.5
+         HUZ00(il) = HU00
+12    continue
+
+      do 13 jk = 1, nlev
+      do 13 il = 1, ni
+         HTP1(il,JK) = TP(IL,JK)
+         HQP1(il,JK) = QP(IL,JK)
+         HPK(il,JK) = S(il,JK) * HPS(il)   !Sigma local (wei YU)
+13    continue
+
+      do 14 il = 1, ni
+         DPK(il,1) = 0.5 * ( HPK(il,2) - HPK(il,1) )
+14    continue
+
+      DO 15 JK  = 2, NLEVM1 
+      DO 15 il  = 1, ni 
+         DPK(il,JK) = 0.5 * ( HPK(il,JK+1) - HPK(il,JK-1) ) 
+15    CONTINUE
+ 
+      do 16 il = 1, ni
+         DPK(il,NLEV) = 0.5 * ( HPK(il,NLEV) - HPK(il,NLEV-1) ) 
+     &                 + S(il,nlev+1) * HPS(il) - HPK(il,NLEV) 
+16    continue
+
+      DO 17 JK = 1, NLEV 
+*vdir noloopchg
+      do 17 il = 1, ni
+         DLNPDT(il,JK) = ( 1. / HPK(il,JK) ) * S(il,JK) !Sigma local
+     &                  * ( PSP(IL) - PSM(IL) ) * rTWODT 
+         HDTAD(il,JK) = ( HTP1(il,JK) - TM(il,JK) ) * rTWODT 
+         HDQAD(il,JK) = ( HQP1(il,JK) - QM(il,JK) ) * rTWODT 
+         HDCWAD(il,JK) = ( CWP(il,JK) - CWM(il,JK) ) * rTWODT
+17    CONTINUE
+
+      do 18 il = 1, ni
+         KCBTOP(il) = 3
+         COVVAP(il) = 0. 
+         COVBAR(il) = 0. 
+         PRCPCU(il) = 0. 
+         PRCPST(il) = 0. 
+         CUSNOW(il) = 0. 
+         STSNOW(il) = 0. 
+         HEVACU(il) = 0. 
+         HEVRST(il) = 0. 
+         HEVCST(il) = 0. 
+         indcu(il) = 0
+18    continue
+c      KCBTOP = 3
+      hfis = 0.
+      ANVCOV = 0. 
+      liftst = 3 + 2  !ne pas varier en fonction de maille
+C
+C     CALCULATE SATURATED PRESSURES
+C
+      MODP=3
+          if ( SATUCO ) then
+             CALL MFOQST(HQSAT, TM,S,HPK,MODP,NI,NLEV,NI)
+          else
+             CALL MFOQSA(HQSAT, TM,S,HPK,MODP,NI,NLEV,NI)
+          endif
+C
+C
+C
+      DO jk = 1, nlev
+         do il = 1, ni
+c            temp1 = TM(il,jk)
+            work(il,jk)=-(((max(TM(il,jk),tci)-tci)/tscale)**2)
+         enddo
+      enddo
+C
+         call vsexp(work,work,ni*nlev)
+C
+      if(hdl.ne.0.)then
+         DO jk = 1, nlev
+            do il = 1, ni
+               if ( TM(il,jk) .le. ht273 ) then
+                  temp1 = TM(il,jk)
+                  eloft(il,jk) = hlv + hdl *
+     1                 max(((apri*(work(il,jk)-1.0))+1.0),0.0)
+               else
+                  eloft(il,jk) = hlv
+               endif
+            enddo
+         enddo
+      else
+         DO jk = 1, nlev
+            do il = 1, ni
+                  eloft(il,jk) = hlv
+            enddo
+         enddo
+      endif
+
+c
+C 
+C           UPDATE THE VERTICAL ARRAYS
+C 
+      DO 19 JK = 1, NLEV
+      do 19 il = 1, ni
+*
+         ACCK(il,JK)  = 0. 
+CLS         HTCMT(il,JK) = 0.
+CLS         HTCMTb(il,JK) = 0.
+CLS         HQCMQ(il,JK) = 0.
+CLS         HQCMQb(il,JK) = 0.
+CLS         HKSIZ(il,JK) = 0.
+         CUMASK(il,JK) = 1. 
+C 
+         HDCWST(il,JK) = 0.
+         HEVAC(il,JK) = 0.
+         HEVAPR(il,JK) = 0.
+         HDTST(il,JK) = 0.
+         HDQST(il,JK) = 0.
+         STHEAT(il,JK) = 0. 
+         ZSTCOV(il,JK) = 0. 
+         HFOORL(il,JK) = 1. 
+CLS         HPLOGK(il,JK) = ALOG(HPK(il,JK))
+CLS         HPKAP(il,JK) = (HP0/HPK(il,JK)) ** HKAP 
+CLS         if ( TM(il,jk) .le. ht273 ) then
+CLS            temp1 = TM(il,jk)
+CLS            eloft(il,jk) = hlv + hdl * tabice( temp1 )
+CLS         else
+CLS            eloft(il,jk) = hlv
+CLS         endif
+c***
+         IPRTCO(il,JK) = 0
+C 
+         HELDR = HEDR*ELOFT(il,JK)
+         HLDCP = HCPI*ELOFT(il,JK)
+C
+          temp1 = TM(il,JK)
+          temp2 = HPK(il,JK)
+c***
+CLS          if ( SATUCO ) then
+CLS             HQSAT(il,jk) = FOQST( temp1 , temp2 )
+CLS          else
+CLS             HQSAT(il,jk) = FOQSA( temp1 , temp2 )
+CLS          endif
+c***
+         HQSAT(il,JK) = HQSAT(il,JK) * ( 1. + TVIRTC * HQSAT(il,JK) ) 
+         HSQ(il,JK) = HELDR * HLDCP * HQSAT(il,JK) / ( TM(il,JK) ** 2)
+         HU(il,JK) = AMAX1( QM(il,JK) , HQP1(il,JK) ) / HQSAT(il,JK) 
+         HU(il,JK) = AMIN1( HU(il,JK) , 1. ) 
+         HU(il,JK) = AMAX1( HU(il,JK) , 0. ) 
+CLS         HUQSM1(il,JK) = HU(il,JK) * HQSAT(il,JK) 
+CLS         MOISTN(il,JK) = ( 1. - HU(il,JK) ) ** PMOIST 
+CLS         HDTCU1(il,JK) = 0. 
+19    CONTINUE
+
+C-----------------------------------------------------------------------
+C 
+C
+C-----------------------------------------------------------------------
+C 
+C           HERE BEGINS THE CALCULATION OF STRATIFORM CONDENSATION
+C 
+C-----------------------------------------------------------------------
+      IF (ISTCOND.EQ.3) THEN
+C
+C
+         IF (ICONVEC.EQ.3.OR.ICONVEC.EQ.11) THEN
+C           TRANSVIDAGE DE ILAB DANS CUMASK
+            DO JK=1,NLEV
+               DO IL=1,NI
+                  CUMASK (IL,JK)                     = 1
+                  IF(ILAB(IL,JK).EQ.2) CUMASK(IL,JK) = 0
+               END DO
+            END DO
+         ENDIF
+C
+C
+C  11)      MODIFICATION OF BASIC THRESHOLD RELATIVE HUMIDITY, HU00 
+C           ------------------------------------------------------------
+C 
+      DUOORL = 0. 
+      IF (HFIS. GT.0.) DUOORL = 0.1 
+C-----------------------------------------------------------------------
+C           BEGIN OF MAIN VERTICAL LOOP 
+C           ------------------------------------------------------------
+      do 210 il = 1, ni
+         DONESC(il) = -1.
+         COVBAR(il) =  0.
+         XKCOVB(il) = -1.
+210   continue
+C 
+      DO 1670 JK = 1, NLEV
+         do 230 il = 1, ni
+C-----------------------------------------------------------------------
+C 
+C 
+C 
+            XDIFSC(il) = -1.
+C 
+C  12)      GENERAL REQUIREMENT FOR CONDENSATION, REQCON = 1 OR 0 
+C           ------------------------------------------------------------
+            REQCON(il) = CUMASK(il,JK) 
+            DUSTAB(il) = 0. 
+            SUPSAT(il) = 0. 
+c!!!      SUPCU0 = 0. 
+            HUZ00(il) = HU00 - DUOORL * HFOORL(il,JK)
+230      continue
+C-----------------------------------------------------------------------
+C  13)      SETTING OF SPECIFIC HU00 AND REQCON 
+C           SET REQCON = 0. IN WELL MIXED BOUNDARY LAYER OR INCREASE U0 
+C           WITH STABILITY IN THE LOWEST LAYERS, I.E., (JK.GE.JMIXTK) 
+C           ------------------------------------------------------------
+C
+        if( jk .ge. nlev-7 ) then
+C
+C           LET HU00 INCREASE LINEARLY WITH P FOR P/PS .GT. 0.85
+C           ------------------------------------------------------------
+      do 245 il = 1, ni
+         if ( REQCON(il).EQ.1. .AND. HPK(il,JK)/HPS(il).GT.0.85 ) then
+            HUZ00(il) = HUZ00(il) + ( U00MAX - HUZ00(il) )
+     &       * ( 1. - 6.66 * ( 1. - HPK(il,JK) / HPk(il,nlev) ) )
+         endif
+245   continue
+C
+        endif
+C 
+c      IF ( JK .LT. KSCTOP ) GO TO 1310
+cc
+c      if ( KSCFLD .GT. 0 .AND. JK .GT. KSCFLD ) then
+c         do 240 il = 1, ni
+c            if ( SUPSAT(il) .EQ. 0. ) then
+c               REQCON(il) = 0.
+c            endif
+c240      continue
+c      endif
+cc***
+cC 
+cC           LET HU00 INCREASE WITH STABILITY
+cC           ------------------------------------------------------------
+c      IF ( JK .LT. NLEVM1 ) GO TO 1310
+cc
+c      do 250 il = 1, ni
+c         logic = REQCON(il) .ne. 0.
+cc***
+c         if ( logic .and. JK .EQ. NLEV ) then
+c            xtp = TSS(il)
+c            xsp = 1.
+c         else
+c            xtp = TM(il,jk+1)
+cc***
+cc   Cette ligne est remplacee le 27 Juin (Wei Yu)
+cc            xsp = s(jk+1)
+c            xsp = s(il,jk+1)     !sigma local
+cc***
+c         endif
+c
+c         if ( logic ) then
+c            X = U00MAX - HUZ00(il)
+c            DUSTAB(il) = X * (1.85-0.019*(TM(il,JK)-277.)-1.67E-2
+cc***
+cc   Cette ligne est remplacee le 27 Juin (wei Yu)
+cc
+cc     &                  *(XTP-TM(il,JK-1)) / (XSP-S(JK-1)))
+c     &                  *(XTP-TM(il,JK-1)) / (XSP-S(il,JK-1)))
+cc***
+c            DUSTAB(il) = AMAX1( DUSTAB(il), 0. ) 
+c         endif
+c250   continue
+c1310  CONTINUE
+c
+c      do 260 il = 1, ni
+c         HUZ00(il) = AMIN1( (HUZ00(il) + DUSTAB(il)), U00MAX )
+c260   continue
+C 
+C 
+C           LET U00 INCREASE FOR T.LT.238K
+C           ------------------------------------------------------------
+      do 270 il = 1, ni
+         if ( TM(il,JK) .lt. 238. ) then
+            X = 1.+ 0.15 * ( 238. - TM(il,JK) )
+            DU238 = ( U00MAX - HUZ00(il) ) * ( 1. - 1. / X )
+            HUZ00(il) = AMIN1( (HUZ00(il)+DU238), U00MAX )
+         endif
+270   continue
+C-----------------------------------------------------------------------
+C           IF U.LT.U0,SET REQCON = 0 
+C           ------------------------------------------------------------
+      do 280 il = 1, ni
+         if ( HU(il,JK).LE.HUZ00(il) .AND. SUPSAT(il).EQ.0. ) then
+            REQCON(il) = 0.
+         endif
+280   continue
+C 
+C-----------------------------------------------------------------------
+C           CONDENSATION CALCULATIONS 
+C-----------------------------------------------------------------------
+C  14)      CLOUD COVER AND EVAPORATION OF PRECIPITATION
+C           ------------------------------------------------------------
+      do 290 il = 1, ni
+         ZSTCOV(il,JK) = ( 1. - SQRT( ( 1.-HU(il,JK) ) 
+     &                    / ( 1.-HUZ00(il) ) ) ) * REQCON(il)
+         ZSTCOV(il,JK) = AMAX1( ZSTCOV(il,JK), 0. ) 
+290   continue
+C 
+c      IF ( KSCTOP .GT. NLEV .OR. JK .LT. KSCTOP ) GO TO 1412 
+cc
+c      do 300 il = 1, ni
+cC 
+cC           MODIFICATION OF SC COVER DUE TO ENTRAINMENT 
+cC 
+c         if ( DONESC(il) .le. 0. .and. FSCFLD .GT. 0. 
+c     &         .AND. KSCFLD .EQ. JK .and. ZSTCOV(il,JK-1) .EQ. 0. ) then
+cc***
+c            ZSTCOV(il,JK) = ZSTCOV(il,JK) / ( 1.+ZSTCOV(il,JK)*FSCFLD )
+c            XDIFSC(il) = 1.
+c            DONESC(il) = 1.
+c         endif
+c300   continue
+c1412  CONTINUE
+C 
+*vdir nodep
+      do 310 il = 1, ni
+C
+         PRFLX(il,JK) =  PRFLX(il,JK)+PRCPST(il)-STSNOW(il)
+         SWFLX(il,JK) =  SWFLX(il,JK)+STSNOW(il)
+C
+         logic = PRCPST(il) .ne. 0. .and. SUPSAT(il) .ne. 1.
+c***
+         COVVAP(il) = 0.
+         if ( logic .and. jk .ne. 1 ) then
+            COVVAP(il) = ( (JK-2.) * COVVAP(il) + (JK-1.)
+     &                   * ZSTCOV(il,JK-1) ) / ( JK - 1. + 1.E-6 )
+         endif
+c***
+C 
+c         XCLEAR = 1. 
+c***
+         EVAPRI = 0.
+         if ( logic ) then
+c***
+            XRO  = HPK(il,JK) / ( HRD * TM(il,JK) ) 
+            XROV = XRO * HVTERM 
+            XMIND = AMIN1( (DPK(il,JK) / (HG*XROV) ), ICLDDT2dt ) 
+            XEVAP = 0.5*STPEVP * ( 1.-HUZ00(il)*REQCON(il)-HU(il,JK)
+     &             *(1.-REQCON(il))) * XMIND * XROV
+c***
+            XCLEAR = ( 1. - ZSTCOV(il,JK) ) * COVVAP(il)
+            XEVAP = XEVAP * XCLEAR
+            XPSQ = SQRT( PRCPST(il) ) - XEVAP 
+            XP = AMAX1( XPSQ, 0. )
+            xp = xp * xp
+c***
+            EVAPRI = PRCPST(il) - XP
+C     HEVAPR(JK) = EVAPRI/(ICLDDT*TWODT*XRO)
+            HEVAPR(il,JK) = EVAPRI / ( XMIND * XROV )
+         endif
+c***
+         PRCPST(il) = PRCPST(il) - EVAPRI
+         STSNOW(il) = AMAX1( 0., (STSNOW(il)-EVAPRI) ) 
+310   continue
+C 
+c      IF ( KSCTOP .GT. NLEV .OR. JK .LT. KSCTOP ) GO TO 1430 
+cc
+c      do 320 il = 1, ni
+cC 
+cC           EVAPORATION OF CLOUDWATER COMING UP FROM INVERSION CLOUD
+cC           DUE TO ENTRAINMENT
+cC 
+c         if ( DONESC(il) .le. 0. .and. FSCFLD .GT. 0. 
+c     &         .AND. JK .EQ. KSCFLD-1 .AND. ZSTCOV(il,JK) .EQ. 0. ) then
+c
+c            XCEVSC = 0.5 * ICLDDT2dt * FSCFKZ * DPK(il,JK+1) 
+c     &              / DPK(il,JK)
+c            XSCEV(il) = ( CWM(il,JK+1) * (1.-XCEVSC) + ICLDDT2dt 
+c     &                  * HDCWAD(il,JK+1) ) / (1.+XCEVSC)
+c
+c            XSCEV(il) = XCEVSC * ( XSCEV(il)+CWM(il,JK+1) ) 
+c     &                 * rICLDDT2dt
+cc      XSCEV1 = XSCEV
+c            HEVAC(il,JK) = HEVAC(il,JK) + XSCEV(il)
+c            XSCEV(il) = XSCEV(il) * DPK(il,JK) / DPK(il,JK+1)
+c         endif
+c
+c320   continue
+c1430  CONTINUE
+C 
+C-----------------------------------------------------------------------
+C 
+C  15)      ACCESSION OF VAPOUR, AND FINAL SETTING OF HEATING/COOLING 
+C           ------------------------------------------------------------
+C 
+      do 330 il = 1, ni
+         if ( REQCON(il) .ne. 0. ) then
+
+            HLDCP = HCPI * ELOFT(il,JK)
+            XACCES = HDQAD(il,JK) - HU(il,JK) * HSQ(il,JK) 
+     &              * HDTAD(il,JK) / HLDCP + QM(il,JK) * DLNPDT(il,JK)
+C-----------------------------------------------------------------------
+C           CALCULATION OF HEATING RATE COMPOSED OF RELEASE OF LATENT 
+C           HEAT AND COOLING DUE TO EVAPORATION OF PRECIPITATION
+C           ------------------------------------------------------------
+            XN = 2. * ( 1.-HUZ00(il) ) * ( 1.-ZSTCOV(il,JK)+1.E-3 )
+            XNPM = XN + CWM(il,JK) / ( ZSTCOV(il,JK) * HQSAT(il,JK)
+     &                                  + 1.E-6 )
+            XBNPM = XNPM - XN + ZSTCOV(il,JK) * XN 
+            STHEAT(il,JK) = (XBNPM * XACCES - XN *HEVAPR(il,JK)) / 
+     &                           ((1. + HU(il,JK) * HSQ(il,JK)) * XNPM)
+         endif
+C 
+         if ( SUPSAT(il) .EQ. 0. .and.
+     &        (STHEAT(il,JK) + CWM(il,JK)*rICLDDT2dt+ HDCWAD(il,JK)) 
+     &         .LT. 0. ) then
+            REQCON(il) = 0.
+         endif
+330   continue
+C-----------------------------------------------------------------------
+C           FINAL SETTING OF HEATING/COOLING AND CLOUD COVER
+C           ------------------------------------------------------------
+      do 340 il = 1, ni
+         STHEAT(il,JK) = STHEAT(il,JK) * REQCON(il) - 
+     &               (1.-REQCON(il)) * (HEVAC(il,JK) + HEVAPR(il,JK))
+         ZSTCOV(il,JK) = ZSTCOV(il,JK) * REQCON(il)
+340   continue
+C 
+C 
+C           CHECK IF SUPER SATURATION MAY RESULT AND IF SO, ADJUST
+C 
+*vdir nodep
+      do 350 il = 1, ni
+c***
+         QPREL = 0.                               !pour la vectorisation
+         QSPREL = 0.                              !pour la vectorisation
+c***
+         if ( CUMASK(il,JK) .EQ. 1. ) then
+            HLDCP = HCPI * ELOFT(il,JK)
+c
+            QPREL = QM(il,JK) + TWODT * ( HDQAD(il,JK)-STHEAT(il,JK) )
+            TPREL = TM(il,JK) + TWODT * ( HDTAD(il,JK) + STHEAT(il,JK)
+     &                                                         * HLDCP )
+            QSPREL = HQSAT(il,JK) + HSQ(il,JK) * ( TPREL - TM(il,JK) )
+     &              / HLDCP - QM(il,JK) * DLNPDT(il,JK) * TWODT
+            QSPREL = AMAX1( QSPREL, 0.0 )
+         endif
+
+c***
+         QINCR = 0.                               !pour la vectorisation
+c***
+         if ( CUMASK(il,JK) .EQ. 1. .and. QPREL .GT. QSPREL ) then
+            QINCR = ( QPREL - QSPREL ) / ( TWODT * ( 1. + HSQ(il,JK) ) )
+            STHEAT(il,JK) = STHEAT(il,JK) + CUMASK(il,JK) * QINCR
+         endif
+C 
+         if ( CUMASK(il,JK) .EQ. 1. .and. QPREL .GT. QSPREL 
+     &        .and. STHEAT(il,JK) .GT. 0. ) then
+            REQCON(il) = 1.
+            CWM(il,JK) = AMAX1( CWM(il,JK) - QINCR, 0. )
+            ZSTCOV(il,JK) = 1.
+         endif
+350   continue
+C 
+      do 360 il = 1, ni
+         if ( REQCON(il) .EQ. 0. 
+     &          .AND. CWP(il,JK) * CUMASK(il,JK) .GT. 0. ) then
+c
+            STHEAT(il,JK) = STHEAT(il,JK) - CWP(il,JK) * rTWODT
+            HDCWST(il,JK) = - CWP(il,JK) * rTWODT 
+         endif
+360   continue
+C-----------------------------------------------------------------------
+C 
+C  16)      PREDICTION OF CLOUD WATER CONTENT, CW, BY AN IMPLICIT SCHEME
+C           REQUIRING AN ITERATIVE PROCEDURE. 
+C           NEWTON - RAPHSON ITERATIVE METHOD IS USED 
+C           ------------------------------------------------------------
+      do 370 il = 1, ni
+         logic3 = REQCON(il) .ne. 0.
+C 
+C           CALCULATE FACTORS FOR COALESCENCE HFCOX, FREEZING HFREZX, 
+C           REDUCTION OF HMRST AT LOW TEMPS, HFMRX
+C           ------------------------------------------------------------
+         if ( logic3 ) then
+            IPRTCO(il,JK) = 3
+            XKCOVB(il) = XKCOVB(il) + 1.
+            COVBAR(il) = ( XKCOVB(il) * COVBAR(il) + ZSTCOV(il,JK) ) 
+     &         / ( XKCOVB(il) + 1. ) 
+         endif
+C 
+c***
+C 
+C           MODIFIED PROBABILITY OF ICE RESULTING FROM ICE IN PRECIP
+C           COMING FROM ABOVE 
+C***
+         if ( logic3 .and. TM(il,JK) .LE. HT273 ) then
+            temp1 = TM(il,JK)
+            XDE = TABDE(temp1)
+            XPRB = TABICE(temp1)
+c            XPRB = max(((apri*(work(il,jk)-1.0))+1.0),0.0)
+            xft = FMROFT(temp1)
+         else
+            XDE = 0.
+            XPRB = 0.
+            xft = 1.
+         endif
+C 
+         if ( logic3 ) then
+            PRBMOD(il) = XPRB + (1.-XPRB) * STSNOW(il) 
+     &                  / ( PRCPST(il)+1.E-7 ) 
+            BFMOD = PRBMOD(il) * (1.-XPRB) * XDE
+C 
+            STSNOW(il) = AMAX1( 0., STSNOW(il) )
+            HFCOX = 1. + COALES * SQRT( PRCPST(il) + ACCK(il,JK) 
+     &                                 * rICLDDTdt )
+C 
+            XFT = AMAX1( XFT, 3.E-2 )
+
+            HFREZX = 1. + CBFEFF * BFMOD
+            HFREZX = HFREZX * ( 1. + CFREEZ * (1.-XFT) / XFT )
+C 
+            XFRCOA(il) = HFCOX * HFREZX 
+            HFMRX(il) = HMRST * XFT / HFCOX 
+         endif
+C 
+C 
+C-----------------------------------------------------------------------
+C           SPECIAL TREATMENT FOR T.LT.236K 
+C           ------------------------------- 
+            if ( logic3 .and. TM(il,JK) .LT. 236. 
+     &                                .AND. TM(il,JK) .GT. 232. ) then
+               XFRCOA(il) = 0.25 * ( XFRCOA(il) * ( TM(il,JK) - 232. )
+     &                              + 5. * ( 236. - TM(il,JK) ) )
+            endif
+c***
+         if ( logic3 .and. TM(il,JK) .LE. 232. ) then
+            XFRCOA(il) = 5.
+         endif
+C-----------------------------------------------------------------------
+C           CALCULATE THE FIXED PART OF EQU AND NORMALIZE BY B * MR 
+C           ------------------------------------------------------------
+         if ( logic3 .and. XDIFSC(il).GT.0. ) then
+            XSCDIF = XSCEV(il)
+         else
+            XSCDIF = 0.
+         endif
+C 
+         if ( logic3 ) then
+            XFIX(il) = ((cwp(il,jk)+CWM(il,JK)) +
+     &                  ICLDDT2dt * ( HDCWAD(il,JK)
+     &                             - XSCDIF + STHEAT(il,JK) ) )
+     &                / ( 2. * ( ZSTCOV(il,JK)+1.E-2 ) * HFMRX(il) )
+C 
+C           THE CONVERSION RATE TIMES 2*DT
+C 
+            XCST(il) = 0.5 * HCST * XFRCOA(il) * ICLDDT2dt
+C 
+C           FIRST GUESS IS THE NORMALIZED M(T-DT) 
+C 
+            YM(il) = 0.5*(cwm(il,JK)+cwp(il,JK)) /
+     &               ( ( ZSTCOV(il,JK)+1.E-2 ) * HFMRX(il) )
+C 
+C           TO MAKE M(T+DT)GE.0, THE FINAL SOLUTION 
+C           OF YM HAS TO BE YM.GE.M(T-DT)/(2.*B*MR) 
+C 
+            YMMIN(il) = 0.5 * YM(il)
+         endif
+370   continue
+C 
+C           NEWTON - RAPHSON LOOP 
+C           ------------------------------------------------------------
+      DO 1630 JNR = 1,2 
+      do 1630 il = 1, ni
+         if ( REQCON(il) .ne. 0. ) then
+            YMN = AMIN1( YM(il), 5. )
+            XXP = EXP( -YMN * YMN ) 
+            XHJ = 1.+ XCST(il) * ( 1. - XXP )
+            XF = YM(il) * XHJ - XFIX(il)
+            XFPRIM = XHJ + 2. * XCST(il) * YM(il) * YM(il) * XXP
+            YM(il) = AMAX1( (YM(il)-XF/XFPRIM), YMMIN(il) )
+         endif
+c***
+c                ca se converge au bout de 5 iterations
+c      XERMAX = ABS(XF)
+c      IF (XERMAX.LT.1.E-5) GO TO 1635 
+c***
+1630  CONTINUE
+c1635 CONTINUE
+c***
+      do 380 il = 1, ni
+         logic3 = REQCON(il) .ne. 0.
+c
+         if ( logic3 ) then
+            XCWP1 = 2. * YM(il) * ( ZSTCOV(il,JK)+1.E-2 ) * HFMRX(il)
+     &             - CWp(il,JK)
+            XCWP1 = AMAX1( XCWP1, 0. ) 
+            HDCWST(il,JK) = ( XCWP1 - CWM(il,JK) ) * rICLDDT2dt 
+     &                                                   - HDCWAD(il,JK)
+         endif
+C 
+         if ( logic3 .and. ABS( HDCWST(il,JK)) .LT. 1.E-16 ) then
+            HDCWST(il,JK) = 0.
+         endif
+C 
+C           RATE OF PRECIPITATION 
+C           ------------------------------------------------------------
+C 
+         if ( logic3 ) then
+C      
+            XPRADD = DPK(il,JK) * rHG 
+     &                 * AMAX1( (STHEAT(il,JK)-HDCWST(il,JK)), 0. )
+            PRCPST(il) = PRCPST(il) + XPRADD 
+            STSNOW(il) = AMIN1( (STSNOW(il) + PRBMOD(il) * XPRADD),
+     &                          PRCPST(il) )
+         endif
+c***
+         if ( logic3 .and. PRCPST(il) .EQ. 0. ) then
+            COVBAR(il) = 0.
+         endif
+380   continue
+C 
+C           ADJUST THE HEATING FOR THE THETA EQU AND UPDATE 
+C           THE MOISTURE TENDENCY 
+C           ------------------------------------------------------------
+ 1660 CONTINUE
+C 
+      do 390 il = 1, ni
+         HLDCP = HCPI * ELOFT(il,JK)
+         HDTST(il,JK) = STHEAT(il,JK) * HLDCP
+         HDQST(il,JK) = -STHEAT(il,JK) 
+390   continue
+C 
+C           CALCULATE POSSIBLE MELTING
+C 
+c      DTMELT = 0. 
+      do 400 il = 1, ni
+
+         if ( TM(il,JK) .GT. HT273 .AND. STSNOW(il) .GT. 0. ) then
+            XRO = HPK(il,JK) / ( HRD * TM(il,JK) )
+            XROV = XRO * HVSNOW 
+            XMIND = AMIN1( (DPK(il,JK) / (HG*XROV) ), ICLDDT2dt ) 
+            DMELT = 0.5 * HKMELT * ( TM(il,JK)-HT273 ) * XMIND * XROV
+            SQMELT = SQRT( STSNOW(il) ) - DMELT
+            XMELT = AMAX1( SQMELT, 0. )
+            xmelt = xmelt * xmelt
+            DSNOW = STSNOW(il) - XMELT
+            STSNOW(il) = XMELT
+            DMELT = DSNOW / ( ICLDDT2dt * XRO )
+            DTMELT = HDLDCP*DMELT
+         else
+            DTMELT = 0.
+         endif
+
+         HDTST(il,JK) = HDTST(il,JK) - DTMELT
+400   continue
+C 
+C           ACCUMULATE EVAPORATED STRATIFORM PRECIPITATION AND
+C           CLOUD WATER FOR TABLE OUTPUT
+C           ------------------------------------------------------------
+      do 410 il = 1, ni
+         HEVRST(il) = HEVRST(il) + HEVAPR(il,JK) * DPK(il,JK) * rHG 
+         HEVCST(il) = HEVCST(il) + HEVAC(il,JK) * DPK(il,JK) * rHG 
+410   continue
+C 
+1670  CONTINUE
+C 
+C           END OF MAIN VERTICAL LOOP 
+C-----------------------------------------------------------------------
+C 
+C  17)      ACCUMULATE STRATIFORM PRECIPITATION.
+C           ------------------------------------------------------------
+C           ------------------------------------------------------------
+C 
+C           RETURN CALCULATED TENDENCIES TO THE MAIN ARRAYS, INCLUDING
+C           ADJUSTMENT OF THE HEATING FOR THE THETA EQU.
+C           ------------------------------------------------------------
+C 
+C 
+      do 420 il = 1, ni
+*******************************
+* small precip rates --> 0.0  *
+*******************************
+        if(prcpst(il) .lt. 1.0E-05) then
+          zsrr(il) = 0.0
+          zssr(il) = 0.0
+        else
+          ZSRR(IL) = PRCPST(il) - STSNOW(il)
+          ZSSR(IL) = STSNOW(il)
+        endif
+
+420   continue
+
+      DO 4000 JK = 1, NLEV
+      do 4000 il = 1, ni
+         TM    (il,JK) = HDTST (il,JK)
+         QM    (il,JK) = HDQST (il,JK)
+         CWM   (il,JK) = HDCWST(il,JK)
+ 4000 CONTINUE
+C 
+C-----------------------------------------------------------------------
+C           END OF CONSTANT J-LINE LOOP 
+C
+      ENDIF
+C
+C
+C           HERE ENDS THE CALCULATION OF STRATIFORM CONDENSATION
+C***********************************************************************
+C
+      RETURN
+      CONTAINS
+#include "fmroft.cdk"
+      END 
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d22 1
+a22 1
+      Integer ICONVEC, ISTCOND
+d40 5
+d291 1
+a291 1
+      real    tabice, tabde, dpksf, fmroft, tetae
+d349 1
+a349 1
+      AUTOMATIC ( HPLOGK  , REAL    , (NI,NLEV) )
+d429 1
+a437 3
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+d483 1
+a483 1
+      Z4(XT) = Z3(XT) / (1. + Z3(XT)) * CVMGT(1.,-1.,XT.GE.232.)
+d487 1
+a487 1
+      FMROFT(XT) = CVMGT( Z1(XT), Z5(XT), XT.GT.250. )
+d648 42
+a695 7
+         IF (ICONVEC.EQ.4) THEN
+            ZTE(il,JK) = 0.
+            ZQE(il,JK) = 0.
+            ZCUCOV(il,JK) = 0. 
+            ZCWE(il,JK) = 0.
+         ENDIF
+*
+d697 5
+a701 5
+         HTCMT(il,JK) = 0.
+         HTCMTb(il,JK) = 0.
+         HQCMQ(il,JK) = 0.
+         HQCMQb(il,JK) = 0.
+         HKSIZ(il,JK) = 0.
+d712 8
+a719 8
+         HPLOGK(il,JK) = ALOG(HPK(il,JK))
+         HPKAP(il,JK) = (HP0/HPK(il,JK)) ** HKAP 
+         if ( TM(il,jk) .le. ht273 ) then
+            temp1 = TM(il,jk)
+            eloft(il,jk) = hlv + hdl * tabice( temp1 )
+         else
+            eloft(il,jk) = hlv
+         endif
+d729 5
+a733 5
+          if ( SATUCO ) then
+             HQSAT(il,jk) = FOQST( temp1 , temp2 )
+          else
+             HQSAT(il,jk) = FOQSA( temp1 , temp2 )
+          endif
+d740 3
+a742 3
+         HUQSM1(il,JK) = HU(il,JK) * HQSAT(il,JK) 
+         MOISTN(il,JK) = ( 1. - HU(il,JK) ) ** PMOIST 
+         HDTCU1(il,JK) = 0. 
+a746 1169
+      IF (ICONVEC.EQ.4) THEN
+C
+C  1)       FIND LIFTING CONDENSATION LEVEL, LCL, HPB OF SURFACE AIR
+C           AND CORRESPONDING TEMPERATURE, TB, AND HUMIDITY, QB 
+C           CALCULATE THETAE OF HPB 
+C           *** NOTE THAT NO CONVECTION IS ASSUMED IF THE SFC (NLEV) AIR
+C               IS DRIER THAN 20% RH
+C           ------------------------------------------------------------
+      do 122 il = 1, ni
+         logic2(il) = .true.
+         savel(il) = .false.
+         ilhdpb(il) = 0.
+         ilkhb(il) = 1                                 !pour la securite
+         ilkht(il) = 1                                 !pour la securite
+         liftlv(il) = 1                                !pour la securite
+122   continue
+
+      do 22 jk = nlev, liftst, -1
+c***
+         do 2000 il = 1, ni
+            indflo(il) = 0
+            REQCON(il) = 0. 
+            indcon(il) = 1
+2000     continue
+c***
+         do 20 il = 1, ni
+            khb(il) = nlev + 1
+            kht(il) = nlev + 2
+c***
+            if ( HU(il,jk) .ge. 0.20 ) then
+               indlift(il) = 1                 !convection eventuelle
+            else
+               indlift(il) = 0                    !pas de convection
+            endif
+c***
+C 
+            HRTDEL = HRTDE / ELOFT(il,jk)
+            HELDCP = HEPS * HCPI * ELOFT(il,jk)
+C 
+            QGTO = AMAX1( HUQSM1(il,jk), 1.E-5 ) 
+            X = HT273 / ( 1. + HRTDEL * ALOG( HEPSE0 / ( HPK(il,jk) 
+     &                                                 * QGTO ) ) )
+C 
+            HTD = AMIN1( X, TM(il,jk) ) 
+C 
+            X = HTD - 0.1875 * ( TM(il,jk) - HTD ) 
+C 
+            Y = TM(il,jk) * EXP( HELDCP * ( 1./HTD - 1./X ) )
+C 
+            HTB(il) = X - ( X - Y ) / ( 1. - HELDCP * Y / X / X ) 
+            HTB(il) = AMAX1( HTB(il), 1. ) 
+C 
+            HPB(il) = HPK(il,jk) * ( HTB(il) / TM(il,jk) ) ** HKPI
+C 
+            HQB(il) = QGTO
+            X = HPKAP(il,jk) * TM(il,jk) / HTB(il)
+C 
+            temp1 = HTB(il)
+            temp2 = HQB(il)
+ccccccccccc
+ccccccccccc     variable HLDCP was not calculated here
+ccccccccccc     although used in function TETAE
+ccccccccccc
+            HLDCP = HCPI * ELOFT(il,jk)
+            HTETAE(il) = TETAE( X, temp1, temp2 ) 
+C***
+C                  CALCULATE TC AND QC AT LIFTLV FROM HTETAE 
+C           ------------------------------------------------------------
+            temp1 = HPK(il,jk)
+            temp2 = HPB(il)
+            X = DPKSF( temp1 , temp2 )
+C 
+            Y = X * HTB(il) * ( HKAP + 9.5 * ( 3.E-3*X + HQB(il) ) )
+     &         / ( 1. + 169. * ( 3.E-3 * X + HQB(il) ) )
+C 
+            HTC(il,jk) = HTB(il) + Y 
+c***
+            temp1 = HTC(il,jk)
+            temp2 = HPK(il,jk)
+            IF ( SATUCO ) THEN
+               HQC(il,jk) = FOQST( temp1 , temp2 )
+            ELSE
+               HQC(il,jk) = FOQSA( temp1 , temp2 )
+            ENDIF
+
+c***
+20       continue
+
+C*** 
+C           SET KCBTOP WITH REGARD TO THETAE-VALUE
+C***
+         if ( jk .eq. nlev ) then
+            do 119 il = 1, ni
+               logic1(il) = .true.
+119         continue
+c***
+            do 120 icount = 1, nlev   !compteur
+            do 120 il = 1, ni
+               if ( HTETAE(il) .GT. TVBEG*HPKAP(il,KCBTOP(il))
+     &                                           .and. logic1(il) ) then
+                  logic1(il) = .false.
+               else if ( HTETAE(il) .le. TVBEG*HPKAP(il,KCBTOP(il))
+     &                                           .and. logic1(il) ) then
+                  kcbtop(il) = kcbtop(il) + 1
+               endif
+120         continue
+         endif
+
+c***
+c                    On cherche kcbtopmin
+c***
+         kcbtopmin = nlev
+         do 121 il = 1, ni
+            if ( indlift(il).eq.1 ) then
+               kcbtopmin = min0 ( kcbtopmin, kcbtop(il) )
+            endif
+121      continue
+
+C 
+C  2)       SETTING OF FIRST MODEL, KHB, LEVEL ABOVE LCL
+C           IF(HPB.GE.HPK(LIFTLV) KHB = LIFTLV
+C           CALCULATE TC(K) AND QC(K) ALONG THETAE = CONSTANT 
+C           ------------------------------------------------------------
+         do 2222 il = 1, ni
+            if ( HPB(il) .GE. HPK(il,jk) ) then
+               khb(il) = jk
+            endif
+2222     continue
+c***
+         do 222 icount = jk-1, kcbtopmin, -1
+         do 222 il = 1, ni
+C 
+            HELDR = HEDR * ELOFT(il,icount)
+            HLDCP = HCPI * ELOFT(il,icount)
+C 
+c***
+            IF ( HPK(il,icount) .LE. HPB(il) 
+     &                      .AND. HPK(il,icount+1) .GT. HPB(il) )THEN
+               temp1 = HPK(il,icount)
+               temp2 = HPB(il)
+               XD = DPKSF( temp1, temp2 )
+               X = HTB(il)
+               KHB(il) = icount
+            ELSE
+               temp1 = HPK(il,icount)
+               temp2 = HPK(il,icount+1)
+               XD = DPKSF( temp1, temp2 )
+               X = HTC(il,icount+1)
+            ENDIF
+c***
+C 
+            Y = X * XD * ( HKAP + 9.5 * HQC(il,icount+1) ) 
+     &         / ( 1. + 169. * HQC(il,icount+1) ) 
+            XC = X + Y
+C
+c***
+            temp1 = HPK(il,icount)
+            if ( SATUCO ) then
+               yc = FOQST( XC, temp1 )
+            else
+               yc = FOQSA( XC, temp1 )
+            endif
+c***
+C
+            temp1 = HPKAP(il,icount)
+            YE = TETAE( temp1, XC, YC ) 
+C 
+            HTC(il,icount) = XC - ( YE - HTETAE(il) ) / ( YE 
+     &           * ( 1. + HLDCP * YC / XC * ( HELDR / XC - 1. ) ) ) * XC
+C 
+c***
+            temp1 = HTC(il,icount)
+            temp2 = HPK(il,icount)
+            if ( SATUCO ) then
+               hqc(il,icount) = FOQST( temp1, temp2 )
+            else
+               hqc(il,icount) = FOQSA( temp1, temp2 )
+            endif
+c***
+C
+222      continue
+C 
+C           DELTA-P AROUND JK = KHB 
+C 
+         do 223 il = 1, ni
+c***
+            ktmp = khb(il)
+c***
+            if ( ktmp .gt. nlev .or. ktmp .lt. kcbtop(il)+2 ) then
+               indcon(il) = 0                      !pas de convection
+c            endif
+c***
+            else if ( ktmp .EQ. 1 ) then
+               hdpb(il) = HPB(il) - HPK(il,ktmp)
+            else
+               hdpb(il) = 0.5 * ( HPK(il,ktmp) - HPK(il,ktmp-1) )
+     &                           + ( HPB(il) - HPK(il,ktmp) )
+            endif
+223      continue
+C-----------------------------------------------------------------------
+C 
+C  3)       CALCULATE (TC-T) AND (TC-T)-MAX AND (QC-Q). SET 
+C           TOP LEVEL, KT, AND LEVEL OF 
+C           (TC-T)-MAX, KTMAX 
+C           ------------------------------------------------------------
+         DO 23 icount = jk, KCBTOPmin, -1
+*vdir noloopchg
+         do 23 il = 1, ni
+            if ( indlift(il).eq.1 .and. indcon(il).eq.1 
+     &                               .and. icount.ge.kcbtop(il) ) then
+               HTCMT(il,icount) = HTC(il,icount) * ( 1. + TVIRTC 
+     &                           * HQC(il,icount) ) - TM(il,icount)
+     &                           * ( 1. + TVIRTC * HUQSM1(il,icount) )
+               HQCMQ(il,icount) = AMAX1( HQC(il,icount)
+     &                                  -HUQSM1(il,icount), 0. )
+            endif
+23       CONTINUE
+C-----------------------------------------------------------------------
+         khbmax = liftst
+         khbmin = nlev
+         do 21 il = 1, ni
+            if ( indlift(il).eq.1 .and. indcon(il).eq.1 ) then
+               khbmax = max0 ( khb(il), khbmax )
+               khbmin = min0 ( khb(il), khbmin )
+            endif
+21       continue
+c***
+C                        FIND THE LFC
+         SHCUM = 0.
+c****
+c****
+         do 24 il = 1, ni
+            tempar(il) = 0.
+            TEMPAD(il) = 0.
+            KHFREE(il) = 3       !pour la securite
+            logic1(il) = .true.
+24       continue
+
+         do 25 icount = khbmax, kcbtopmin+2, -1
+         do 25 il = 1, ni
+           IF ( indlift(il).eq.1 .and. indcon(il).eq.1 ) then
+            if ( icount .EQ. NLEV ) then
+               TEMPAD1 = HTCMT(il,icount) * ALOG( ( HPS(il) 
+     &                                                + HPK(il,icount) )
+     &                         / ( HPK(il,icount) + HPK(il,icount-1) ) )
+            else
+               TEMPAD1 = HTCMT(il,icount) * ALOG( ( HPK(il,icount+1)
+     &                                                + HPK(il,icount) )
+     &                         / ( HPK(il,icount) + HPK(il,icount-1) ) )
+            endif
+c***
+            if ( icount.le.khb(il) .and. icount.ge.kcbtop(il)+2
+     &                                           .and. logic1(il) ) then
+               TEMPAD(il) = TEMPAD1
+               TEMPAR(il) = TEMPAR(il) + AMIN1( TEMPAD(il), 0. )
+            endif
+c***
+            if ( logic1(il) .and. htcmt(il,icount) .le. 0. ) then
+               indflo(il) = 0                      !pas de convection
+            else
+               indflo(il) = 1
+            endif
+
+            if ( logic1(il) .and. indflo(il) .eq. 1 ) then
+               KHFREE(il) = icount
+               logic1(il) = .false.
+            endif
+          ENDIF
+25       continue
+C 
+*vdir nodep
+         do 26 il = 1, ni
+            ktmp = KHFREE(il)
+c***
+            TEMPA2 = HTCMT(il,ktmp-1) 
+     &              * ALOG( ( HPK(il,ktmp) + HPK(il,ktmp-1) )
+     &                     / ( HPK(il,ktmp-1) + HPK(il,ktmp-2) ) )
+            logic = TEMPAR(il).LT.-5.6E-2
+     &             .or. TEMPAR(il)+TEMPAD(il)+TEMPA2 .LT. 0.
+     &             .or. HPK(il,khb(il))-HPK(il,ktmp) .GT. 10000.
+     &             .or. ktmp .eq. 3
+     &             .or. ( HTCMT(il,ktmp-2) .LT. 0. 
+     &                   .AND. HTCMT(il,ktmp-1) .LT. 0. 
+     &                   .AND.HTCMT(il,ktmp) .LT. 0. )
+     &             .or. ( (HTCMT(il,ktmp) .LT. 0.) .OR.
+     &                   (HTCMT(il,ktmp-2) .LT. 0.
+     &                    .AND. HTCMT(il,ktmp-1) .LT. 0.) )
+            if ( logic ) then
+               indflo(il) = 0
+            endif
+26       continue
+C 
+C  4)       DETERMINE TOP OF THE CONVECTION. IF THE RESULT IS KT.GE.KB, 
+C           THEN FURTHER CALCULATIONS ARE TERMINATED
+C           ------------------------------------------------------------
+         do 27 il = 1, ni
+            KHT(il) = NLEVP1
+            logic1(il) = .true.
+27       continue
+c***
+         if ( SHCUM .eq. 1. ) then
+            do 28 icount = jk-1, kcbtopmin, -1
+            do 28 il = 1, ni
+               logic = HPK(il,icount) .lt. HPB(il)
+     &                .and. icount .lt. KHFREE(il)-1
+     &                .and. icount .ge. kcbtop(il)
+               logic3 = icount .EQ. KHFREE(il)-2
+c***
+               if ( logic .and. logic3 .and. logic1(il) ) then
+                  kht(il) = icount
+                  logic1(il) = .false.
+               endif
+28          continue
+         else
+            do 29 icount = jk-1, kcbtopmin, -1
+            do 29 il = 1, ni
+               logic = HPK(il,icount) .lt. HPB(il)
+     &                .and. icount .lt. KHFREE(il)-1
+     &                .and. icount .ge. kcbtop(il)
+               logic3 = icount .le. KHFREE(il)-2 
+     &                 .and. HTCMT(il,icount) .LE. 0.
+     &                 .and. HTCMT(il,icount+1) .GT. 0.
+c***
+               if ( logic .and. logic3 .and. logic1(il) ) then
+                  kht(il) = icount+1
+                  logic1(il) = .false.
+               endif
+29          continue
+         endif              
+c***
+         khtmin = kht(1)
+         do 221 il = 2, ni
+            khtmin = min0 ( kht(il), khtmin )
+221      continue
+c***
+      do 333 il = 1, ni
+         KTCMTX(il) = 0
+         TCMTMX(il) = 1.E-6
+333   continue
+C 
+      DO 5512 icount = KHBmax, KHTmin, -1
+      do 5512 il = 1, ni
+         if ( indflo(il) .eq. 1 .and. icount .ge. kht(il) 
+     &        .and. icount .le. khb(il) 
+     &        .and. TCMTMX(il) .LT. HTCMT(il,icount) ) then
+            TCMTMX(il) = HTCMT(il,icount)
+            KTCMTX(il) = icount
+         endif
+ 5512 CONTINUE
+C-----------------------------------------------------------------------
+C 
+C  5)      CALCULATE ACCESSION OF VAPOUR, CQI, AND BASIC PROPORTIONALITY
+C          PARAMETER, KSI0.  IF CQI.LE.0  OR KSI0.LE.0, SET KT = KB
+C           ------------------------------------------------------------
+      do 440 il = 1, ni
+         CQI(il) = 0.
+         XSUMT(il) = 0.
+         XSUMQ(il) = 0.
+         XSUM(il) = 0. 
+c***
+         LQCONV(il) = 1
+440   continue
+C 
+      DO 6610 icount = KHTmin, KHBmax
+      do 6610 il = 1, ni
+         logic = indflo(il) .eq. 1 .and. icount .ge. kht(il) 
+     &           .and. icount .le. khb(il)
+c***
+         HLDCP = HCPI * ELOFT(il,icount)
+         XDU = MOISTN(il,icount)
+c***
+         XDPb = DPK(il,icount)
+         if ( logic .and. icount .eq. KHB(il) ) then
+            XDPb = HDPB(il)
+         endif
+c***
+         if ( icount .lt. KTCMTX(il) ) then
+            tmp1 = ABS( HTCMT(il,icount) / TCMTMX(il) )
+         else
+            tmp1 = 1.
+         endif
+         if ( logic ) then
+            HFDTMX(il,icount) = tmp1
+         endif
+c***
+         if ( logic .and. HDQAD(il,icount) .LT. 0. 
+     &                                      .AND. LQCONV(il).EQ.1 ) then
+            LQCONV(il) = icount * LQONOF + 1
+         endif
+c***
+         if ( logic .and. jk .ge. LQCONV(il) ) then
+            cqi(il) = CQI(il) + XDPb * HDQAD(il,icount)
+         endif
+c***
+         if ( logic ) then
+            XSUMT(il) = XSUMT(il) + XDPb * HFDTMX(il,icount)
+     &                             * HTCMT(il,icount) / HLDCP
+            XSUMQ(il) = XSUMQ(il) + XDPb * HFDTMX(il,icount)
+     &                             * HQCMQ(il,icount) * XDU
+         endif
+ 6610 CONTINUE
+
+      do 50 il = 1, ni
+         if ( indflo(il) .eq. 1 ) then
+            XSUM(il) = XSUMT(il) + XSUMQ(il)
+         endif
+50    continue
+C***
+C           ACCOUNT FOR POSSIBLE SUPER-SATURATION BENEATH THE CLOUD BASE
+C***
+      KHBP1 = KHBmin + 1 
+      if ( jk .eq. nlev ) then
+         do 6620 icount = KHBP1, nlev
+         do 6620 il = 1, ni
+            if ( indflo(il) .eq. 1 .and. khb(il) .lt. nlev
+     &           .and. icount .ge. khb(il)+1 ) then
+c***
+               XQMQS = AMAX1( ( HQP1(il,icount) - HQSAT(il,icount) ) 
+     &                    * rTWODT, 0. )
+               CQI(il) = CQI(il) + DPK(il,icount) * XQMQS 
+               ZQE(il,icount) = -XQMQS
+            endif
+6620     continue
+      endif
+C***
+C           CALCULATION OF KSI AND FINAL SETTING OF CQI, KHT AND KHB
+C***
+      do 660 il = 1, ni
+         HLDCP = HCPI * ELOFT(il,jk)
+c         logic = CQI(il) .GT. 0. .AND. XSUM(il) .GT.
+c     &           ( HPK(il,KHB(il)) - HPK(il,KHT(il)) + 0.5 *
+c     &           ( DPK(il,KHB(il)) + DPK(il,KHT(il)) ) ) * 0.3
+c     &           / HLDCP .and. indflo(il) .eq. 1
+c***
+         if ( indflo(il) .eq. 1 .and. kht(il) .lt. khb(il) ) then
+            logic = CQI(il) .GT. 0. .AND. XSUM(il) .GT.
+     &              ( HPK(il,KHB(il)) - HPK(il,KHT(il)) + 0.5 *
+     &              ( DPK(il,KHB(il)) + DPK(il,KHT(il)) ) ) *
+     &              0.3 / HLDCP
+         else
+            logic = .false.
+         endif
+c***
+         if ( logic ) then
+            xcu(il) = 1.
+         else
+            xcu(il) = 0.
+         endif
+         cqi(il) = cqi(il) * xcu(il)
+         hksi(il) = cqi(il) / amax1( xsum(il), 1.e-6 )
+c***
+         if ( hksi(il) .gt. 0. ) then
+            indcu(il) = 1
+         endif
+c***
+         if ( xcu(il) .eq. 0. ) then
+            indflo(il) = 0
+         endif
+c***
+         if ( (indcu(il) .eq. 1) .and. (indflo(il) .eq. 1) 
+     &        .and. (indlift(il) .eq. 1) .and. (indcon(il) .eq. 1)
+     &        .and. (kht(il) .lt. khb(il)) .and. logic2(il) ) then
+            ilkhb(il) = khb(il)
+            ilkht(il) = kht(il)
+            ilhdpb(il) = hdpb(il)
+            liftlv(il) = jk
+            logic2(il) = .false.
+            savel(il) = .true.
+         endif
+660    continue
+C           ------------------------------------------------------------
+c               on sauvegarde HTCMT et HQCMQ
+c***
+       DO 323 icount = jk, KCBTOPmin, -1
+*vdir noloopchg
+       do 323 il = 1, ni
+          if ( savel(il) ) then
+             HTCMTb(il,icount) = HTCMT(il,icount)
+             HQCMQb(il,icount) = HQCMQ(il,icount)
+          endif
+323    CONTINUE
+
+       do 423 il = 1, ni
+          savel(il) = .false.
+423    continue
+C-----------------------------------------------------------------------
+22    continue
+C           ------------------------------------------------------------
+c               on re-charge HTCMT et HQCMQ
+c***
+ccccccc
+ccccccc KCBTOPmin is incorrect for this loop 
+ccccccc
+       DO 523 icount = nlev, 3, -1
+*vdir noloopchg
+       do 523 il = 1, ni
+             HTCMT(il,icount) = HTCMTb(il,icount)
+             HQCMQ(il,icount) = HQCMQb(il,icount)
+523    CONTINUE
+c***
+c     On cherche le sommet le plus eleve et la base la plus basse
+c***
+      khbmax = 1
+      khbmin = nlev
+      khtmin = nlev
+      do 32 il = 1, ni
+         if ( indcu(il) .eq. 1 ) then
+            khbmin = min0 ( ilkhb(il), khbmin )
+            khbmax = max0 ( ilkhb(il), khbmax )
+            khtmin = min0 ( ilkht(il), khtmin )
+         endif
+32    continue
+C 
+      do 33 il = 1, ni
+         KTCMTX(il) = 0
+         TCMTMX(il) = 1.E-6
+33    continue
+C 
+      DO 512 JK = KHBmax, KHTmin, -1
+      do 512 il = 1, ni
+         if ( indcu(il) .eq. 1 .and. jk .ge. ilkht(il) 
+     &        .and. jk .le. ilkhb(il) 
+     &        .and. TCMTMX(il) .LT. HTCMT(il,JK) ) then
+            TCMTMX(il) = HTCMT(il,jk)
+            KTCMTX(il) = jk
+         endif
+  512 CONTINUE
+C-----------------------------------------------------------------------
+C 
+C  5)      CALCULATE ACCESSION OF VAPOUR, CQI, AND BASIC PROPORTIONALITY
+C          PARAMETER, KSI0.  IF CQI.LE.0  OR KSI0.LE.0, SET KT = KB
+C           ------------------------------------------------------------
+c***
+c               On re-initialise ZQE
+c***
+      do 4440 jk = 1, nlev
+      do 4440 il = 1, ni
+         ZQE(il,jk) = 0.
+4440  continue
+c***
+      do 40 il = 1, ni
+         CQI(il) = 0.
+         XSUMT(il) = 0.
+         XSUMQ(il) = 0.
+         XSUM(il) = 0. 
+c***
+         LQCONV(il) = 1
+40    continue
+C 
+      DO 610 JK = KHTmin, KHBmax
+      do 610 il = 1, ni
+         logic = indcu(il) .eq. 1 .and. jk .ge. ilkht(il) 
+     &           .and. jk .le. ilkhb(il)
+c***
+         HLDCP = HCPI * ELOFT(il,JK)
+         XDU = MOISTN(il,JK)
+c***
+         XDPb = DPK(il,JK)
+         if ( logic .and. JK .eq. ilKHB(il) ) then
+            XDPb = ilHDPB(il)
+         endif
+c***
+         if ( JK .lt. KTCMTX(il) ) then
+            tmp1 = ABS( HTCMT(il,JK) / TCMTMX(il) )
+         else
+            tmp1 = 1.
+         endif
+         if ( logic ) then
+            HFDTMX(il,JK) = tmp1
+         endif
+c***
+         if ( logic .and. HDQAD(il,JK).LT.0. .AND. LQCONV(il).EQ.1 )then
+            LQCONV(il) = JK * LQONOF + 1
+         endif
+c***
+         if ( logic .and. jk .ge. LQCONV(il) ) then
+            cqi(il) = CQI(il) + XDPb * HDQAD(il,JK)
+         endif
+c***
+         if ( logic ) then
+            XSUMT(il) = XSUMT(il) + XDPb * HFDTMX(il,JK)
+     &                             * HTCMT(il,JK) / HLDCP
+            XSUMQ(il) = XSUMQ(il) + XDPb * HFDTMX(il,JK)
+     &                             * HQCMQ(il,JK) * XDU
+         endif
+  610 CONTINUE
+
+      do 550 il = 1, ni
+         if ( indcu(il) .eq. 1 ) then
+            XSUM(il) = XSUMT(il) + XSUMQ(il)
+         endif
+550    continue
+C***
+C           ACCOUNT FOR POSSIBLE SUPER-SATURATION BENEATH THE CLOUD BASE
+C***
+      KHBP1 = KHBmin + 1 
+      do 620 jk = KHBP1, nlev
+      do 620 il = 1, ni
+         if ( indcu(il) .eq. 1 .and. liftlv(il) .eq. nlev
+     &        .and. jk .ge. ilkhb(il)+1 .and. ilkhb(il) .lt. nlev ) then
+c***
+            XQMQS = AMAX1( ( HQP1(il,JK) - HQSAT(il,JK) ) * rTWODT, 0. )
+            CQI(il) = CQI(il) + DPK(il,JK) * XQMQS 
+            ZQE(il,JK) = -XQMQS
+         endif
+620   continue
+C***
+C           CALCULATION OF KSI AND FINAL SETTING OF CQI, KHT AND KHB
+C***
+      do 60 il = 1, ni
+         HLDCP = HCPI * ELOFT(il,LIFTLV(il))
+         logic = CQI(il) .GT. 0. .AND. XSUM(il) .GT. ( HPK(il,ilKHB(il))
+     &                   - HPK(il,ilKHT(il)) + 0.5 * ( DPK(il,ilKHB(il))
+     &                             + DPK(il,ilKHT(il)) ) ) * 0.3 / HLDCP
+     &          .and. indcu(il) .eq. 1
+         if ( logic ) then
+            xcu(il) = 1.
+         else
+            xcu(il) = 0.
+         endif
+         cqi(il) = cqi(il) * xcu(il)
+         hksi(il) = cqi(il) / amax1( xsum(il), 1.e-6 )
+60    continue
+C-----------------------------------------------------------------------
+C 
+C  6)       CALCULATE KSI(K), HEATING AND MOISTENING FUNCTIONS AND CLOUD
+C           COVER.
+C           ------------------------------------------------------------
+C 
+      DO 710 JK = KHTmin, KHBmax
+*vdir noloopchg
+      do 710 il = 1, ni
+C 
+         logic = indcu(il) .eq. 1 .and. jk .ge. ilkht(il) 
+     &           .and. jk .le. ilkhb(il)
+c***
+         if ( logic ) then
+            HLDCP = HCPI*ELOFT(il,JK)
+C 
+            X = HKSI(il) * HFDTMX(il,JK) 
+            HKSIZ(il,JK) = X / ( 1. + ICLDDTDT * X )
+            ZTE(il,JK) = HKSIZ(il,JK) * HTCMT(il,JK) 
+            UKSIZ = MOISTN(il,JK) * HKSIZ(il,JK)
+            ZQE(il,JK) = UKSIZ * HQCMQ(il,JK) 
+            ZCWE(il,JK) = UKSIZ * CWM(il,JK)
+            ZCWE(il,JK) = AMAX1( ZCWE(il,JK), 0. ) 
+            EVCWMX = ( HQSAT(il,JK) - HUQSM1(il,JK) ) * rTWODT 
+     &              - ZQE(il,JK) 
+            EVCWMX = AMAX1( EVCWMX, 0. ) 
+            ZCWE(il,JK) = AMIN1( ZCWE(il,JK), EVCWMX ) 
+            HDTCU1(il,JK) = ZTE(il,JK)
+            ZTE(il,JK) = ZTE(il,JK) - HLDCP * ZCWE(il,JK)
+            ZQE(il,JK) = ZQE(il,JK) + ZCWE(il,JK)
+c***
+            CUMASK(il,JK) = 0.
+C 
+C           CLOUD COVER 
+C 
+c***
+c       On utilise sigma local, Juin 94 (Wei Yu)
+c
+            ZCUCOV(il,JK) = HKSIZ(il,JK) * HTAUCU * 
+     &                      (1. + (S(il,ilKHB(il))
+     &                      - S(il,ilKHT(il))) / HCUNRM ) / ( 1.+2.5
+c***
+     &                      * HKSIZ(il,JK) * HTAUCU ) * ( 1.+HU(il,JK) )
+            ZCUCOV(il,JK) = AMIN1( ZCUCOV(il,JK), (0.25+0.5*HU(il,JK)) )
+            ZCUCOV(il,JK) = AMAX1( ZCUCOV(il,JK), 0. ) 
+         endif
+C
+  710 CONTINUE
+C*** 
+C           IF THE CLOUD IS DEEP, THE TOP LEVEL IS TREATED AS 
+C           A STRATIFORM ANVIL
+C***
+*vdir nodep
+      do 70 il = 1, ni
+         JK = ilKHT(il)
+         KHTX(il) = ilKHT(il)
+         REQCON(il) = 0.
+c***
+         logic = indcu(il) .eq. 1 .and. TM(il,JK) .LE. TANVIL
+C 
+         if ( logic .and. HU(il,JK).GT.HU00 ) then
+            REQCON(il) = 1.
+         endif
+c***
+         HLDCP = HCPI * ELOFT(il,JK)
+         ANVCOV = ( 1. - SQRT((1. - HU(il,JK)) / (1. - HUZ00(il))) ) 
+     &           * REQCON(il)
+         ANVCOV = AMAX1( ANVCOV, 0. ) 
+c***
+         if ( logic ) then
+            ZCUCOV(il,JK) = AMAX1( ANVCOV, ZCUCOV(il,JK) ) * REQCON(il)
+
+            ZQE(il,JK) = ZQE(il,JK) + ZTE(il,JK) / HLDCP
+            ZTE(il,JK) = 0.
+            ZCWE(il,JK) = 0.
+C 
+            CUMASK(il,JK) = 1. - REQCON(il)
+         endif
+c***
+         if ( logic .and. REQCON(il) .EQ. 0. ) then
+            ilkht(il) = ilkht(il) + 1
+         endif
+         if ( logic ) then
+            KHTX(il) = ilKHT(il)
+         endif
+c***
+         XACCAD =  0.
+         if ( logic
+     &         .and. REQCON(il) .EQ. 1. .and. JK.LT.LQCONV(il) ) then
+            XACCAD = HDQAD(il,JK)
+         endif
+C 
+         if ( logic .and. REQCON(il) .EQ. 1. ) then
+            XACCES = ZQE(il,JK) - HU(il,JK) * HSQ(il,JK) 
+     &              * HDTAD(il,JK) / HLDCP + QM(il,JK) * DLNPDT(il,JK)
+C 
+            XN = 2. * (1. - HUZ00(il)) * ( 1.-ZCUCOV(il,JK) + 1.E-3 )
+            XNPM = XN + CWM(il,JK) / ( ZCUCOV(il,JK) * HQSAT(il,JK) 
+     &            + 1.E-6 )
+            XBNPM = XNPM - XN + ZCUCOV(il,JK) * XN 
+c***
+            ZTE(il,JK) = XBNPM * (XACCES+XACCAD) / ( (1. + HU(il,JK)
+     &                    * HSQ(il,JK)) * XNPM )
+            ZQE(il,JK) = ZQE(il,JK) - ZTE(il,JK)
+            ZTE(il,JK) = ZTE(il,JK) * HLDCP
+C 
+            KHTX(il) = ilKHT(il) + 1
+         endif
+c***
+70    continue
+C*** 
+C           SET CUMASK = 0 IN THE SUB-CLOUD LAYER 
+C 
+      do 720 jk = khbp1, nlev
+*vdir noloopchg
+      do 720 il = 1, ni
+         logic = jk .ge. ilkhb(il)+1 .and. indcu(il) .eq. 1
+     &        .and. liftlv(il) .eq. nlev .and. ilkhb(il) .lt. nlev
+c***
+         if ( logic ) then
+            CUMASK(il,JK) = 0.
+         endif
+C RE-EVAPORATE ANY REMAINING WATER SINCE NO CONVECTION OR NORMAL STRATIFORM 
+         if ( logic .and. (HQP1(il,JK)-HQSAT(il,JK))*rtwodt.lt.0. ) then
+            STHEAT(il,JK) = STHEAT(il,JK) - CWP(il,JK) * rTWODT
+            HDCWST(il,JK) = -CWP(il,JK) * rTWODT
+C
+            IPRTCO(il,JK) = 1
+         endif
+720   continue
+C 
+C---------------------------------------------------------------------- 
+C    LOOK FOR POSSIBLE SUPERSATURATION. DISTRIBUTE SUCH RELEASED HEAT 
+C    AT THE OTHER HEAT IN LOOP 710. LET ALL THIS CONDENSATE PRECIPITATE.
+C-----------------------------------------------------------------------
+C 
+      do 80 il = 1, ni
+         XQSUPS(il) = 0.
+         xdp(il) = ilhdpb(il)
+80    continue
+
+      do 750 jk = khbmax, khtmin, -1
+*vdir nodep
+      do 750 il = 1, ni
+         logic = jk .le. ilkhb(il) .and. jk .ge. ilkht(il)
+     &          .and. indcu(il) .eq. 1
+c***
+         xaccad = 0.
+         if ( logic .and. JK .LT. LQCONV(il) ) then
+            xaccad = HDQAD(il,JK)
+         endif
+c
+         xdq = 0.
+         if ( logic ) then
+            HLDCP = HCPI * ELOFT(il,JK)
+c
+            TPREL = TM(il,JK) + TWODT * ( HDTAD(il,JK)+ZTE(il,JK) )
+            QSPREL = HQSAT(il,JK) + HSQ(il,JK) * (TPREL - TM(il,JK)) 
+     &              / HLDCP 
+            XDQ = ( QM(il,JK) + TWODT * (ZQE(il,JK)+XACCAD)-QSPREL)
+     &           * rTWODT
+         endif
+C 
+         if ( logic .and. XDQ .GT. 0. ) then
+           XQSUPS(il) = XQSUPS(il) +  XDP(il) * XDQ
+           ZQE(il,jk) = ZQE(il,jk) - xdq
+         endif
+C 
+         if ( logic ) then
+            XDP(il) = DPK(il,JK-1)
+         endif
+750   continue
+c***
+*vdir nodep
+      do 90 il = 1, ni
+         logic = XQSUPS(il) .ne. 0. .and. indcu(il) .eq. 1
+c***
+         if ( logic .and. KHTX(il) .GT. ilKHT(il) ) then
+            HLDCP = HCPI * ELOFT(il,ilkht(il))
+            xsumt(il) = xsumt(il)-DPK(il,ilKHT(il))*HFDTMX(il,ilKHT(il))
+     &                 * HTCMT(il,ilKHT(il)) / HLDCP
+         endif
+c***
+         if ( logic ) then
+            SUPKSI(il) = XQSUPS(il) / ( XSUMT(il) + 1.E-2)
+            PRCPCU(il) = PRCPCU(il) + XQSUPS(il) * rHG
+         endif
+90    continue
+C 
+      do 760 jk = khtmin, khbmax
+*vdir noloopchg
+      do 760 il = 1, ni
+         if ( jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &       .and. XQSUPS(il) .ne. 0. .and. indcu(il) .eq. 1 ) then
+            ZTE(il,JK) = ZTE(il,JK) + SUPKSI(il) * HFDTMX(il,JK) 
+     &                    * HTCMT(il,JK)
+         endif
+760   CONTINUE
+C           ------------------------------------------------------------
+C 
+C  7)       PREDICTION OF CLOUD WATER CONTENT, CW, BY AN IMPLICIT 
+C           SCHEME, REQUIRING AN ITERATIVE PROCEDURE. 
+C           ------------------------------------------------------------
+      IF ( SHCUM .EQ. 0. ) GO TO 810
+C 
+C           FOR CALCULATION OF CLOUD WATER MAKE HEATING 
+C           POSITIVE AT ALL 3 LEVELS BY DISTRIBUTING THE NET HEATING
+C 
+      do 100 il = 1, ni
+         XQ(il) = 0. 
+         DPSUM(il) = 0.
+100   continue
+C 
+      do 805 jk = khtmin, khbmax
+      do 805 il = 1, ni
+         logic = jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &           .and. indcu(il) .eq. 1
+c***
+         if ( logic .and. JK .EQ. ilKHB(il) ) then
+            xdpb = ilhdpb(il)
+         else
+            xdpb = dpk(il,jk)
+         endif
+
+         if ( logic ) then
+            xq(il) = XQ(il) + XDPb * ZTE(il,JK)
+            DPSUM(il) = DPSUM(il) + XDPb
+         endif
+805   continue
+c
+      do 110 il = 1, ni
+         if ( indcu(il) .eq. 1 ) then
+            XQ(il) = XQ(il) / DPSUM(il)
+         endif
+c***
+         if ( indcu(il) .eq. 1 .and. xq(il) .lt. 0. ) then
+            indcu(il) = 0
+            xcu(il) = 0.
+         endif
+110   continue
+C 
+810   CONTINUE
+C 
+c      COVBAR = 0. !il est deja initialise!!!! A revoir!!!!
+
+      DO 850 JK = KHTmin, KHBmax
+*vdir nodep
+         do 130 il = 1, ni
+C
+            PRFLX(IL,JK) = PRCPCU(il)-CUSNOW(il)
+            SWFLX(IL,JK) = CUSNOW(il)
+C
+            logic = jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &             .and. indcu(il) .eq. 1
+C 
+C           CALCULATE FACTORS FOR COALESCENCE HFCOX, FREEZING HFREZX, 
+C           REDUCTION OF HMRCU AT LOW TEMPS, HFMRX
+C 
+C           MODIFIED PROBABILITY OF ICE RESULTING FROM ICE IN PRECIP
+C           COMING FROM ABOVE 
+C 
+            xde = 0.
+            xprb = 0.
+            xft = 1.
+            if ( logic .and. TM(il,JK) .LE. HT273 ) then
+               temp1 = TM(il,JK)
+               XDE = TABDE( temp1 )
+               XPRB = TABICE( temp1 )
+               xft = FMROFT( temp1 )
+            endif
+            XFT = AMAX1( XFT, 3.E-2 )
+C 
+            HFCOX = 1.                                 !pour la securite
+            if ( logic ) then
+               PRBMOD(il) = XPRB + ( 1. - XPRB ) * CUSNOW(il) 
+     &                     / ( PRCPCU(il) + 1.E-7 ) 
+               BFMOD = PRBMOD(il) * (1.-XPRB) * XDE
+C 
+               XK = JK - ilKHT(il)
+               COVBAR(il) = ( XK * COVBAR(il) + ZCUCOV(il,JK) ) 
+     &                     / ( XK + 1. )
+
+               CUSNOW(il) = AMAX1( 0., CUSNOW(il) )
+               HFCOX = 1. + COALES * SQRT( PRCPCU(il) )
+C 
+               HFREZX = 1. + CBFEFF * BFMOD
+               HFREZX = HFREZX * ( 1. + CFREEZ * (1.-XFT) / XFT )
+C 
+               XFRCOA(il) = HFCOX * HFREZX 
+            endif
+c***
+            XHMRCU = HMRCU
+            if ( logic .and. JK .EQ. ilKHT(il) 
+     &                                .AND. REQCON(il) .EQ. 1. ) then
+               XHMRCU = HMRST
+            endif
+c***
+            if ( logic ) then
+               HFMRX(il) = XHMRCU * XFT / HFCOX
+            endif
+C 
+C-----------------------------------------------------------------------
+C           SPECIAL TREATMENT FOR T.LT.236K 
+C           ------------------------------- 
+            if ( logic .and. TM(il,JK) .LT. 236. 
+     &                                .AND. TM(il,JK) .GT. 232. ) then
+               XFRCOA(il) = 0.25 * ( XFRCOA(il) * ( TM(il,JK) - 232. )
+     &                              + 5. * ( 236. - TM(il,JK) ) )
+            endif
+c***
+            if ( logic .and. TM(il,JK) .LE. 232. ) then
+               XFRCOA(il) = 5.
+            endif
+130      continue
+C 
+C-----------------------------------------------------------------------
+C           CALCULATE THE FIXED PART OF EQU AND NORMALIZE BY B * MR 
+C 
+         IF (SHCUM.EQ.1.) THEN 
+            do 140 il = 1, ni
+               if ( jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &             .and. indcu(il) .eq. 1 ) then
+                  XQNET(il) = XQ(il)
+               endif
+140         continue
+         else
+C 
+C           FOR CALCULATION OF CLOUD WATER, MAKE HEATING POSITIVE 
+C           AT A POSSIBLE NEG. VALUE BY SHARING WITH THE LEVEL ABOVE
+C 
+            do 150 il = 1, ni
+               if ( jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &             .and. indcu(il) .eq. 1 ) then
+                  XQNET(il) = ZTE(il,JK) 
+               endif
+150         continue
+         ENDIF 
+C 
+         do 160 il = 1, ni
+            if ( jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &          .and. indcu(il) .eq. 1 ) then
+c***
+               HLDCP = HCPI * ELOFT(il,JK)
+C 
+               XQNET(il) = XQNET(il) / HLDCP
+               XQNET(il) = AMAX1( XQNET(il), 0. ) 
+
+               XFIX(il) = ( 2. * CWM(il,JK) + ICLDDT2dt * 
+     &                     ( HDCWAD(il,JK) + XQNET(il) ) )
+     &                   / ( 2. * ( ZCUCOV(il,JK) + 1.E-2 ) * HFMRX(il))
+C 
+C                 THE CONVERSION RATE TIMES 2*DT
+C 
+               XCCU(il) = 0.5 * HCCU * XFRCOA(il) * ICLDDT2dt
+C 
+C                 FIRST GUESS IS NORMALIZED M(T-DT) 
+C 
+               YM(il) = CWM(il,JK) / ( ( ZCUCOV(il,JK) + 1.E-2 ) 
+     &                                  * HFMRX(il) )
+C 
+C           TO MAKE M(T+DT).GE.0, THE FINAL SOLUTION OF YM HAS TO BE
+C           YM.GE.M(T-DT)/(2.*B*MR) 
+C 
+               YMMIN(il) = 0.5 * YM(il)
+            endif
+160      continue
+C 
+         DO 820 JNR = 1,5
+         do 820 il = 1, ni
+            if ( jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &          .and. indcu(il) .eq. 1 ) then
+c***
+               YMN = AMIN1( YM(il), 5. )
+               XXP = EXP( -YMN * YMN ) 
+               XHJ = 1. + XCCU(il) * ( 1. - XXP )
+               XF  = YM(il) * XHJ - XFIX(il) 
+               XFPRIM = XHJ + 2. * XCCU(il) * YM(il)* YM(il) * XXP
+               YM(il)  = AMAX1( ( YM(il) - XF / XFPRIM ), YMMIN(il) ) 
+c***
+c               Ca se converge au bout de 5 iterations!
+c              XERMAX = ABS(XF)
+c              IF (XERMAX.LT.1.E-5) GO TO 825
+c***
+            endif
+820      CONTINUE
+C 
+         do 170 il = 1, ni
+            logic = jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &             .and. indcu(il) .eq. 1
+c
+            if ( logic ) then
+               XCWP1 = 2. * YM(il) * ( ZCUCOV(il,JK)+1.E-2 ) * HFMRX(il)
+     &                - CWM(il,JK) 
+               XCWP1 = AMAX1( XCWP1, 0. )
+               ZCWE(il,JK) = ( XCWP1 - CWM(il,JK) ) * rICLDDT2dt 
+     &                        - HDCWAD(il,JK)
+C 
+C           RATE OF PRECIPITATION 
+C 
+C     
+               XPRADD = DPK(il,JK) * rHG 
+     &                      * AMAX1( ( XQNET(il) - ZCWE(il,JK) ), 0. )
+               PRCPCU(il) = PRCPCU(il) + XPRADD
+               ACCK(il,JK) = ACCK(il,JK) + PRCPCU(il)
+               CUSNOW(il) = AMIN1( ( CUSNOW(il) + PRBMOD(il) * XPRADD ),
+     &                             PRCPCU(il) )
+            endif
+C***
+C           CALCULATE POSSIBLE MELTING
+C***
+            DTMELT = 0.
+            if ( logic .and. TM(il,JK) .GT. HT273
+     &                                   .AND. CUSNOW(il) .GT. 0. ) then
+               XRO = HPK(il,JK) / ( HRD * TM(il,JK) )
+               XROV = XRO * HVSNOW 
+               XMIND = AMIN1( (DPK(il,JK) / (HG*XROV) ), ICLDDT2dt ) 
+               DMELT = 0.5 * HKMELT * (TM(il,JK)-HT273) * XMIND * XROV
+               SQMELT = SQRT( CUSNOW(il) ) - DMELT 
+               XMELT = AMAX1( SQMELT, 0. )
+               xmelt = xmelt * xmelt
+               DSNOW = CUSNOW(il) - XMELT
+               CUSNOW(il) = XMELT
+               DMELT = DSNOW / ( ICLDDT2dt * XRO )
+               DTMELT = HDLDCP * DMELT
+            endif
+c
+            if ( logic ) then
+               ZTE(il,JK) = ZTE(il,JK) - DTMELT
+C 
+               IPRTCO(il,JK) = 2
+            endif
+170      continue
+850   CONTINUE
+C 
+C           CALCULATE POSSIBLE MELTING IN SUB-CLOUD LAYER 
+C             - " -   EVAPORATION OF CONVECTIVE PRECIP IN SUB-CLOUD LYR 
+C 
+      DO 855 JK = KHBP1,NLEV
+         do 180 il = 1, ni
+            logic = jk .ge. ilkhb(il)+1 .and. indcu(il) .eq. 1
+C
+            if ( logic ) then
+               PRFLX(IL,JK) = PRCPCU(il)-CUSNOW(il)
+               SWFLX(IL,JK) = CUSNOW(il)
+            endif
+C
+            DTMELT = 0.
+c
+            if ( logic .and. TM(il,JK) .GT. HT273 
+     &                                   .AND. CUSNOW(il) .GT. 0. ) then
+
+               XRO = HPK(il,JK) / ( HRD * TM(il,JK) )
+               XROV = XRO * HVSNOW 
+               XMIND = AMIN1( (DPK(il,JK) / (HG*XROV)), ICLDDT2dt ) 
+               DMELT = 0.5 * HKMELT * (TM(il,JK)-HT273) * XMIND * XROV
+               SQMELT = SQRT( CUSNOW(il) ) - DMELT 
+               XMELT = AMAX1( SQMELT, 0. )
+               xmelt = xmelt * xmelt
+               DSNOW = CUSNOW(il) - XMELT
+               CUSNOW(il) = XMELT
+               DMELT = DSNOW / ( ICLDDT2dt * XRO )
+               DTMELT = HDLDCP * DMELT
+            endif
+c
+            ZTE(il,JK) = ZTE(il,JK) - DTMELT
+180      continue
+C 
+         do 190 il = 1, ni
+            EVAPRI = 0.
+            XEVACU = 0.
+c***
+            logic = jk .ge. ilkhb(il)+1 .and. indcu(il) .eq. 1
+c
+            if ( logic .and. ( PRCPCU(il) .GT. 0. ) .AND. 
+     &           ( ((HQP1(il,JK)-HQSAT(il,JK))*rTWODT) .LT. 0. ) ) then
+c***
+               XROV = HPK(il,JK) / ( HRD * TM(il,JK) ) * HVTERM
+               XMIND = AMIN1( (DPK(il,JK)/(HG*XROV)), ICLDDT2dt ) 
+               XEVAP = 0.5 * CVPEVP * (1. - HUZ00(il) * REQCON(il) 
+     &                - HU(il,JK) * (1. - REQCON(il))) * XMIND * XROV
+C 
+               XEVAP = XEVAP * COVBAR(il)
+               XPSQ = SQRT( PRCPCU(il) ) - XEVAP 
+               XP = AMAX1( XPSQ, 0. )
+               xp = xp * xp
+               EVAPRI = PRCPCU(il) - XP
+               XEVACU = EVAPRI / ( XMIND * XROV )
+               HEVACU(il) = XEVACU * DPK(il,JK) * rHG + HEVACU(il)
+            endif
+c
+            if ( logic ) then
+               PRCPCU(il) = PRCPCU(il) - EVAPRI
+               ACCK(il,JK) = ACCK(il,JK) + PRCPCU(il)
+               CUSNOW(il) = AMAX1( 0., (CUSNOW(il) - EVAPRI) )
+C 
+               HLDCP = HCPI * ELOFT(il,JK)
+               ZTE(il,JK) = ZTE(il,JK) - XEVACU * HLDCP
+               ZQE(il,JK) = ZQE(il,JK) + XEVACU
+            endif
+190      continue
+855   CONTINUE
+C 
+      DO 860 JK = KHTmin, KHBmax
+*vdir noloopchg
+      do 860 il = 1, ni
+         if ( jk .ge. ilkht(il) .and. jk .le. ilkhb(il)
+     &        .and. indcu(il) .eq. 1 ) then
+            ZQE(il,JK) = ZQE(il,JK) - HDQAD(il,JK)
+         endif
+  860 CONTINUE
+C 
+c***
+c           Verification
+c***
+      do 200 jk = 1, nlev
+*vdir noloopchg
+      do 200 il = 1, ni
+         if ( indcu(il) .eq. 0 ) then
+            ZQE(il,jk) = 0.
+            ZTE(il,jk) = 0.
+            ZCWE(il,jk) = 0.
+            Zcucov(il,jk) = 0.
+            cumask(il,jk) = 1.
+         endif
+200   continue
+C 
+C  8)       ACCUMULATE CONVECTIVE PRECIPITATION AND EVAPORATION THEREOF 
+C           ------------------------------------------------------------
+C           ------------------------------------------------------------
+C 
+C           RETURN CALCULATED TENDENCIES TO THE MAIN ARRAYS, INCLUDING
+C           ADJUSTMENT OF THE HEATING FOR THE THETA EQU.
+C           ------------------------------------------------------------
+C 
+C 
+      do 900 il = 1, ni
+         ZCRR(IL) = PRCPCU(il) - CUSNOW(il)
+         ZCSR(IL) = CUSNOW(il)
+900   continue
+C 
+C 
+C           HERE ENDS THE CALCULATION OF CONVECTIVE CONDENSATION
+C***********************************************************************
+C
+      ENDIF
+C
+d1086 1
+d1296 2
+@

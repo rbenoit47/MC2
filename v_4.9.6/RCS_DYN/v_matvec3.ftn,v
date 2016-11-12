@@ -1,0 +1,264 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r v_matvec3
+      subroutine v_matvec3 (r, w, s, czz, qu, qv, q, wk1, nx, ny, nz,
+     $                                 lminx,lmaxx,lminy,lmaxy,niter)
+      implicit none
+*
+      integer nx, ny, nz, lminx, lmaxx, lminy, lmaxy, niter
+      real*8  r(nx,ny,nz), w(nx,ny,nz), qu(lminx:lmaxx,lminy:lmaxy,*), 
+     $     qv(lminx:lmaxx,lminy:lmaxy,*),q(lminx:lmaxx,lminy:lmaxy,*),
+     $     czz(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),nz,3),
+     $     wk1(*)
+      real   s(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1))
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *                                                                 *
+*    *                           CALCULATES                            *
+*    *                                                                 *
+*    *                                                                 *
+*    *    r = H*q  : the Helmholtz matrix H times q                    *
+*    *                                                                 *
+*    *                                                                 *
+*    *     where                                                       *
+*    *             q=w  is here a guestimate of the solution   qpp     *
+*    *      and                                                        *
+*    *             r    is therefore an approximation to       rhs     *
+*    *                                                                 *
+*    *                                                                 *
+*    *                    CALCULATES ESSENTIALLY                       *
+*    *                                                                 *
+*    *                                                                 *
+*    *                         _XY  ~2    2   ~2    2                  *
+*    *  r = H*q  = c00*q + con*S  *{d q/dX  + d q/dY } + DZ2*nu0*DZ1*q *
+*    *                                                                 *
+*    *                                                                 *
+*    *  r = H*q  = c00*q +   s    *{   hdiv(qu,qv)   } + DZ2*nu0*DZ1*q *
+*    *                                                                 *
+*    *                                                                 *
+*    *  r = H*q  =           s    *{   hdiv(qu,qv)   } +     czz*q     *
+*    *                                                                 *
+*    *                                                                 *
+*    *                                              _____X   _____Y    *
+*    * n.b.if k=1, r = r + s * [ G0r+c01*orts ] * [ G1*qu  + G2*qv  ]  *
+*    *                                                                 *
+*    *                                                                 *
+*    *             *****************************************           *
+*    *             *                            ________Z  *           *
+*    *             *       ~                        _X     *           *
+*    *             *  qu = dq/dX = dq/dX + G0ur*G1*dq/dZ   *           *
+*    *             *                                       *           *
+*    *             *                            ________Z  *           *
+*    *             *       ~                        _Y     *           *
+*    *             *  qv = dq/dY = dq/dY + G0vr*G2*dq/dZ   *           *
+*    *             *                                       *           *
+*    *             *                                       *           *
+*    *             *****************************************           *
+*    *                                                                 *
+*    *                                 ~        ~                      *
+*    *                   hdiv(u,v)  =  dqu/dX + dqv/dY                 *
+*    *                                                                 *
+*    *                                                                 *
+*    *             *****************************************           *
+*    *             *    ~                     _________XZ  *           *
+*    *             *    dqu/dX = dqu/dX + G0r*G1*dqu/dZ    *           *
+*    *             *                                       *           *
+*    *             *    ~                     _________YZ  *           *
+*    *             *    dqv/dY = dqv/dY + G0r*G2*dqv/dZ    *           *
+*    *             *                                       *           *
+*    *             *****************************************           *
+*    *                                                                 *
+*    *                                                                 *
+*    *                                                                 *
+*    *             *****************************************           *
+*    *             *                                       *           *
+*    *             *       czz*q = c00*q + DZ2*nu0*DZ1*q   *           *
+*    *             *                                       *           *
+*    *             *   DZ2*DZ1*q = DZ2*qw                  *           *
+*    *             *                                       *           *
+*    *             *               ~                   __Z *           *
+*    *             *      DZ2*qw = dqw/dZ - 2*c01*orts*qw  *           *
+*    *             *                                       *           *
+*    *             *                ~                  _Z  *           *
+*    *             *  qw = DZ1*q =  dq/dZ - 2*c02*nssq*q   *           *
+*    *             *                                       *           *
+*    *             *                                       *           *
+*    *             *****************************************           *
+*    *                                                                 *
+*    *                                                                 *
+*    *                                                                 *
+*    *******************************************************************
+*
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dynmem.cdk"
+#include "nbcpu.cdk"
+*
+      integer i, j, k, nkk, kp1, km1
+      real*8 p25,pt5,one,g1k,g2k,t1,t2,t3,t4,t5,t6,t7,t8,s1,s2,s3,w3,w4
+      parameter (p25=0.25d0,pt5=0.5d0,one=1.d0)
+*-----------------------------------------------------------------------
+*
+!$omp do
+      do k = 1, nz
+      do j = 1, ny
+      do i = 1, nx
+         q(i,j,k) = w(i,j,k)
+      end do
+      end do
+      end do
+!$omp enddo
+*     
+!$omp single
+      call rpn_comm_xch_halon (q,minx,maxx,miny,maxy,ldni,ldnj,
+     $                       nz,hx,hy,period_x,period_y,ldni,0,2)
+!$omp end single
+*
+!$omp do
+      do k = 1, gnk-1
+         km1 = max(k-1,1 )
+         kp1 = min(k+1,gnk-1 )
+*
+         do j = 1, ny + (1-north)
+         do i = 1, nx + (1-east )
+            t1 = ( q(i,j,k) - q(i-1,j,k) ) * odxu(1)
+            t2 = gg1(i,j,k+1) *
+     $           (q(i,j,kp1)+q(i-1,j,kp1)-q(i,j,k  )-q(i-1,j,k  ))
+            t3 = gg1(i,j,k  ) *
+     $           (q(i,j,k  )+q(i-1,j,k  )-q(i,j,km1)-q(i-1,j,km1))
+            t4 = ( q(i,j,k) - q(i,j-1,k) ) * odyv(j)
+            t5 = gg2(i,j,k+1) *
+     $           (q(i,j,kp1)+q(i,j-1,kp1)-q(i,j,k  )-q(i,j-1,k  ))
+            t6 = gg2(i,j,k  ) *
+     $           (q(i,j,k  )+q(i,j-1,k  )-q(i,j,km1)-q(i,j-1,km1))
+            qu(i,j,k) = t1 + g0ur(i,j,k) * p25 * ( t2 + t3 )
+            qv(i,j,k) = t4 + g0vr(i,j,k) * p25 * ( t5 + t6 )
+         end do
+         end do
+         if (west.gt.0) then
+           do j = 1, ny + (1-north)
+              qu (1,j,k) = 0.
+           end do
+         endif
+         if (east.gt.0) then
+           do j = 1, ny + (1-north)
+              qu (nx+1,j,k) = 0.
+           end do
+         endif
+         if (south.gt.0) then
+           do i = 1, nx + (1-east )
+              qv (i,1,k) = 0.
+           end do
+         endif
+         if (north.gt.0) then
+           do i = 1, nx + (1-east )
+              qv (i,ny+1,k) = 0.
+           end do
+         endif
+      end do
+!$omp enddo
+*
+      nkk = nz
+      if (flextop) then
+!$omp do
+         do j = 1, ny
+         do i = 1, nx
+            r(i,j,Gnk) =  czz(i,j,Gnk,1) * q(i,j,Gnk-1)
+     $                  + czz(i,j,Gnk,2) * q(i,j,Gnk  )
+     $                  + czz(i,j,Gnk,3) * q(i,j,Gnk  )
+         end do
+         end do
+!$omp enddo
+         nkk = nz - 1
+      endif
+*
+!$omp do
+      do j = 1, ny
+      do i = 1, nx
+         t1 = gg1(i+1,j,nkk) * (qu(i+1,j,nkk)-qu(i+1,j,nkk-1))
+         t2 = gg1(i  ,j,nkk) * (qu(i  ,j,nkk)-qu(i  ,j,nkk-1))
+         g1k= p25 * ( t1 + t2 )
+         t3 = gg2(i,j+1,nkk) * (qv(i,j+1,nkk)-qv(i,j+1,nkk-1))
+         t4 = gg2(i,j  ,nkk) * (qv(i,j  ,nkk)-qv(i,j  ,nkk-1))
+         g2k= p25 * ( t3 + t4 )
+         s1 = czz(i,j,nkk,1) * q(i,j,nkk-1)
+     $      + czz(i,j,nkk,2) * q(i,j,nkk  )
+     $      + czz(i,j,nkk,3) * q(i,j,nz )
+         s2 = (qu(i+1,j,nkk)-qu(i,j,nkk))*odx(1) + gg0r(i,j,nkk)*g1k
+         s3 = (qv(i,j+1,nkk)-qv(i,j,nkk))*ody(j) + gg0r(i,j,nkk)*g2k
+         r(i,j,nkk) =  s1 + s(i,j) * ( s2 + s3 )
+      end do
+      end do
+!$omp enddo
+*
+!$omp do
+      do k = 1, nkk-1
+*
+         kp1 = min(k+1,nz)
+         km1 = max(k-1,1 )
+*
+         do j = 1, ny
+         do i = 1, nx
+            s2 = (qu(i+1,j,k)-qu(i,j,k))
+            t1 = gg1(i+1,j,kp1) * (qu(i+1,j,kp1)-qu(i+1,j,k  ))
+            t3 = gg1(i+1,j,k  ) * (qu(i+1,j,k  )-qu(i+1,j,km1))
+            t2 = gg1(i  ,j,kp1) * (qu(i  ,j,kp1)-qu(i  ,j,k  ))
+            t4 = gg1(i  ,j,k  ) * (qu(i  ,j,k  )-qu(i  ,j,km1))
+            w3 = s2*odx(1) + gg0r(i,j,k)*p25 * ( t1+t2+t3+t4 )
+            s3 = (qv(i,j+1,k)-qv(i,j,k))
+            t5 = gg2(i,j+1,kp1) * (qv(i,j+1,kp1)-qv(i,j+1,k  ))
+            t7 = gg2(i,j+1,k  ) * (qv(i,j+1,k  )-qv(i,j+1,km1))
+            t6 = gg2(i,j  ,kp1) * (qv(i,j  ,kp1)-qv(i,j  ,k  ))
+            t8 = gg2(i,j  ,k  ) * (qv(i,j  ,k  )-qv(i,j  ,km1))
+            w4 = s3*ody(j) + gg0r(i,j,k)*p25 * ( t5+t6+t7+t8 )
+            r(i,j,k) = czz(i,j,k,1) * q(i,j,km1) + 
+     $                 czz(i,j,k,2) * q(i,j,k  ) + 
+     $                 czz(i,j,k,3) * q(i,j,kp1) + s(i,j) * (w3+w4)
+         end do
+         end do
+*
+      end do
+!$omp enddo
+*
+!$omp do
+      do j = 1, ny
+      do i = 1, nx
+         s1 = ( gg1(i+1,j,1)*qu(i+1,j,1) + gg1(i,j,1)*qu(i,j,1) ) * pt5
+     $      + ( gg2(i,j+1,1)*qv(i,j+1,1) + gg2(i,j,1)*qv(i,j,1) ) * pt5
+         r(i,j,1) = r(i,j,1) + s(i,j) *
+     $                       ( gg0r(i,j,1) + c01*orts(i,j,1) ) * s1
+      end do
+      end do
+!$omp enddo
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

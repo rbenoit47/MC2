@@ -1,0 +1,290 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.30;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P FISIMP3
+      SUBROUTINE FISIMP3  (D, DSIZ, F, FSIZ, V, VSIZ,
+     $                     SE, KDIF, NI, NK, ZUSZNK, 
+     $                     KOUNT)
+#include "impnone.cdk"
+*
+      INTEGER DSIZ, FSIZ,VSIZ,NI,NK,KOUNT
+      REAL D(DSIZ), F(FSIZ),V(VSIZ),SE(NI,NK)
+      REAL KDIF(NI,NK),ZUSZNK(NI)
+*
+*Author
+*          C. Beaudoin (April 1988)
+*
+*Revision
+* 001      B. Bilodeau (Fall 1993) - New physics interface.
+*          Change name from PHYSIMP (SEF model) to FISIMP. 
+* 002      R. Sarrazin (Spring 1995) - ZU changed to 10 metres
+* 003      M. Desgagne (Oct 1995) - New interface.
+* 004      B. Bilodeau (Nov 96) - Replace common block pntclp by
+*                                 common block turbus
+* 005      C. Girard (Fall 96) - New formulation.
+* 006      J. Mailhot (Oct 1998) - New SURFACE interface and explicit
+*                                  formulation for the fluxes FC and FV
+* 007      B. Bilodeau (Nov 98) - Merge phyexe and param4. 
+*                                 Change name to fisimp3.
+* 008      B. Bilodeau (Nov 2000) - New comdeck phybus.cdk
+
+*
+*Object
+*          To calculate the (unnormalized) diffusion coefficients KM and KT
+*          and the (unnormalized) boundary conditions for the diffusion of
+*          wind, temperature, and moisture
+*          using simplified physical parameterizations.
+*          The normalizations are done in S/P DIFVER5.
+
+*Arguments
+*
+*          - Input/Output -
+* F        field of permanent physics variables
+* V        volatile bus
+* MF       dimension of F
+* VSIZ     dimension of V
+*
+*          - Input -
+* SE       staggered sigma levels
+* KDIF     work field
+* NI       horizontal dimension
+* NK       vertical dimension
+*
+*          - Output -
+* ZUSZNK   ratio UV(NK) / UV(NK-1)
+*
+*          - Input -
+* KOUNT    timestep number
+*
+*Notes
+*         Simplified physics includes full boundary layer where :
+*         - countergradient term is neglected
+*         - Prandtl number is 1./.74
+*         - KM = constant and KT = KM/.74
+*         - CM**2=drag coefficient = (.35/LN(1+ZA/Z0))**2
+*         - neglect the dependency of CM and CT on RI (Richardson number)
+*         - Limit of Z(anemometer)=10*(roughness length) : ZA MAX.=10*Z0
+*
+**
+      EXTERNAL SATQ
+      INTEGER K,I
+      REAL ZU,VMAG,CMSQ,QQS,ZNK,LNZNK,LNZU,SZERO,SBOT,
+     $     DIFBAK,DIFBOT,DELTAS,XVAR,FILT
+
+      DATA SZERO,SBOT,DIFBAK,DIFBOT/0.87,1.0,0.1,10.0/
+      DATA ZU/10.0/
+*
+      REAL UU, VV
+      REAL RHO
+*
+#include "indx_sfc.cdk"
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+#include "options.cdk"
+#include "consphy.cdk"
+#include "dintern.cdk"
+*
+      integer ik
+*     fonction-formule pour l'adressage
+      ik(i,k) = (k-1)*ni + i -1
+*
+#include "fintern.cdk"
+*
+*---------------------------------------------------------------------
+*
+*
+*     KDIF VARIE CUBIQUEMENT ENTRE SBOT ET SZERO
+*     EN SUPPOSANT QUE KDIF=KBOT A SBOT ET KDIF=KBAK A SZERO
+*     ET QUE LA PENTE DE KDIF EST NULLE A SBOT ET SZERO.
+*     ON SUPOOSE KDIF=KBAK EN HAUT DE SZERO.
+*
+      DELTAS=SBOT-SZERO
+*
+*VDIR NODEP
+      DO I=1,NI
+*
+         V(BM   +I-1)=0.0
+         V(BT   +I-1)=0.0
+         V(ALFAT+I-1)=0.0
+         V(ALFAQ+I-1)=0.0
+*
+         F(TSURF+I-1)=F(TWATER+I-1)
+         if(satuco) then
+            F(QSURF+(indx_agrege-1)*NI+I-1) = 
+     $                   foqst(F(TSURF+I-1),D(PMOINS+I-1))
+         else
+            F(QSURF+(indx_agrege-1)*NI+I-1) = 
+     $                   foqsa(F(TSURF+I-1),D(PMOINS+I-1))
+         endif
+*
+         F(ILMO+I-1)=1./.74
+*
+      ENDDO
+*
+*VDIR NODEP
+      DO I=1,NI*NK
+         V(GTE+I-1)=0.0
+         V(GQ+I-1)=0.0
+         V(KM+I-1)=0.0
+         V(KT+I-1)=0.0
+      ENDDO
+*
+      DO 1 K=1,NK
+*VDIR NODEP
+      do 1 i=1,ni
+      KDIF(I,K)=DIFBAK
+      IF( (SE(I,K)  .GE. SZERO) .AND. (SE(I,K)  .LT. SBOT ))THEN
+            XVAR=(SE(I,K)-SZERO)/DELTAS
+            FILT=(3.-2.*XVAR)*XVAR*XVAR
+        KDIF(I,K)=DIFBOT*FILT + (1. - FILT)*DIFBAK
+      ENDIF
+      IF(SE(I,K) .GE. SBOT) THEN
+        KDIF(I,K)=DIFBOT
+      ENDIF
+    1 CONTINUE
+*
+      IF(DMOM) THEN
+        DO 10 K=1,NK-1
+*VDIR NODEP
+        DO 11 I=1,NI
+        V(KM+(K-1)*NI+I-1)=KDIF(I,K)
+        V(KT+(K-1)*NI+I-1)=V(KM+(K-1)*NI+I-1)*F(ILMO+I-1)
+   11   CONTINUE
+   10   CONTINUE
+*
+        IF(DRAG) THEN
+*VDIR NODEP
+          DO 20 I=1,NI
+*
+*         ZNK EST LA HAUTEUR DU NIVEAU D'ANEMOMETRE
+          ZNK = -(RGASD/GRAV)*ALOG(D(SIGM+ik(I,NK)))*D(TMOINS+ik(I,NK))
+*         LNZNK EST LN(1 + ZNK/ZZ0)
+          LNZNK = ALOG (ZNK + F(Z0+I-1)) - ALOG(F(Z0+I-1))
+*
+*         BETA : TERME HOMOGENE DE CONDITION AUX LIMITES A LA SURFACE
+*
+          CMSQ  = (karman/LNZNK)**2
+          UU = D(UMOINS+ik(i,nk))
+          VV = D(VMOINS+ik(i,nk))
+          VMAG  = SQRT(UU*UU+VV*VV)
+          V(BM+I-1) = CMSQ*VMAG
+          V(BT+I-1) = CMSQ*VMAG*F(ILMO+I-1)*(1.-NINT(F(MG+I-1)))
+*
+*         PROFIL LOGARITHMIQUE DU VENT IMPOSE POUR NIVEAU DIAGNOSTIQUE
+*
+*         LNZU EST LN(1 + ZU/ZZ0)
+          LNZU  = ALOG (ZU  + F(Z0+I-1)) - ALOG(F(Z0+I-1))
+*         ZUSZNK EST LE RAPPORT ENTRE LE MODULE DU VENT AUX
+*         NIVEAUX NK+1 ET NK RESPECTIVEMENT
+          ZUSZNK(I) = LNZU/LNZNK
+*
+   20     CONTINUE
+*
+*         INCORPORATION DU GRADIENT D'EQUILIBRE (-grav/cpd)
+*         POUR LA DIFFUSION DE LA TEMPERATURE
+*
+          DO K=1,NK-1
+*VDIR NODEP
+           DO I=1,NI
+            V(GTE+(K-1)*NI+I-1) = (-GRAV/CPD)
+           ENDDO
+          ENDDO
+*
+          IF(CHAUF) THEN
+*VDIR NODEP
+            DO 30 I=1,NI
+*         ZNK EST LA HAUTEUR DU NIVEAU D'ANEMOMETRE
+               ZNK = -(RGASD/GRAV)*ALOG(D(SIGM+ik(I,NK)))*
+     $                             D(TMOINS+ik(I,NK))
+               V(ALFAT+I-1)= -V(BT+I-1)*(F(TSURF+I-1) - 
+     $                        V(THETAA+I-1))
+               RHO = D(PMOINS+I-1) /
+     $               (RGASD*F(TSURF+I-1)*(1.+DELTA*F(QSURF+I-1)))
+               V(FC+(indx_water -1)*ni+I-1) = -CPD  * RHO * V(ALFAT+I-1)
+               V(FC+(indx_agrege-1)*ni+I-1) = -CPD  * RHO * V(ALFAT+I-1)
+   30       CONTINUE
+          ENDIF
+*
+          IF(EVAP) THEN
+*VDIR NODEP
+            DO 40 I=1,NI
+               V(ALFAQ+I-1) = -V(BT+I-1)*
+     $                         (F(QSURF+(indx_agrege-1)*ni+I-1) -
+     $                          D(HUMOINS+ik(I,NK)))
+               RHO = D(PMOINS+I-1) /
+     $               (RGASD*F(TSURF+I-1)*(1.+DELTA*F(QSURF+I-1)))
+               V(FV+(indx_water -1)*ni+I-1) = -CHLC * RHO * V(ALFAQ+I-1)
+               V(FV+(indx_agrege-1)*ni+I-1) = -CHLC * RHO * V(ALFAQ+I-1)
+   40       CONTINUE
+          ENDIF
+*
+*VDIR NODEP
+          DO I=1,NI
+             V(BT+I-1) = 0.0
+          END DO
+*
+        ENDIF
+*
+      ENDIF
+*
+*     CALCULER LES VALEURS AU NIVEAU DIAGNOSTIQUE
+      IF(DMOM) THEN
+*
+*VDIR NODEP
+         DO I=1,NI
+*
+            IF(.NOT.DRAG)  ZUSZNK(I) = 1.
+            f(udiag+i-1) =  D(UMOINS+ik(I,NK)) * ZUSZNK(I)
+            f(vdiag+i-1) =  D(VMOINS+ik(I,NK)) * ZUSZNK(I)
+*
+*           TT(DIAGNOSTIQUE) =  TT(AVANT-DERNIER NIVEAU)
+            f(tdiag+i-1) = D(TMOINS +ik(I,NK))
+*
+            f(qdiag+i-1) = D(HUMOINS+ik(I,NK))
+*
+         END DO
+*
+      ENDIF
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,128 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P RADFAC3
+*
+      SUBROUTINE RADFAC3 ( QOZ,OZOTOIT,SIG,NLEV,NK,LREF,
+     %                     DLAT,PRESS,NP,NPMAX,MAXLEV,
+     %                     O3F,X1,X2,X3,X4,I1,I2,
+     %                     S2,S3,NLAT,FOZO,CLAT,PREF)
+#include "impnone.cdk"
+      INTEGER NLEV,LREF,NP,NPMAX,MAXLEV,NLAT,NK
+*
+      REAL QOZ(NPMAX,NLEV),
+     1 SIG(np,NK),DLAT(NP),PRESS(NP),O3F(NPMAX,LREF),
+     2 X1(NP),X2(NP),X3(NP),X4(NP),S2(NLEV),
+     3 S3(NLEV)
+      REAL FOZO(NLAT,LREF),CLAT(NLAT),PREF(LREF)
+      REAL ozotoit(NPMAX)
+      INTEGER I1(NP),I2(NP)
+*
+*Author
+*          L.Garand RPN (June 1989)
+*
+*Revision
+* 001      G.Pellerin(Mar90)Standard documentation
+* 002      R. Benoit (Aug 93) Local Sigma- remove U/T CO2
+* 003      B. Bilodeau (November 1993) - ozotoit added
+*          Change name from RADFACE to RADFAC2
+* 004      B. Bilodeau (September 1997) - change calls to
+*          ozoref2 and qozon3
+*
+*Object
+*          to calculate ozone mixing ratio at model levels
+*
+*Arguments
+*
+*          - Output -
+* QOZ      ozone mixing ratio (kg O3/kg air) for each 
+*          sigma level
+* OZOTOIT  total ozone (cm stp) above model roof
+*
+*          - Input -
+* SIG      sigma levels at the centre of the layers
+* NLEV     number of flux levels
+* NK       number of layers
+* LREF     number of ozone climatological levels
+* DLAT     latitude of NP points to process in radians
+* PRESS    NP points of surface pressure
+* NP       number of points to process
+* NPMAX    maximum number of points allowed
+* MAXLEV   number of maximum flux levels in the model
+*
+*          - Output -
+* O3F      ozone (kg O3/kg air) at  each reference
+*          climatological level for DLAT latitudes
+*
+*          - Input -
+* X1       work field
+* X2       work field
+* X3       work field
+* X4       work field
+* I1       work field
+* I2       work field
+* S2       work field
+* S3       work field
+* NLAT     number of climatological latitudes
+* FOZO     ozone climatological field in PPMV
+* CLAT     ozone climatological latitudes
+* PREF     ozone climatological pressures
+*
+*Notes
+*          This routine calls:
+*          OZOREF2 (kg O3/kg air at climatological levels)
+*          QOZON3  (kg O3/kg air at desired sigma  levels)
+*
+**
+*
+C
+      EXTERNAL OZOREF2,QOZON3
+C
+C
+      CALL OZOREF2(O3F,LREF,DLAT,NP,NPMAX,I1,NLAT,CLAT,PREF,FOZO)
+C
+      CALL QOZON3(QOZ,ozotoit,O3F,PRESS,SIG,NLEV,NK,NP,NPMAX,
+     2            LREF,PREF,X1,X2,X3,X4,I1,I2)
+C
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

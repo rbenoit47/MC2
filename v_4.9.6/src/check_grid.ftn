@@ -1,0 +1,174 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r check_grid
+      subroutine check_grid (unf,ft)
+      implicit none
+*
+      integer unf
+      logical ft
+*
+*AUTHOR  M. Desgagne    Jan 2000
+*
+*IMPLICIT
+#include "consdyn_8.cdk"
+#include "grd.cdk"
+*
+**
+      integer nlis
+      parameter (nlis = 1024)
+      integer liste (nlis)
+      integer lislon
+      character*1   grtyp
+      character*2   typvar
+      character*4   nomvar   
+      character*12  etiket
+      character*24  chaine
+      character*256 filename
+      logical fx,fy
+      integer i,key,nrec,ier
+      integer npac, deet, npas, ip1,ip2,ip3,ig1,ig2,ig3,ig4
+      integer idatev,cdatyp,ni1,nj1,nk1,ni,nj
+      integer swadm,ilngdm,idtfdm,iubcdm,ixt1dm,ixt2dm,ixt3dm,idtpdm
+      integer fstinf,fstinl,fstprm,fstluk,longueur
+      external fstinf,fstinl,fstprm,fstluk,longueur
+      real d2r,sum,ppi,pj,d60,dgrw,xps,yps,lat,lon,eps
+      real, dimension(:), allocatable :: x,y
+      data eps /1.0e-5/
+*---------------------------------------------------------------------
+*
+      if (ft) then
+*
+         fx = .false.
+         fy = .false.
+         nrec   = fstinl (unf,ni1,nj1,nk1,-1,' ',-1,-1,-1,' ',">>",
+     $                                          liste,lislon,nlis)
+         if (lislon.eq.0) goto 2
+*     
+         ier=fstprm (liste(1),idatev,deet,npas,ni1,nj1,nk1,
+     $               npac,idtpdm,ip1,ip2,ip3,typvar,nomvar,etiket,
+     $               grtyp,ig1,ig2,ig3,ig4,swadm,ilngdm,idtfdm,iubcdm,
+     $               ixt1dm,ixt2dm,ixt3dm)
+*
+         key = fstinf(unf,ni1,nj1,nk1,-1," ",-1,-1,-1," ",">>")
+         allocate(x(ni1))
+         ier  = fstluk(x,key,ni,nj1,nk1)
+         fx = .true.
+*
+         key = fstinf(unf,ni1,nj1,nk1,-1," ",-1,-1,-1," ","^^")
+         if (key.ge.0) then
+            allocate(y(nj1))
+            ier  = fstluk(y,key,ni1,nj,nk1)
+            fy = .true.
+         else
+            goto 2
+         endif
+*
+      else
+*     
+         fx = .false.
+         fy = .false.
+         rewind (unf)
+ 1       read (unf,end=2) npac, idatev, deet, npas, ni1, nj1, nk1,
+     $          ip1, ip2, ip3, ig1, ig2, ig3, ig4, cdatyp, chaine
+         read (chaine, 10) typvar,nomvar,etiket,grtyp
+ 10      format(a2,2x,a4,a12,a1,3x)
+*
+         if (nomvar.eq.'>>') then
+            allocate(x(ni1))
+            call readit (x,unf,ni1)
+            ni = ni1
+            fx = .true.
+         else
+            if (nomvar.eq.'^^') then
+               allocate(y(nj1))
+               call readit (y,unf,nj1)
+               nj = nj1
+               fy = .true.
+            else
+               read(unf)
+            endif
+         endif
+         if (.not.(fx.and.fy)) goto 1
+*
+      endif
+*
+      call cigaxg (grtyp,ppi,pj,d60,dgrw,ig1,ig2,ig3,ig4)
+      if (grtyp.eq."N") grtyp="P"
+      if (grtyp.eq."L") grtyp="M"
+*
+      if (grtyp.eq."P") then
+         d60 = (x(2)-x(1))*1000.
+         yps = y(1)*1000./Grd_dx + real(Grd_jref-1)
+         xps = x(1)*1000./Grd_dx + real(Grd_iref-1)
+         call llfxy (lat,lon,xps,yps,Grd_dx,Grd_dgrw,0)
+         if (  abs(dgrw-Grd_dgrw)  .gt.
+     $         max(abs(dgrw),abs(Grd_dgrw))/eps  ) then
+            write (6,940)
+            stop
+         endif
+      endif
+      if (grtyp.eq."M") then
+         d2r = pi_8 / 180.
+         sum = 0.
+         do i=2,ni
+            sum=sum+(x(i)-x(1))/real(i-1)*d2r*cos(Grd_phir*d2r)*rayt_8
+         end do
+         d60  = sum / real(ni-1)
+         lat = y(Grd_jref)
+         lon = x(Grd_iref)
+         if (Grd_phir.ne.22.5) then
+            write (6,941)
+            stop
+         endif
+      endif
+*
+ 2    if (.not.(fx.and.fy)) then
+         write (6,900)
+         stop
+      endif
+*
+      if (grtyp.ne.Grd_proj_S) then
+         write (6,910)
+         stop
+      endif
+*
+      if ((ni.ne.Grd_ni).or.(nj.ne.Grd_nj)) then
+         write (6,920)
+         stop
+      endif
+*         
+      if (  abs(d60-Grd_dx)  .gt.  max(d60,Grd_dx)/eps  ) then
+         write (6,930)
+         stop
+      endif
+      if (  (abs(lat-Grd_latr)  .gt.
+     $       max(abs(lat),abs(Grd_latr))/eps) .or.
+     $      (abs(lon-Grd_lonr)  .gt.
+     $       max(abs(lon),abs(Grd_lonr))/eps) ) then
+         write (6,950)
+         stop
+      endif
+*
+ 900  format (/ 'MISSING POSITIONAL PARAMETERS --- ABORT ---'/)
+ 910  format (/ 'WRONG GRID PROJECTION --- ABORT ---'/)
+ 920  format (/ 'WRONG GRID DIMENSIONS --- ABORT ---'/)
+ 930  format (/ 'WRONG GRID RESOLUTION --- ABORT ---'/)
+ 940  format (/ 'WRONG GRID ROTATION --- ABORT ---'/)
+ 941  format (/ 'WRONG REFERENCE LATITUDE --- ABORT ---'/)
+ 950  format (/ 'WRONG REFERENCE LAT/LON --- ABORT ---'/)
+*
+      return
+      end
+*
+***s/r readit
+      subroutine readit (d,unf,n)
+      implicit none
+*
+      integer unf,n
+      real d(n)
+*
+      read (unf) d
+*
+      return
+      end
+
+

@@ -1,0 +1,103 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.08;	author armnphy;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R MFSLESMX  -  MIXED PHASE SATURATION VAPOR PRESSURE CALCULATION
+*
+#include "phy_macros_f.h"
+      SUBROUTINE MFDLESMX(RES,TT,FF,DF,NI,NK)
+*
+#include "impnone.cdk"
+*
+      INTEGER NI,NK
+      REAL RES(NI,NK),TT(NI,NK),FF(NI,NK),DF(NI,NK)
+*
+*Author
+*          A. Plante (May 2003), based on FDLESMX from J. Mailhot
+*
+*Revision
+*
+*Object
+*          To calculate mixed phase saturation vapor pressure
+*
+*Arguments
+*
+*          - Output -
+* RES      mixed phase saturation vapor pressure
+*
+*          - Input -
+* TT       temperature
+* FF       ice fraction
+* DF       value of derivative w/r to T for saturation w/r to ice or liquid
+* NI       horizontal dimension
+* NK       vertical dimension
+*
+**
+*
+#include "consphy.cdk"
+*
+      INTEGER I,K
+      REAL*8 MFOEWA
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( WORK8 , REAL*8 , (NI,NK) )
+*
+************************************************************************
+*
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*MODULES
+*     
+C     COMPUTE FOEWA WITH MASS LIBRARY
+!      FOEWA(TTT)=610.78D0*DEXP(17.269D0*(DBLE(TTT)-DBLE(TRPL))/
+!     W (DBLE(TTT)-35.86D0))
+      DO K=1,NK
+         DO I=1,NI
+            WORK8(I,K)=17.269D0*(DBLE(TT(I,K))-DBLE(TRPL))/
+     $           (DBLE(TT(I,K))-35.86D0)
+         ENDDO
+      ENDDO
+      CALL VEXP(WORK8,WORK8,NI*NK)
+      
+      DO K=1,NK
+         DO I=1,NI
+            MFOEWA=610.78D0*WORK8(I,K)
+            RES(I,K)= ( (1.D0-DBLE(FF(I,K)))*MFOEWA*FODLA(TT(I,K))
+     1           + DBLE(FF(I,K))*FESI(TT(I,K))*FDLESI(TT(I,K))
+     1           + DBLE(DF(I,K))*(FESI(TT(I,K))-MFOEWA) )/
+     1           FESMX(TT(I,K),FF(I,K))
+         ENDDO
+      ENDDO
+*     
+      RETURN
+      END
+@

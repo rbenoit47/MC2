@@ -1,0 +1,135 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r eshrwp
+*
+      subroutine eshrwp (swmod,tmod,hmmod,prw,prt,rf,ng,nk,nksor,ip2)
+      implicit none
+*
+      integer ng,nk,nksor,ip2
+      real swmod(ng,nk),tmod(ng,nk),hmmod(ng,nk),prw(ng,nk),
+     $     prt(ng,nk),rf(nksor)
+*
+*OBJECT
+*     passage de hauteur a pression et conversions des variables:
+*     de l'humidite specifique a es et hr.
+*
+**
+#include "consdyn_8.cdk"
+#include "levels.cdk"
+#include "sor.cdk"
+#include "physnml.cdk"
+#include "vinterpo.cdk"
+*
+      integer gltd,glhu,glhr,glwz,glww
+      integer i,j,k,nkref,err
+      real, dimension (:,:), allocatable :: w1,w2
+      real posv
+      pointer (paposv, posv(ng,nksor,2,3))
+*----------------------------------------------------------------------
+*
+      print*, '=====> ESHRWP'
+      paposv = paposit
+*
+      gltd=-1
+      glhu=-1
+      glhr=-1
+      glwz=-1
+      glww=-1
+      do i=1,nvardyn
+         if (udolist(i).eq.'TD') gltd=i
+         if (udolist(i).eq.'HU') glhu=i
+         if (udolist(i).eq.'HR') glhr=i
+         if (udolist(i).eq.'WZ') glwz=i
+         if (udolist(i).eq.'WW') glww=i
+      end do
+*
+      nkref= nksor
+      if (levtyp.eq.'G') nkref= nk
+      if (nkref.lt.1) return
+*     
+      allocate (w1(ng,max(nk,nkref)),w2(ng,nkref))
+*
+      if (gltd.gt.0) call hrores (w1,hmmod,tmod,prt,ng,nk,satuco,'TD')
+*
+      if (levtyp.ne.'G') then
+*        
+         if (gltd.gt.0) then
+            call inv_vertint (w2,w1,posv(1,1,1,3),htt,ng,nksor,nk)
+            print*, 'TD ',(table_out(i,gltd),i=1,3)
+            call ecris2_fst (w2,rf,'TD',-1,ip2,0,1.0,ng,nksor,
+     $                                     table_out(1,gltd))
+         endif
+         if (glhu.gt.0) then
+            call inv_vertint (w1,hmmod,posv(1,1,1,3),htt,ng,nksor,nk)
+            print*, 'HU ',(table_out(i,glhu),i=1,3)
+            call ecris2_fst (w1,rf,'HU',-1,ip2,0,1.0,ng,nksor,
+     $                                     table_out(1,glhu))
+         endif
+*
+      else
+*
+         if (gltd.gt.0) then
+            print*, 'TD ',(table_out(i,gltd),i=1,3)
+            call ecris2_fst (w1,ztr,'TD',-1,ip2,0,1.0 ,ng,nkref,
+     $                                       table_out(1,gltd))
+         endif
+         if (glhu.gt.0) then
+            print*, 'HU ',(table_out(i,glhu),i=1,3)
+            call ecris2_fst (hmmod,ztr,'HU',-1,ip2,0,1.0 ,ng,nkref,
+     $                                          table_out(1,glhu))
+         endif
+*
+      endif
+*
+*     conversion de l'humidite specifique a l'humidite relative
+*
+      if (glhr.gt.0) then
+*
+         call hrores (w1,hmmod,tmod,prt,ng,nk,satuco,'HR')
+*
+         if (levtyp.ne.'G') then
+            call inv_vertint (w2,w1,posv(1,1,1,3),htt,ng,nksor,nk)
+            print*, 'HR ',(table_out(i,glhr),i=1,3)
+            call ecris2_fst (w2,rf,'HR',-1,ip2,0,1.0,ng,nkref,
+     $                                     table_out(1,glhr))
+         else
+            print*, 'HR ',(table_out(i,glhr),i=1,3)
+            call ecris2_fst (w1,ztr,'HR',-1,ip2,0,1.0,ng,nkref,
+     $                                      table_out(1,glhr))
+         endif
+      endif
+*
+*   * Mouvement vertical
+*
+      if (glww.gt.0) then
+         do k=1,nk
+         do i=1,ng
+            w1(i,k)= -prw(i,k)*swmod(i,k)*grav_8/(rgasd_8*tmod(i,k))
+         end do
+         end do
+         print*, 'WW ',(table_out(i,glww),i=1,3)
+         if (levtyp.eq.'G') then
+            call ecris2_fst  (w1,zt,'WW',-1,ip2,0,1.,ng,nkref,
+     $                                     table_out(1,glww))
+         else
+            call inv_vertint (w2,w1,posv(1,1,1,1),hww,ng,nksor,nk)
+            call ecris2_fst  (w2,rf,'WW',-1,ip2,0,1.,ng,nksor,
+     $                                     table_out(1,glww))
+         endif
+      endif
+*
+      if (glwz.gt.0) then
+         print*, 'WZ ',(table_out(i,glwz),i=1,3)
+         if (levtyp.eq.'G') then
+            call ecris2_fst (swmod,zt,'WZ',-1,ip2,0,1.,ng,nkref,
+     $                                       table_out(1,glwz))
+         else
+            call inv_vertint (w1,swmod,posv(1,1,1,1),hww,ng,nksor,nk)
+            call ecris2_fst (w1,rf,'WZ',-1,ip2,0,1.,ng,nkref,
+     $                                    table_out(1,glwz))
+         endif
+      endif
+*
+      deallocate (w1,w2)
+*----------------------------------------------------------------------
+      return
+      end

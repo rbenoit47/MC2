@@ -1,0 +1,180 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ldgeop
+*
+      subroutine ldgeop (etiket)
+      implicit none
+*
+      character*8 etiket
+*
+*AUTHOR  M. Desgagne    Nov 1995
+*
+*LANGUAGE Fortran 77
+*
+*OBJECT (ldgeop)
+*     Time series extraction of the invariant surface properties.
+*      
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*    nis        I    I     S  Maximum horizontal dimension along X
+*    njs        I    I     S  Maximum horizontal dimension along Y
+*    nic        I    I     S  Computational dimension along X
+*    njc        I    I     S  Computational dimension along Y
+*    fni        I    I     S  Running length
+*    fnj        I    I     S  Number of slice of length "runlgt"
+*
+*IMPLICIT
+*
+#include "lesbus.cdk"
+#include "physcom.cdk"
+#include "consdyn_8.cdk"
+#include "lcldim.cdk"
+#include "phymem.cdk"
+#include "physnml.cdk"
+#include "maxdim.cdk"
+#include "lun.cdk"
+#include "serinml.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+      integer n2dmx
+      parameter (n2dmx=11)
+      character*8 vngeoser(n2dmx),dummy
+      data vngeoser / 'LA','LO','MG','TM','HS',
+     $                'AL','ZP','GL','LH','SD','TP' /
+      integer i,j,m,mul,l,length,err
+      integer lmg,lsol,lwat
+      integer open_db_file,close_db_file,rewind_db_file,
+     $        read_db_file,write_db_file
+      external open_db_file,close_db_file,rewind_db_file,
+     $         read_db_file,write_db_file
+      real busper,busper2(max(1,sizpbus)),bustmp(max(1,fni)),c
+      pointer (pabusper,busper(*))
+*
+*----------------------------------------------------------------------
+*
+      c = 180. / pi_8
+*
+      if (nstat.le.0) return
+*
+      if (.not.incore) then
+         err = open_db_file   (un_gbusper)
+         err = rewind_db_file (un_gbusper)
+         pabusper = loc(busper2(1))
+      endif
+*
+      call sersetc ('SURFACE',vngeoser,n2dmx,err)
+*
+      do 10 j=1,fnj
+*
+         if (.not.incore) then
+            err = read_db_file (un_gbusper,j,1)
+            err = read_db_file (un_gbusper,busper,sizpbus)
+         else
+            pabusper = loc (lebus((j-1)*sizpbus+1))
+         endif
+*
+         do m=5,n2dmx
+            dummy=vngeoser(m)
+            if (dummy.eq."AL") dummy = "ALVIS"
+            if (dummy.eq."GL") dummy = "GLSEA"
+            if (dummy.eq."HS") dummy = "WSOIL"
+            if (dummy.eq."LH") dummy = "LHTG"
+            if (dummy.eq."SD") dummy = "SNODP"
+            if (dummy.eq."ZP") dummy = "Z0"
+            mul = -1
+            l   = 0
+            call getindx2 (dummy,  'P', l,   length,mul)
+            if (l.gt.0)
+     $      call serxst (busper(l), vngeoser(m), j, fni, 0.0, 1.0, -1)
+         end do
+* MG
+         mul = -1
+         lmg = 0
+         call getindx2 ("MG",  'P', lmg,   length,mul)
+         if (lmg.gt.0)
+     $   call serxst (busper(lmg), "MG", j, fni, 0.0, 1.0, -1)
+* TM
+         dummy = "TWATER"
+         mul = -1
+         lwat = 0
+         call getindx2 (dummy,  'P', lwat,   length,mul)
+* TP
+         dummy = "TSOIL"
+         mul = -1
+         lsol = 0
+         call getindx2 (dummy,  'P', lsol,   length,mul)
+         if (lsol.gt.0)
+     $   call serxst (busper(lsol+fni), "TP", j, fni, 0.0, 1.0, -1)
+* Merge TM/TP
+         if (lmg.gt.0.and.lwat.gt.0.and.lsol.gt.0) then
+            do i=1,fni
+               if (busper(lmg+i-1).ge.0.5) then
+* deep soil temperature
+                  bustmp(i) = busper(lsol+fni+i-1)
+               else
+                  bustmp(i) = busper(lwat+i-1)
+               endif
+            end do
+            call serxst (bustmp, "TM", j, fni, 0.0, 1.0, -1)
+         endif
+* LA
+         dummy = "DLAT"
+         mul = -1
+         l   = 0
+         call getindx2 (dummy,  'P', l,   length,mul)
+         if (l.gt.0) then
+            do i=1,fni
+               bustmp(i) = busper(l+i-1) * c
+            end do
+            call serxst (bustmp, "LA", j, fni, 0.0, 1.0, -1)
+         endif
+* LO
+         dummy = "DLON"
+         mul = -1
+         l   = 0
+         call getindx2 (dummy,  'P', l,   length,mul)
+         if (l.gt.0) then
+            do i=1,fni
+               bustmp(i) = busper(l+i-1) * c
+               if (bustmp(i).lt.0.) bustmp(i) = 360. + bustmp(i)
+            end do
+            call serxst (bustmp, "LO", j, fni, 0.0, 1.0, -1)
+         endif
+*
+ 10   continue
+*
+      call seri_out(.true.,etiket)
+      call sersetc ('SURFACE',surface,nsurf,err)
+*
+      if (.not.incore) then
+         err = close_db_file (un_gbusper)
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

@@ -1,0 +1,80 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.30;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** FUNCTION GAMMA2
+      FUNCTION GAMMA2 (X)
+#include "impnone.cdk"
+* 
+      REAL GAMMA2,X
+*
+*Author
+*          Stephane Belair  July 1991
+*
+*Revision
+* 001      Bernard Bilodeau (March 2002) - Rename function to eliminate
+*                                          name conflict
+*
+*Object
+*          to calculate value using the gamma function
+*          given X
+* 
+*Arguments
+*
+*          - Input -
+* X        input to gamma function
+*
+*          - Output -
+* GAMMA2   result of gamma function of X
+*
+*Notes
+*
+**
+      X = X-1 
+* 
+      GAMMA2 = 
+     1       (2.0*3.1416*X)**0.5* X**X *EXP(-X) * 
+     1       ( 1.0 + 1.0/(12.0*X) +1.0/(288.0*X*X) -
+     1         139./(51840.*X*X*X) )
+*
+      RETURN
+      END 
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

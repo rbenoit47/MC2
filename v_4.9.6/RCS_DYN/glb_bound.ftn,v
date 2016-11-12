@@ -1,0 +1,128 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine glb_bound (wall,slab)
+      implicit none
+*
+      logical wall,slab
+#
+#include "dynmem.cdk"
+#include "nestpnt.cdk"
+#include "partopo.cdk"
+#include "levels.cdk"
+#include "rec.cdk"
+*
+      integer n
+      real wk1(dim3d)
+*
+*----------------------------------------------------------------------
+*
+      if (north+south+east+west.eq.0) goto 9988
+*
+*     Update exterior halo
+*     
+      if (wall) then
+
+         call mirror
+
+      else
+
+         call filbo (qpp,qpnestt,"q",minx,maxx,miny,maxy,gnk+1)
+         call filbo (up ,unestt ,"u",minx,maxx,miny,maxy,gnk  )
+         call filbo (vp ,vnestt ,"v",minx,maxx,miny,maxy,gnk  )
+         call filbo (swp,swnestt,"q",minx,maxx,miny,maxy,gnk  )
+         call filbo (tpp,tpnestt,"q",minx,maxx,miny,maxy,gnk  )
+         call filbo (hmp,hmnestt,"q",minx,maxx,miny,maxy,gnk  )
+         do n=1,ntr
+            call filbo (clp(1-hx,1-hy,1,n),clnestt(1-hx,1-hy,1,n),
+     $                               "q",minx,maxx,miny,maxy,gnk)
+         enddo
+*     
+      endif
+*
+*     **** Horizontal blending (gravity wave absorber) ****
+*
+*     hblen_x: # of points for blending along x (west  and east )
+*     hblen_y: # of points for blending along y (south and north)
+*
+      if ((hblen_x.gt.0).or.(hblen_y.gt.0)) then
+         call nesajr (qpp,qpnestt,minx,maxx,miny,maxy,gnk+1,1,1,
+     $                                          hblen_x,hblen_y)
+         call nesajr ( up, unestt,minx,maxx,miny,maxy,gnk  ,0,1,
+     $                                          hblen_x,hblen_y)
+         call nesajr ( vp, vnestt,minx,maxx,miny,maxy,gnk  ,1,0,
+     $                                          hblen_x,hblen_y)
+         call nesajr (swp,swnestt,minx,maxx,miny,maxy,gnk  ,1,1,
+     $                                          hblen_x,hblen_y)
+         call nesajr (tpp,tpnestt,minx,maxx,miny,maxy,gnk  ,1,1,
+     $                                          hblen_x,hblen_y)
+         call nesajr (hmp,hmnestt,minx,maxx,miny,maxy,gnk  ,1,1,
+     $                                          hblen_x,hblen_y)
+         do n=1,ntr
+            call nesajr (clp(1-hx,1-hy,1,n),clnestt(1-hx,1-hy,1,n),
+     $                minx,maxx,miny,maxy,gnk,1,1,hblen_x,hblen_y)
+         end do
+      endif
+*
+*     **** Vetical blending (gravity wave absorber) ****
+*
+*     * Le pilotage vertical des variables u,v,tp,qp,hm,w et sw tel que
+*     * decrit par les relation (4.2.1)-(4.2.2). La variable grspng
+*     * controle l'epaisseur de la zone de pilotage verticale, elle est
+*     * exprimee en km. Cette variable est passee en "common block" dans
+*     * nestz.cdk.
+*
+ 9988 if (gnpilver.gt.0) then
+         call davvert6 (up ,unestt ,minx,maxx,miny,maxy,gnk,zm,
+     $                                       gnpilver,grpilver)
+         call davvert6 (vp ,vnestt ,minx,maxx,miny,maxy,gnk,zm,
+     $                                       gnpilver,grpilver)
+         call davvert6 (tpp,tpnestt,minx,maxx,miny,maxy,gnk,ztr,
+     $                                       gnpilver,grpilver)
+*
+*    en general le pilotage de la pression n'est pas necessaire
+*
+c        call davvert6 (qpp(minx,miny,1),qpnestt(minx,miny,1),
+c    $                              minx,maxx,miny,maxy,gnk,zm,
+c    $                                       gnpilver,grpilver)
+*
+         call davvert6 (hmp,hmnestt,minx,maxx,miny,maxy,gnk,ztr,
+     $                                       gnpilver,grpilver)
+         call davvert6 (swp,swnestt,minx,maxx,miny,maxy,gnk,zt, 
+     $                                       gnpilver,grpilver)
+      endif
+*
+      if (gnpvw.gt.0) then
+         do n=1,dim3d
+            wk1(n) = 0.
+         end do
+         call davvert6 (swp,wk1 ,minx,maxx,miny,maxy,gnk,zt, 
+     $                                       gnpvw,grpilver)
+      endif
+*
+      if (slab) call slabsym
+*----------------------------------------------------------------------
+      return
+      end
+@

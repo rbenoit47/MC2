@@ -1,0 +1,3 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer lckphy,iolck
+      common /mc2lck/ lckphy,iolck

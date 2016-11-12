@@ -1,0 +1,141 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P ENVIRTHT
+      SUBROUTINE ENVIRTHT(P1,T1,Q1,THT1,R1,RL,
+     *   ALIQ,BLIQ,CLIQ,DLIQ,AICE,BICE,CICE,DICE)
+*
+*
+#include "impnone.cdk"
+*
+*
+      REAL ALIQ,BLIQ,CLIQ,DLIQ,AICE,BICE,CICE,DICE
+      REAL C1,C2,C3,C4,C5
+      REAL EE
+      REAL P00,P1
+      REAL Q1
+      REAL RL,R1
+      REAL TDPT,TFPT,TLOG,TLOGIC,THT
+      REAL THT1,TSAT,TSATIC,TSATLQ,T00,T1
+*
+*AUTHOR
+*          Kain and Fritsch
+*
+*REVISION
+*
+*OBJECT
+*          to calculate environmental equivalent potential
+*          temperature...
+*
+*ARGUMENTS
+*
+*          - Input -
+* P1       pressure
+* T1       temperature
+* Q1       specific humidity
+*
+*          - Output -
+* THT1     environmental equivalent potential temperature
+*
+*          - Input -
+* R1       RATIO2(degree of glaciation)
+* RL       latent heat of vaporization
+* ALIQ     =613.3(constant for calcul. of saturation vapor pressure)
+* BLIQ     =17.502(constant for calcul. of saturation vapor pressure)
+* CLIQ     =4780.8(constant for calcul. of saturation vapor pressure)
+* DLIQ     =32.19(constant for calcul. of saturation vapor pressure)
+* AICE     =613.2(constant for calcul. of saturation vapor pressure)
+* BICE     =22.452(constant for calcul. of saturation vapor pressure)
+* CICE     =6133.0(constant for calcul. of saturation vapor pressure)
+* DICE     =0.61(constant for calcul. of saturation vapor pressure)
+*
+*Notes
+*
+**
+      DATA T00,P00,C1,C2,C3,C4,C5/273.16,1.E5,3374.6525,2.5403,3114.834,
+     *     0.278296,1.0723E-3/
+*
+         IF(R1.LT.1.E-6)THEN
+*
+*                                 Lower than the glaciation zone
+*
+           EE=Q1*P1/(0.622+Q1)
+           TLOG=ALOG(EE/ALIQ)
+           TDPT=(CLIQ-DLIQ*TLOG)/(BLIQ-TLOG)
+           TSAT=TDPT-(.212+1.571E-3*(TDPT-T00)-4.36E-4*(T1-T00))*
+     *           (T1-TDPT)
+           THT=T1*(P00/P1)**(0.2854*(1.-0.28*Q1))
+           THT1=THT*EXP((C1/TSAT-C2)*Q1*(1.+0.81*Q1))
+         ELSEIF(ABS(R1-1.).LT.1.E-6)THEN
+*
+*                                 Above the glaciation zone
+*
+           EE=Q1*P1/(0.622+Q1)
+           TLOG=ALOG(EE/AICE)
+           TFPT=(CICE-DICE*TLOG)/(BICE-TLOG)
+           THT=T1*(P00/P1)**(0.2854*(1.-0.28*Q1))
+           TSAT=TFPT-(.182+1.13E-3*(TFPT-T00)-3.58E-4*(T1-T00))*
+     *           (T1-TFPT)
+           THT1=THT*EXP((C3/TSAT-C4)*Q1*(1.+0.81*Q1))
+         ELSE
+*
+*                                In the glaciation zone
+*
+           EE=Q1*P1/(0.622+Q1)
+           TLOG=ALOG(EE/ALIQ)
+           TDPT=(CLIQ-DLIQ*TLOG)/(BLIQ-TLOG)
+           TLOGIC=ALOG(EE/AICE)
+           TFPT=(CICE-DICE*TLOGIC)/(BICE-TLOGIC)
+           THT=T1*(P00/P1)**(0.2854*(1.-0.28*Q1))
+           TSATLQ=TDPT-(.212+1.571E-3*(TDPT-T00)-4.36E-4*(T1-T00))*
+     *            (T1-TDPT)
+           TSATIC=TFPT-(.182+1.13E-3*(TFPT-T00)-3.58E-4*(T1-T00))*
+     *            (T1-TFPT)
+           TSAT=R1*TSATIC+(1.-R1)*TSATLQ
+           THT1=THT*EXP(RL*Q1*C5/TSAT*(1.+0.81*Q1))
+         ENDIF
+*
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

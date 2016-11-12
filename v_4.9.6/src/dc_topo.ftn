@@ -1,0 +1,134 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***   s/r dc_topo
+      subroutine dc_topo (hh0,maxhh01,maxhh02,ni,nj)
+      implicit none
+*
+      integer ni,nj
+      real hh0(ni,nj,2),maxhh01,maxhh02
+*
+*AUTHOR
+*     Daniel Leuenberger            Apr 2001
+*
+*OBJECT
+*     decomposes a given topography field: INPUT/OUTPUT   hh0(,,1)
+*            in a large-scale part:            hh0(,,1) - hh0(,,2)
+*           and a small-scale part: OUTPUT         hh0(,,2)
+*
+*     a standard laplace filter (1st order) is applied.
+*     the boundary values are treated seperately to assure, that the
+*     also these points are smoothed:
+*     i.e. at the i=1  boundary: A(0,j)    = A(2,j)    for all j
+*                 i=ni boundary: A(ni+1,j) = A(ni-1,j) for all j
+*                 j=1  boundary: A(i,0)    = A(i,2)    for all i
+*                 j=nj boundary: A(i,nj+1) = A(i,nj-1) for all i
+*     nflt determines, how often the filter is applied 
+*     (nflt has to be an even number)
+*     Additionally, the maxima of h0, hh0(,,1) and hh0(,,2) are 
+*     computed and written to standard output.
+*
+      integer i,j,n,nflt
+      real h0(ni,nj), maxh0
+**
+*----------------------------------------------------------------------
+*
+      maxh0   = 0.
+      maxhh01 = 0.
+      maxhh02 = 0.
+
+      nflt = 100
+*     apply nflt times an ideal 2d filter to compute the
+*     longwave part hh0(,,1) of the topography
+
+      do i=1,ni
+      do j=1,nj
+         h0(i,j) = hh0(i,j,1)
+      end do
+      end do  
+*
+      do n=1,nflt/2
+
+*       treat inner points
+        do i=2,ni-1
+        do j=2,nj-1
+           hh0(i,j,2) = hh0(i,j,1)/2.+(hh0(i-1,j,1)+hh0(i+1,j,1)+
+     %                                 hh0(i,j-1,1)+hh0(i,j+1,1))/8.
+        end do
+        end do
+*       treat corner points         
+        hh0(1,1,2)   = hh0(1,1,1)/2.   + hh0(2,1,1)/4.  
+     %               + hh0(1,2,1)/4.
+        hh0(1,nj,2)  = hh0(1,nj,1)/2.  + hh0(2,nj,1)/4. 
+     %               + hh0(1,nj-1,1)/4.
+   
+        hh0(ni,1,2)  = hh0(ni,1,1)/2.  + hh0(ni-1,1,1)/4.  
+     %               + hh0(ni,2,1)/4.
+        hh0(ni,nj,2) = hh0(ni,nj,1)/2. + hh0(ni-1,nj,1)/4. 
+     %               + hh0(ni,nj-1,1)/4.
+*       treat edge points
+        do j=2,nj-1
+          hh0(1,j,2) = hh0(1,j,1)/2.  + hh0(2,j,1)/4. 
+     %               + (hh0(1,j-1,1)  + hh0(1,j+1,1))/8.
+          hh0(ni,j,2)= hh0(ni,j,1)/2. + hh0(ni-1,j,1)/4.  
+     %               + (hh0(ni,j-1,1) + hh0(ni,j+1,1))/8.
+        end do    
+        do i=2,ni-1
+          hh0(i,1,2)  = hh0(i,1,1)/2.  + hh0(i,2,1)/4.     
+     %                + (hh0(i-1,1,1)  + hh0(i+1,1,1))/8.
+          hh0(i,nj,2) = hh0(i,nj,1)/2. + hh0(i,nj-1,1)/4.  
+     %                + (hh0(i-1,nj,1) + hh0(i+1,nj,1))/8.
+        end do
+***********************************************************************
+*       treat inner points
+        do i=2,ni-1
+        do j=2,nj-1
+           hh0(i,j,1) = hh0(i,j,2)/2.+(hh0(i-1,j,2)+hh0(i+1,j,2)+
+     %                                 hh0(i,j-1,2)+hh0(i,j+1,2))/8.
+        end do
+        end do
+*       treat corner points         
+        hh0(1,1,1)   = hh0(1,1,2)/2.   + hh0(2,1,2)/4.  
+     %               + hh0(1,2,2)/4.
+        hh0(1,nj,1)  = hh0(1,nj,2)/2.  + hh0(2,nj,2)/4. 
+     %               + hh0(1,nj-1,2)/4.
+   
+        hh0(ni,1,1)  = hh0(ni,1,2)/2.  + hh0(ni-1,1,2)/4.  
+     %               + hh0(ni,2,2)/4.
+        hh0(ni,nj,1) = hh0(ni,nj,2)/2. + hh0(ni-1,nj,2)/4. 
+     %               + hh0(ni,nj-1,2)/4.
+*       treat edge points
+        do j=2,nj-1
+          hh0(1,j,1) = hh0(1,j,2)/2.  + hh0(2,j,2)/4. 
+     %               + (hh0(1,j-1,2)  + hh0(1,j+1,2))/8.
+          hh0(ni,j,1)= hh0(ni,j,2)/2. + hh0(ni-1,j,2)/4.  
+     %               + (hh0(ni,j-1,2) + hh0(ni,j+1,2))/8.
+        end do    
+        do i=2,ni-1
+          hh0(i,1,1)  = hh0(i,1,2)/2.  + hh0(i,2,2)/4.     
+     %                + (hh0(i-1,1,2)  + hh0(i+1,1,2))/8.
+          hh0(i,nj,1) = hh0(i,nj,2)/2. + hh0(i,nj-1,2)/4.  
+     %                + (hh0(i-1,nj,2) + hh0(i+1,nj,2))/8.
+        end do
+
+      end do
+*
+*     compute the shortwave part hh0(,,2) of the topo with the relation
+*     hh0(,,2) = h0(,) - hh0(,,1)
+*
+      do i=1,ni
+      do j=1,nj
+         hh0(i,j,2) = h0(i,j) - hh0(i,j,1)
+         maxh0 = max(maxh0,h0(i,j))
+         maxhh01 = max(maxhh01,hh0(i,j,1))
+         maxhh02 = max(maxhh02,hh0(i,j,2))
+         hh0(i,j,1) = h0(i,j)
+      end do
+      end do    
+*      
+      print *, 'MAXIMA OF TOPOGRAPHY:'
+      print *, 'MAX TOPO(large scale): ',maxhh01
+      print *, 'MAX TOPO(small scale): ',maxhh02
+      print *, 'MAX TOPO(large+small): ',maxh0
+*
+*----------------------------------------------------------------------
+      return
+      end

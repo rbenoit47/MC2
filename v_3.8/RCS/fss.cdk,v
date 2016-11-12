@@ -1,0 +1,60 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.10;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***********************************************************************
+**  fonction de couche de surface pour le cas stable                ***
+***********************************************************************
+*
+      ff(zs,alfa,zz,usl,hi)=0.5*(-zz*hi+
+     1 sqrt(max(0.,1+2*(2*alfa*usl-hi)*(zz+zs)+hi*(hi-4*alfa*usl)*
+     2       (zz+zs)**2))-sqrt(max(0.,1+2*(2*alfa*usl-hi)*zs+hi*
+     3   (hi-4*alfa*usl)*zs**2))+2*(2*alfa*usl-hi)/(2*sqrt(max(0.,
+     4   -hi*(hi-4*alfa*usl))))*(asin(min(1.,(1-hi/(4*alfa*usl))*(2*
+     5  (zz+zs)*hi-1)+hi/(4*alfa*usl)))-asin(min(1.,(1-hi/(4*alfa*usl))*(2*
+     6  zs*hi-1)+hi/(4*alfa*usl))))-alog(max(0.,((sqrt(max(0.,
+     7  1+2*(2*alfa*usl-hi)*(zz+zs)+hi*(hi-4*alfa*usl)*(zz+zs)**2))
+     8  +2*(2*alfa*usl-hi)*(zz+zs)/2+1)*zs**2)/((sqrt(max(0.,1+2*
+     9   (2*alfa*usl-hi)*zs+hi*(hi-4*alfa*usl)*zs**2))
+     +     +2*(2*alfa*usl-hi)*zs/2+1)*(zz+zs)**2))))
+*
+***********************************************************************
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

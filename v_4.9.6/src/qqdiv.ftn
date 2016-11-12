@@ -1,0 +1,113 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r qqdiv -- Compute vorticity and divergence
+*
+      subroutine qqdiv (qr,dd,u,v,msf,ni,nj,nk)
+      implicit none
+      integer ni,nj,nk
+      real qr(ni,nj,nk),dd(ni,nj,nk),u(ni,nj,nk),v(ni,nj,nk),msf(ni,nj)
+*
+*OBJECT
+*     This subroutine computes relative vorticity (qr)
+*     and the divergence (dd).
+*
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR
+*
+*HISTORY
+*
+**
+#include "grd.cdk"
+#
+      integer i,j,k,err
+      real c1,c2,tr1,tr2
+      pointer (patr1, tr1(ni,nj,*)),(patr2, tr2(ni,nj,*))
+*----------------------------------------------------------------------
+      call hpalloc (patr1  ,ni*nj*nk      ,err,1)
+      call hpalloc (patr2  ,ni*nj*nk      ,err,1)
+      c1 = 0.5
+      c2 =  1. / Grd_dx
+*
+*   * Computing vorticity
+*
+      do k=1,nk
+         do j=1,nj
+            do i=1,ni-1
+               qr(i+1,j,k) = c1*(v(i+1,j,k)+v(i,j,k))
+            end do
+            do i=2,ni-1
+               tr1(i,j,k) = c2*(qr(i+1,j,k)-qr(i,j,k))
+            end do
+         end do
+         do j=1,nj-1
+            do i=2,ni-1
+               tr1(i,j,k) = c1*(tr1(i,j+1,k)+tr1(i,j,k))
+            end do
+         end do
+         do j=1,nj-1
+            do i=1,ni
+               qr(i,j+1,k) = c1*(u(i,j+1,k)+u(i,j,k))
+            end do
+         end do
+         do j=2,nj-1
+            do i=1,ni
+               tr2(i,j,k) = c2*(qr(i,j+1,k)-qr(i,j,k))
+            end do
+         end do
+         do j=2,nj-1
+            do i=1,ni-1
+               tr2(i,j,k) = c1*(tr2(i+1,j,k)+tr2(i,j,k))
+            end do
+         end do
+         do j=2,nj-1
+            do i=2,ni-1
+               qr(i,j,k) = msf(i,j)**2. * (tr1(i,j,k)-tr2(i,j,k))
+            end do
+         end do
+         do j=2,nj-1
+            qr(   1,j,k) = qr(3,j,k) - 2.*(qr(3,j,k)-qr(2,j,k))
+            qr(ni,j,k)   = 2.*qr(ni-1,j,k) - qr(ni-2,j,k)
+         end do
+         do i=1,ni
+            qr(i,   1,k) = qr(i,3,k) - 2.*(qr(i,3,k)-qr(i,2,k))
+            qr(i,nj,k)   = 2.*qr(i,nj-1,k) - qr(i,nj-2,k)
+         end do
+      end do
+*
+*   * Computing divergence
+*
+      do k=1,nk
+         do j=1,nj
+         do i=1,ni-1
+            tr1(i,j,k) = c2*(u(i+1,j,k)-u(i,j,k))
+         end do
+         end do
+         do j=1,nj-1
+         do i=1,ni
+            tr2(i,j,k) = c2*(v(i,j+1,k)-v(i,j,k))
+         end do
+         end do
+         do j=1,nj-1
+         do i=1,ni-1
+            dd(i,j,k) = msf(i,j)**2. * (tr1(i,j,k)+tr2(i,j,k))
+         end do
+         end do
+      end do
+*
+      do k=1,nk
+         do j=1,nj-1
+            dd(ni,j,k) = 2.*dd(ni-1,j,k) - dd(ni-2,j,k)
+         end do
+         do i=1,ni
+            dd(i,nj,k) = 2.*dd(i,nj-1,k) - dd(i,nj-2,k)
+         end do
+      end do
+*
+      call hpdeallc (patr1, err, 1)
+      call hpdeallc (patr2, err, 1)
+*
+*----------------------------------------------------------------------
+      return
+      end

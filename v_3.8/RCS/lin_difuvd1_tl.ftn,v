@@ -1,0 +1,96 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P LIN_DIFUVD1_TL TLM of LIN_DIFUVD1
+*
+      SUBROUTINE LIN_DIFUVD1_TL (E, SC, A, B, C, U, D, N, NK,
+     &                           A5, B5, C5, U5)
+*
+
+      IMPLICIT NONE
+      INTEGER N, NK
+      REAL E(N, NK), A(N, NK), B(N, NK), C(N, NK), U(N, NK), D(N, NK)
+      REAL A5(N, NK), B5(N, NK), C5(N, NK), U5(N, NK)
+      REAL SC
+*
+*Author
+*          S. Laroche (fev 2001)
+*
+*Object
+*          to produce the TLM of tri-diagonal: E=SC*(A,B,C)*U + D
+*
+*Arguments
+*
+*          - Output -
+* E        result of (product +D)
+*
+*          - Input -
+* SC       factor of the operator
+* A        lower-diagonal
+* B        diagonal
+* C        upper-diagonal
+* U        vector to multiply on matrix(A,B,C)
+* D        inhomogeneous term to add
+* N        1st dimension (for all except for U)
+* NK       second dimension
+*
+**
+*
+      INTEGER K, I
+*
+      DO 10 K=1,NK
+*     FAIRE D'ABORD TERME DIAGONAL ET AJOUT DU TERME D DANS ACCUMULATEUR
+         DO 1 I=1,N
+1           E(I,K)=D(I,K)+SC*B5(I,K)*U(I,K)+SC*B(I,K)*U5(I,K)
+         IF (K.GT.1) THEN
+            DO 2 I=1,N
+2              E(I,K)=E(I,K)+SC*A5(I,K)*U(I,K-1)+SC*A(I,K)*U5(I,K-1)
+         ENDIF
+         IF (K.LT.NK) THEN
+            DO 3 I=1,N
+3              E(I,K)=E(I,K)+SC*C5(I,K)*U(I,K+1)+SC*C(I,K)*U5(I,K+1)
+         ENDIF
+10       CONTINUE
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

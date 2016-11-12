@@ -1,0 +1,73 @@
+#!/bin/ksh
+#
+arguments=$*
+. r.entry.dot
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+     -reps    ""   ""  "[remote source directory]" \
+     -repd    ""   ""  "[remote destination directory]" \
+     -machs   ""   ""  "[remote source system]" \
+     -machd   ""   ""  "[remote destination system]" \
+     -attempts  "${attempts:-36}"   "1" "[Number of attempts to try each transfer before giving up]"\
+     -sleeptime "${sleeptime:-300}" "0" "[Interval in seconds between transfer attemps]"\
+     -_status "ABORT"    "ABORT"    "[return status]"  \
+  ++ $arguments`
+#
+if [ ! "${machs}" -o ! "${machd}" -o ! "${reps}" -o ! "${repd}" ] ; then
+  attempts=0
+fi
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+nbfiles=`rsh ${machs} -n "cd ${reps} ; ls -l 2> /dev/null | wc -l"`
+if [ $nbfiles -le 1 ] ; then
+   echo "\n NO FILE TO TRANFER: (Um_xfer_rsync)\n"
+   _status=NOFILE
+   . r.return.dot
+   exit
+fi
+#
+echo "\n ${rsync} ${machs}:${reps} ${machd}:${repd}\n"
+#
+attempt=${attempts}
+while [ ${attempt} -gt 0 ] ; do
+#
+  echo "rsync -a -r -u -v ${reps} ${machd}:${repd}\n"
+  ls -l ${reps}
+  HHi=`hfract 0`
+  rsync -a -r -u -v ${reps} ${machd}:${repd}
+  flag_rcp=$?
+  nsec=`hfract 1 ${HHi}`
+#
+  if [ ${flag_rcp} -ne 0 ] ; then
+#
+    attempt=$(( ${attempt} - 1 ))
+#
+    if [ ${attempt} -gt 0 ]; then
+      echo " Problem with rsync from ${machs}:${reps} at `date`"
+      echo " Process sleeps for ${sleeptime} seconds and will retry"
+      sleep ${sleeptime}
+    else
+      echo " Problem with rsync from ${machs}:${reps} after ${attempts} attempts"
+      echo " Files will remain on ${machs}"
+      attempt=0
+    fi
+#
+  else
+#
+    rsh ${machd} -n "ls -l ${repd} ; cd ${repd} ; ls -l ${reps##*/}"
+    if [ ${attempt} -ne ${attempts} ]; then
+      echo ${ECHOARG} "\n Transfer succeeded at `date` \n"
+    fi
+    nMB=`cd ${reps} ; ls -l * | awk 'BEGIN{s=0}{s = s + $5}END{printf "%.10g",  s / 1048576.}'`
+    xfer_rate=$(echo "scale=10; ${nMB}/${nsec}" | bc -l)
+    echo "Tranfer rate: ${machs}==>${machd} ${nMB} (MB) ${nsec} (sec) ${xfer_rate} (MB / sec)\n"
+    _status=OK
+    attempt=0
+#
+  fi
+#
+done
+#
+. r.return.dot
+#

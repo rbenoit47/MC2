@@ -1,0 +1,56 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine tranche2 (f2d,f3d,j,nis,njs,nks,ni,nk,flag)
+      implicit none
+c
+      integer nis,njs,nks,ni,nk,flag,j
+      real f3d(nis,njs,nks)
+      real f2d(nis,nks)
+c
+      integer i,k
+c
+c     * Michel Desgagne                          Jul   1993
+c
+c----------------------------------------------------------------------
+c
+      if (flag.eq.32) then
+c
+         do 1 k=1,nk
+            do 1 i=1,ni
+               f2d(i,k)  = f3d (i,j,k)
+ 1       continue
+c
+      elseif (flag.eq.23) then
+         
+         do 2 k=1,nk
+            do 2 i=1,ni
+               f3d(i,j,k)= f2d (i,k)
+ 2       continue
+c
+      endif
+c
+      return
+c----------------------------------------------------------------------
+      end
+@

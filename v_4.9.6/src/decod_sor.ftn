@@ -1,0 +1,64 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+***s/r decod_sor
+*
+      subroutine decod_sor (vn,kd,kf,ki,string)
+      implicit none
+*
+      character*(*) vn,string
+      integer kd,kf,ki
+*
+*AUTHOR   Michel Desgagne       June 1999
+*
+**
+
+      character*120 dum_s
+      integer ideb,ifin,lst_s,lst_d,flag
+*-------------------------------------------------------------------
+*
+      lst_s = len(string)
+      lst_d = len(dum_s)
+      if (lst_d.lt.lst_s) then
+         print*, 'CHARACTER STRING dum_s TOO SHORT'
+         print*, ' --- ABORT --- in decod_sor'
+         stop
+      endif
+*
+      dum_s = string(1:lst_s)
+      ifin   = index (dum_s,'[') - 1
+      if (ifin.lt.0) ifin = lst_s
+      vn    = dum_s(1:ifin)
+      if (vn.eq." ")  then
+        write(6,800) "STOP IN decod_sor: UNADMISSIBLE VN=(NAME)",string
+        stop
+      endif
+*
+      ideb = index (dum_s,'[') + 1
+      if (ideb.eq.1) return
+      dum_s = dum_s(ideb:lst_s)
+      ifin   = index (dum_s,',') - 1
+      if (ifin.lt.0) ifin = lst_s
+      read (dum_s(1:ifin),702,iostat=flag) kd
+      if (flag.gt.0) kd = -1
+*
+      ideb = index (dum_s,',') + 1
+      dum_s = dum_s(ideb:lst_s)
+      ifin   = index (dum_s,',') - 1
+      if (ifin.lt.0) ifin = lst_s
+      read (dum_s(1:ifin),702,iostat=flag) kf
+      if (flag.gt.0) kf = -1
+*
+      ideb = index (dum_s,',') + 1
+      dum_s = dum_s(ideb:lst_s)
+      ifin   = index (dum_s,']') - 1
+      if (ifin.lt.0) ifin = lst_s
+      read (dum_s(1:ifin),702,iostat=flag) ki
+      if (flag.gt.0) ki = -1
+*
+ 702  format (i8)
+ 800  format (/1x,a,/"STRING= '",a,"'"/)
+*
+*-------------------------------------------------------------------
+      return
+      end
+*

@@ -1,0 +1,58 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r rdpbus
+*
+      subroutine rdpbus(outbus,prt,topo,nm,par,n,npar,sizobus,
+     $                                        ni,nj,nk,unphy)
+      implicit none
+*
+      integer n,npar,sizobus,ni,nj,nk,unphy
+      character* (*) nm (n)
+      integer par (npar,n) 
+      real outbus (sizobus),prt(ni,nj,nk),topo(ni,nj,2)
+*
+*AUTHOR     Michel Desgagne                Nov   1995
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (rdpbus)
+*    Writes a header and the whole content of the pre-prepared
+*    physics output bus (outbus) on disk.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    outbus     I    R    A    bus containing physics output variables
+*    prt        I    R    A    hydrostatic pressure on thermo. lvls
+*    nm         I    C    A    names on outbus
+*    par        I    I    A    attributes of variables on outbus
+*    n          I    I    S    number of output variables on outbus
+*    npar       I    I    A    number of attributes per variable
+*    sizobus    I    I    S    length of bus OUTBUS
+*    ni         I    I    S    horizontal dimension along X
+*    nj         I    I    S    horizontal dimension along Y
+*    nk         I    I    S    vertical dimension
+*    unphy      I    I    S    fortran unit number for physics output
+*
+*IMPLICIT
+*
+*MODULES
+*
+      integer flag3d
+**
+*----------------------------------------------------------------------
+*
+      read (unphy) topo
+      read (unphy) nm,par
+      read (unphy) outbus
+      read (unphy) flag3d
+      if (flag3d.gt.0) read (unphy) prt
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+

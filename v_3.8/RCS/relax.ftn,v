@@ -1,0 +1,147 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@      subroutine relax
+      write(6,'(A)') "SUBROUTINE RELAX IS OBSOLETE"
+      call qqexit(1)
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d1 5
+a5 98
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  RELAX
+*
+      SUBROUTINE RELAX( ZN , ZE , EN , A , S , W , TAU , XX , N , NK )
+*
+#include "impnone.cdk"
+      INTEGER N,NK
+      REAL ZN(N,NK),ZE(N,NK),EN(N,NK),A(N),S(N,NK),W(N),TAU,XX
+*
+*Author
+*          J. Cote (RPN 1983)
+*
+*Revision
+* 001      J. Cote RPN(Nov 1984)SEF version documentation
+* 002      M. Valin , J. Cote RPN(Oct 1985)Optimization
+* 003      M. Lepine  -  RFE model code revision project (Feb 87)
+* 004      B. Bilodeau  (August 1991)- Adaptation to UNIX
+*
+*Object
+*          to solve the relaxation equation for the mixing length
+*
+*Arguments
+*
+*          - Input/Output -
+* ZN       mixing length of turbulence (contains the value at time
+*          T as input)
+*
+*          - Input -
+* ZE       inverse of the equilibrium mixing length of turbulence
+* EN       turbulent energy
+* A        empirical function linking KM to EN and ZN
+* S        vertical shear of the wind
+* W        convective speed scale
+* TAU      timestep
+* XX       work field
+* N        horizontal dimension
+* NK       vertical dimension
+*
+**
+*
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+      INTEGER J,K
+      REAL C, F, G, X, P22, SI
+      REAL E, XO, EPS, ORI
+      SAVE E,XO,EPS,ORI
+      DATA E, XO, EPS, ORI / 2.718281828459045, 1.6159, 1.E-6, 0.003 /
+*
+      P22(X)=X*(1.0+X*(.50000000000000+X*.01805555555555))
+     X        /(1.0+X*(.83333333333333+X*.14305555555555))
+
+*
+*     SOLUTION DE L'EQUATION DE RELAXATION
+*
+      DO 2 K=1,NK
+         DO 1 J=1,N
+*
+*           CALCUL DE X
+*
+            X=SQRT(W(J)**2+A(J)*ZN(J,K)*SQRT(EN(J,K))*S(J,K))*ZE(J,K)
+     X           *TAU
+*
+*           CALCUL DE A'
+*
+            C = ZN(J,K)*ZE(J,K)-1.0
+*
+*           CALCUL DE C = A' * EXP(A' - X)
+*
+            ZN(J,K) = C * EXP(MAX(C - X ,  - 675.0))
+            C = CVMGT( ZN(J,K) , ORI , ABS(ZN(J,K)).GT.ORI )
+*
+*           SOLUTION DE X = C * EXP( - X)
+*
+            SI = SIGN( 1.0 , C )
+            X = ABS(P22(SQRT(2.0 * ( C * E + 1.0))) - 1.0)
+            C = ALOG(ABS(C))
+            X = CVMGT( X , 0.75 * C , X.LT.XO )
+            G = X * SI
+            F = G + ALOG(X) - C
+            G = G + 1.0
+            X = X * (1.0 - ( F * G )/( G * G + 0.5 * F))
+            G = X * SI
+            F = G + ALOG(X) - C
+            G = G + 1.0
+            X = X * (1.0 - ( F * G )/( G * G + 0.5 * F)) * SI
+            X = CVMGT( X ,
+     Y                 ZN(J,K)*(1.0-ZN(J,K)*(1.0+1.4*ZN(J,K))/
+     Z                 (1.0+ZN(J,K)*(2.9+1.68333333333*ZN(J,K)))) ,
+     T                 ABS(ZN(J,K)).GT.ORI )
+*
+*           ON RENORMALISE LA SOLUTION
+*
+    1       ZN(J,K) = (X + 1.0)/ZE(J,K)
+    2 CONTINUE
+*
+      RETURN
+      END
+@

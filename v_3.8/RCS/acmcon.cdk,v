@@ -1,0 +1,77 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+      REAL HC,HF,HM,AA,DEPTH
+      INTEGER LHEAT,MOIADJ,MOIFLX,ITRET,ITRMAX
+      REAL HCI,HCMTOL,HMHCMIN,TOL,TRESHLD
+      COMMON/ACMCON/HC,HF,HM,AA,DEPTH,LHEAT,MOIADJ,MOIFLX,ITRET,
+     X              ITRMAX,HCI,HCMTOL,HMHCMIN,TOL,TRESHLD
+
+#if defined(DOC)
+*COMMON BLOCK /ACMCON/
+*          contains variables related to humidity calculations.  All
+*          are initialized in WETCON.
+*
+* HC       between 0.0 and 1.0; threshold (Relative Humidity) for
+*          onset of  moist convective adjustment
+* HF       between 0.0 and 1.0; threshold (Relative Humidity) for
+*          upward moisture flux during convective adjustment
+* HM       between 0.0 and 1.0; an input in the calculation of the
+*          saturation (R.H) for the first iteration
+* AA       =0.0 unless HM<0 then AA=1.0/(6.0*(1.0-HM)**2)
+* DEPTH    1.0/(RAUW*GRAV) where RAUW is in COMMON CTESPHY
+* LHEAT    if=1; to add the latent heat released by condensation
+* MOIADJ   if=1; adjusts gamma towards wet adiabat
+*          if=0; adjusts gamma towards dry adiabat
+* MOIFLX   if=1; moves the humidity upward
+* ITRET    (recommended to be 1) iteration number where one makes the
+*          "Gather-Scatter"
+* ITRMAX   ABS(ITRMAX) gives the number of the last iteration, if <0,
+*          abort. It is commended to be (-4*NK)
+* HCI      =1 unless HC not 1 then HCI = 1.0/(1-HC)
+* HCMTOL   HC - TOL
+* HMHCMIN  minimum of either (HM or HC)
+* TOL      =.01
+* TRESHLD  =.01
+*
+#endif
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

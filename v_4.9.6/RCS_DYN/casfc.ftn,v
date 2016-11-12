@@ -1,0 +1,200 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r
+*
+      subroutine casfc
+      implicit none
+*
+*author   M.Desgagne November 2001
+*
+*revision
+*
+      integer fnom,fstouv,fstinf,fstinl,fstprm,fstluk,
+     $        fstecr,fstfrm,fclos,fstopl,fstsel,fstlis,longueur
+      external fnom,fstouv,fstinf,fstinl,fstprm,fstluk,
+     $         fstecr,fstfrm,fclos,fstopl,fstsel,fstlis,longueur
+*
+      character*1  typ_S, grd_S
+      character*2  var_S, nomvar, nvar
+      character*8  lab_S, lste_S(2)
+      character*16 ladate
+      integer iun1,iun2
+      parameter (iun1 = 51, iun2 = 52)
+      integer dte, det, ipas, p1, p2, p3, g1, g2, g3, g4, bit,
+     $        dty, swa, lng, dlf, ubc, ex1, ex2, ex3, ip3_ts,ip3
+      integer i,j,ni,nj,nk,err,p1_4,p1_5,key,key1,key2,ni1,nj1
+      integer, parameter :: nmax=4000
+      real, dimension (:), allocatable :: w1
+      integer nlis,lislon,header
+      parameter (nlis = 1024)
+      integer liste (nlis),fstinl,datev
+      data header /4/
+      character*4 listevar(4)
+      data listevar /'I9','I7','I0','TM'/
+*
+*--------------------------------------------------------------------
+*  
+      call convip ( p1_4, 4., 3, 1, lab_S, .false. )
+      call convip ( p1_5, 5., 3, 1, lab_S, .false. )
+*
+      read(5,'(a)') ladate
+      call datp2f (datev,ladate)
+*
+      if (fnom(iun2,'sfc_from_previous_run','RND+OLD',0).ge.0) then
+         if (fstouv(iun2,'RND').lt.0) then
+            write (6,8001) 'sfc_from_previous_run'
+            stop
+         endif
+      else
+         write (6,8000) 'sfc_from_previous_run'
+         stop
+      endif
+*
+      err = fnom(iun1,'sfc_for_newrun','RND',0)
+      err = fstouv(iun1,'RND')
+*
+      do j=1,4
+         nomvar = listevar(j)
+         err = fstinl (iun2,ni,nj,nk,datev,' ',-1,-1,-1,' ',nomvar,
+     $                                          liste,lislon,nlis)
+         if (lislon.gt.0) then 
+            allocate (w1(ni*nj+header))
+            do i=1,lislon
+               err = fstluk( w1, liste(i), ni,nj,nk) 
+               print*, 'ello ',err
+               err = fstprm( liste(i), dte, det, ipas, ni, nj, nk, bit,
+     $                     dty, p1, p2, p3, typ_S, var_S, lab_S, grd_S,
+     $                     g1, g2, g3, g4, swa, lng,dlf,ubc,ex1,ex2,ex3)
+               print*, 'ello2 ',err
+               err = fstecr( w1, w1, -bit, iun1, dte, det, ipas, ni, nj,
+     $                        1, p1, p2, p3, typ_S, nomvar, lab_S, 
+     $                       grd_S, g1, g2, g3, g4, dty, .true.)
+               print*, 'ello3 ',err
+            end do
+            deallocate (w1)
+         endif
+      end do
+*
+      key = fstinf (iun2,ni,nj,nk,datev,' ',p1_4,-1,-1,' ','SD')
+      if (key.ge.0) then 
+         allocate (w1(ni*nj+header))
+         err = fstluk( w1, key, ni,nj,nk)   
+         err = fstprm( key, dte, det, ipas, ni, nj, nk, bit,
+     $                 dty, p1, p2, p3, typ_S, var_S, lab_S, grd_S,
+     $                 g1, g2, g3, g4, swa, lng,dlf,ubc,ex1,ex2,ex3)
+         err = fstecr( w1, w1, -bit, iun1, dte, det, ipas, ni, nj,
+     $                        1, 0, p2, p3, typ_S, 'SD', lab_S, 
+     $                        grd_S, g1, g2, g3, g4, dty, .true.)
+         deallocate (w1)
+      endif
+*
+      key = fstinf (iun2,ni,nj,nk,datev,' ',p1_5,-1,-1,' ','AL')
+      if (key.ge.0) then 
+         allocate (w1(ni*nj+header))
+         err = fstluk( w1, key, ni,nj,nk)   
+         err = fstprm( key, dte, det, ipas, ni, nj, nk, bit,
+     $                 dty, p1, p2, p3, typ_S, var_S, lab_S, grd_S,
+     $                 g1, g2, g3, g4, swa, lng,dlf,ubc,ex1,ex2,ex3)
+         err = fstecr( w1, w1, -bit, iun1, dte, det, ipas, ni, nj,
+     $                        1, 0, p2, p3, typ_S, 'AL', lab_S, 
+     $                        grd_S, g1, g2, g3, g4, dty, .true.)
+         deallocate (w1)
+      endif
+*
+      key = fstinf (iun2,ni,nj,nk,datev,' ',-1,-1,-1,' ','GL')
+      if (key.ge.0) then 
+         allocate (w1(ni*nj+header))
+         err = fstluk( w1, key, ni,nj,nk)   
+         err = fstprm( key, dte, det, ipas, ni, nj, nk, bit,
+     $                 dty, p1, p2, p3, typ_S, var_S, lab_S, grd_S,
+     $                 g1, g2, g3, g4, swa, lng,dlf,ubc,ex1,ex2,ex3)
+         err = fstecr( w1, w1, -bit, iun1, dte, det, ipas, ni, nj,
+     $                        1, 0, p2, p3, typ_S, 'LG', lab_S, 
+     $                        grd_S, g1, g2, g3, g4, dty, .true.)
+         deallocate (w1)
+      endif
+*
+      key1 = fstinf (iun2,ni1,nj,nk,-1,' ',g1,g2,g3,' ','>>')
+      key2 = fstinf (iun2,ni,nj1,nk,-1,' ',g1,g2,g3,' ','^^')
+      if ((key1.ge.0).and.(key2.ge.0)) then 
+         allocate (w1(max(ni1,nj1)+header))
+         err = fstprm( key1, dte, det, ipas, ni, nj, nk, bit,
+     $                 dty, p1, p2, p3, typ_S, var_S, lab_S, grd_S,
+     $                 g1, g2, g3, g4, swa, lng,dlf,ubc,ex1,ex2,ex3)
+         err = fstluk( w1, key1, ni,nj,nk)  
+         err = fstecr( w1, w1, -bit, iun1, dte, det, ipas, ni1, 1,
+     $                        1, p1, p2, p3, typ_S, '>>', lab_S, 
+     $                        grd_S, g1, g2, g3, g4, dty, .true.)
+         err = fstluk( w1, key2, ni,nj,nk) 
+         err = fstecr( w1, w1, -bit, iun1, dte, det, ipas, ni, nj1,
+     $                        1, p1, p2, p3, typ_S, '^^', lab_S, 
+     $                        grd_S, g1, g2, g3, g4, dty, .true.)
+         deallocate (w1)
+      endif
+*
+      err = fstfrm(iun1)
+      err = fclos(iun1)
+      err = fstfrm(iun2)
+      err = fclos(iun2)
+*
+ 8000 format (/' Unable to fnom: ',a/)
+ 8001 format (/' Unable to fstouv: ',a/)
+*
+*---------------------------------------------------------------------
+*
+      return
+      end
+***s/r datp2f
+      subroutine datp2f (fstdate,mc2date)
+      implicit none
+*
+      integer fstdate
+      character* (*) mc2date
+**    
+      integer yy,mo,dd,hh,mm,ss,dat2,dat3,newdate,err
+      character*4 cyy
+      character*2 cmo,cdd,chh,cmm,css
+*-------------------------------------------------------------------
+      cyy=mc2date(1:4)
+      cmo=mc2date(5:6)
+      cdd=mc2date(7:8)
+      chh=mc2date(10:11)
+      cmm=mc2date(12:13)
+      css=mc2date(14:15)
+*
+      read(cyy,'(I4)') yy
+      read(cmo,'(I2)') mo
+      read(cdd,'(I2)') dd
+      read(chh,'(I2)') hh
+      read(cmm,'(I2)') mm
+      read(css,'(I2)') ss
+*    
+      dat2= yy*10000 + mo*100 + dd
+      dat3= hh*1000000 + mm*10000 + ss*100
+      err = newdate(fstdate,dat2,dat3,3)
+*-------------------------------------------------------------------
+      return
+      end
+
+@

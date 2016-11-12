@@ -1,0 +1,41 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r sormc2
+*
+      subroutine sormc2
+      implicit none
+*
+**
+#include "sor.cdk"
+#include "yomdyn.cdk"
+#include "partopo.cdk"
+*
+      logical inictes
+      integer ng,progfil,flag,status,i
+*
+*----------------------------------------------------------------------
+*
+      write (6,200)
+*
+      call sorctrl (status)
+*
+      numproc = 1
+      if (.not.inictes (6)) stop
+*
+      print'(/a/)', ' ***** PROCESSING DYNAMICS OUTPUT *****'
+      flag = progfil ('process/zmc2.progd',ng,0,rndoseq)
+      if (flag.ge.0) call progout (ng)
+      print'(/a/)', ' ***** PROCESSING DONE... *****'
+*
+      print'(/a/)', ' ***** PROCESSING PHYSICS  OUTPUT *****'
+      flag = progfil ('process/zmc2.progp',ng,1,rndoseq)
+      if (flag.ge.0) call physout (ng)
+      print'(/a/)', ' ***** PROCESSING DONE... *****'
+*    
+      write (6,500)
+*
+*----------------------------------------------------------------------
+ 200  format (/10x,'***** SORMC2_V4.9.3   --   RUN TIME *****'/)
+ 500  format (/,1x,'SORMC2 SE TERMINE NORMALEMENT'/)
+*
+      stop
+      end

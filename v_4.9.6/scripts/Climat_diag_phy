@@ -1,0 +1,355 @@
+#! /bin/sh
+#
+cclargs    0$                   "[Calcule la moyenne et la variance des accumulateurs 2D]"\
+      -exp       ",,,," ",,,,"        "[Prefixe commun aux fichiers de donnees]"\
+      -rep       "."    ",,,,"        "[Repertoire contenant ces donnees]"\
+      -outnam    " "    ",,,,"        "[Prefixe commun au fichiers de resultats]"\
+      -destin    " "    ",,,,"        "[Repertoire ou les resultats seront deposes]"\
+      -deltah     18     6            "[Nombre d'heures entre les echantillons accumules]"\
+      -varscal   "ab"   ",,,,"        "[Variable utilisee pour la mise-a-l'echelle des acccumulateurs]"\
+      -graphe+   "OUI"  "NON"         "[Presentation graphique des resultats (metacode)]"\
+      -gaussian+ "NON"  "OUI"         "[Les donnees sont sur des grilles gaussiennes]"\
+      -lon        192   ",,,,"        "[Dimension (longitudes) des grilles gaussiennes intermediaires]"\
+      -lat        96    ",,,,"        "[Dimension (latitudes) des grilles gaussiennes intermediaires]"\
+      -zoncal+   "OUI"  "NON"         "[Calcul des moyennes zonale en sus]"\
+      -bnce+     "NON"  "OUI"         "[transferer les donnees vers leur destination finale]"\
+      -b_mach    ""     ""            "[machine de destination finale, si requis]" \
+      -b_addres  ""     ""            "[repertoire sur b_mach ou les donnees sont deposees]" \
+      -clean+    "NON"  "OUI"         "[effacer les donnees apres leur transfert sur b_mach]"\
+      -debug+    "NON"  "OUI"         "[Activer le mode DEBUG]"\
+      -do_diag+  "OUI"  "NON"         "[On fait les diagnostiques en mode DEBUG]"\
+      -travail   ${BIG_TMPDIR} ",,,," "[Repertoire de travail (BIG_TMPDIR)]"\
+      ++ $* > ${BIG_TMPDIR}/cclargs_diag_phy.out$$
+#
+. ${BIG_TMPDIR}/cclargs_diag_phy.out$$ && /bin/rm -f ${BIG_TMPDIR}/cclargs_diag_phy.out$$
+#
+# Description...
+#    Cette script calcule les moyennes et variances temporelles
+#    des variables contenues dans une serie de fichiers de sorties
+#    de la physique (v3.66+, en mode climat)
+#
+# Parametres...
+# exp      - prefixe commun aux fichiers de donnees
+# rep      - repertoire contenant ces donnees
+# outnam   - prefixe commun au fichiers de resultats
+# destin   - repertoire ou les resultats seront deposes
+# deltah   - nombre d'heures entre les echantillons
+# graphe   - OUI: presentation graphique des resultats (metacode) 
+# gaussian - OUI: Les donnees sont sur des grilles gaussiennes
+# lon      - dimension (longitudes) des grilles gaussiennes intermediaires
+# lat      - dimension (latitudes) des grilles gaussiennes intermediaires
+# zoncal   - effectuer le calcul des moyennes zonale en sus
+# debug    - activer le mode DEBUG
+# do_diag  - On fait les diagnostiques en mode DEBUG
+# travail  - repertoire de travail (BIG_TMPDIR)
+#
+# Auteur...
+#    Bernard Dugas
+#
+# Revisions...
+#    001 - septembre 2000: version initiale
+#    002 - novembre  2000; enlever MG & co. de la surface
+#    003 - decembre  2000; 1) utiliser la variable $EDITFST et
+#                          2) ajouter ZP dans la liste des exclusions
+#    004 - fevrier   2001; modifs a la liste: ajouter S7 et S8; enlever AW
+#    005 - decembre  2001; adaptation a GEM/DM v2.3.1
+#    006 - mars      2002: ajouter la cle do_diag
+#    007 - aout      2002: remplacer make_diag, make_surfacc_mean et mv2cfs par
+#                          Climat_diag, Climat_surfacc_mean et Climat_mv2cfs
+#    008 - aout      2002: ajouter la cle zoncal (Katja Winger)
+#    009 - aout      2002: exclure tous les champs de la dynamique
+#    010 - mai       2003: modifier l'appel a cclargs
+#
+if [ ! -d ${rep} ]; then
+  echo "Le repertoire de donnees initiale ${rep} n'existe pas"
+  exit 1
+fi
+#
+rep=`true_path ${rep}`
+#
+# S'occuper des repertoires de destination et de travail
+#
+if [ ${destin}ation = ation ]; then
+  destin=${rep}
+else
+  if [ ! -d ${destin} ]; then mkdir ${destin} ; fi
+  destin=`true_path ${destin}`
+fi
+#
+if [ ! -d ${travail} ]; then
+  mkdir ${travail}
+  nouveau_travail=OUI
+else
+  nouveau_travail=NON
+fi
+#
+travail=`true_path ${travail}` ; cd ${travail}
+#
+# Definir certaines variables d'environnement de R.DIAG
+USE_BIG_TMPDIR=oui ; export USE_BIG_TMPDIR
+BIG_TMPDIR=${travail} ; export BIG_TMPDIR
+ECHO_COMMAND_LINE=on ; export ECHO_COMMAND_LINE
+RDIAG=${RDIAG:-r.diag}
+EDITFST=${EDITFST:-editfst}
+#
+if [ "${DIAGNOSTIC_EXIT}"var = var ]; then
+  DIAGNOSTIC_EXIT=${BIG_TMPDIR}/DIAGNOSTIC_EXIT ; export DIAGNOSTIC_EXIT
+  if [ -s ${DIAGNOSTIC_EXIT} ]; then rm -f ${DIAGNOSTIC_EXIT} ; fi
+  touch ${DIAGNOSTIC_EXIT}
+elif [ -s ${DIAGNOSTIC_EXIT} ]; then
+  exit 99
+fi
+#
+if [ ${rep} = ${travail} ]; then
+  echo " "
+  echo "Les repertoires rep et travail doivent etre differents..."
+  echo "rep = travail = ${travail}"
+  exit 2
+fi
+#
+# Conversions de l'anglais au francais
+#
+if [ ${bnce} = YES ]; then
+  bnce=OUI
+elif [ ${bnce} = NO ]; then
+  bnce=NON
+fi
+#
+if [ ${clean} = YES ]; then
+  clean=OUI
+elif [ ${clean} = NO ]; then
+  clean=NON
+fi
+#
+if [ ${debug} = YES ]; then
+  debug=OUI
+elif [ ${debug} = NO ]; then
+  debug=NON
+fi
+#
+if [ ${do_diag} = YES ]; then
+  do_diag=OUI
+elif [ ${do_diag} = NO ]; then
+  do_diag=NON
+fi
+#
+if [ ${gaussian} = YES ]; then
+  gaussian=OUI
+elif [ ${gaussian} = NO ]; then
+  gaussian=NON
+fi
+#
+if [ ${zoncal} = YES ]; then
+  zoncal=OUI
+elif [ ${zoncal} = NO ]; then
+  zoncal=NON
+fi
+#
+if [ ${graphe} = YES ]; then
+  graphe=OUI
+elif [ ${graphe} = NO ]; then
+  graphe=NON
+fi
+#
+if [ ${outnam}e = e ]; then outnam=d${exp} ; fi
+#
+#
+# Liste des variables multi-niveaux et qui seraont traitees par Climat_diag *
+# *************************************************************************
+liste="al fc fv i0 i1 i7 i9 sd"
+LISTE="'AL','FC','FV','I0','I1','I7','I9','SD'"
+LISTED="'VT','GZ','HU','TT','ES','UU','VV','WW'"
+# *************************************************************************
+# *************************************************************************
+#
+# Verifier si mode debug est actif
+#
+if [ ${debug} = OUI ]; then
+  echo " "
+  echo "Appel a Climat_diag_phy..."
+  echo "  exp      = ${exp}"
+  echo "  rep      = ${rep}"
+  echo "  outnam   = ${outnam}"
+  echo "  destin   = ${destin}"
+  echo "  deltah   = ${deltah}"
+  echo "  varscal  = ${varscal}"
+  echo "  graphe   = ${graphe}"
+  echo "  gaussian = ${gaussian}"
+  echo "  lon      = ${lon}"
+  echo "  lat      = ${lat}"
+  echo "  zoncal   = ${zoncal}"
+  echo "  bnce     = ${bnce}"
+  echo "  b_mach   = ${b_mach}"
+  echo "  b_addres = ${b_addres}"
+  echo "  clean    = ${clean}"
+  echo "  travail  = ${travail}"
+  echo "  do_diag  = ${do_diag}"
+  echo " "
+else
+  do_diag=OUI
+fi
+#
+NOMVAR="ALL" ; export NOMVAR
+#
+reditfst()
+{
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+  ${EDITFST} $@
+  editfst_stat=$?
+  if [ ${editfst_stat} != 0 ]; then
+    echo "Erreur ${editfst_stat} dans ${EDITFST}" > ${DIAGNOSTIC_EXIT}
+  fi
+fi
+}
+#
+r.echo " "
+r.echo "Climat_diag_phy: RDIAG          =${RDIAG}"
+r.echo "Climat_diag_phy: BIG_TMPDIR     =${BIG_TMPDIR}"
+r.echo "Climat_diag_phy: DIAGNOSTIC_EXIT=${DIAGNOSTIC_EXIT}"
+r.echo "Climat_diag_phy: Starting at `date`"
+r.echo " "
+#
+if [ ${debug} = OUI ]; then set -x ; fi
+#
+# Deplacer toutes les donnees dans le repertoire de destination
+#
+if [ ${rep} != ${destin} ]; then
+  cd ${rep} ; mv ${exp}* ${destin} ; cd ${travail}
+fi
+#
+# Construire les fichiers qui seront sujets aux diagnostiques
+#
+nombre=`ls -1 ${destin}/${exp}* | wc -l`
+if [ ${nombre} = 0 ]; then 
+  r.echo " "
+  r.echo "Climat_diag_phy: mauvais rep/exp ${rep}/${exp}"
+  r.echo " "
+  exit 3
+fi
+#
+if [ ${debug} = OUI ]; then set -x ; fi
+#
+for infile in ${destin}/${exp}*
+do
+#
+  for outfile in ${liste}
+  do
+#
+    nom=`echo ${outfile} | tr "[a-z]" "[A-Z]"`
+#
+    echo "desire(-1,\"${nom}\")" | \
+    reditfst -s ${infile} -ds -d ${exp}_${outfile} -nobox
+#
+  done
+#
+  echo "\
+  exclure(-1,[${LISTE},'>>','^^'])
+  exclure(-1,[${LISTED}])" | \
+  reditfst -s ${infile} -ds -d ${exp}_restant -nobox
+#
+  cp ${infile} dernier
+# rm -f ${infile}
+#
+done
+#
+# Isoler les accumulateurs de la v3.66+ ;
+# on enleve egalement les differents masques et les forcages
+# constants dans le temps et qui sont presents au pas de temps 0.
+echo "\
+desire(-1,['AR','AB','AU','AD','AS','NF','A1','A2'])
+desire(-1,['A3','A4','AE','FR','PC','PE','PR','RN','SN'])
+desire(-1,['AH','AG','AW','AV','AI','N0','N2','N3','N4'])
+desire(-1,['O1','O5','O6','O7','O8','O9','S7','S8'])" |\
+reditfst -s ${exp}_restant -ds -d ${exp}_accumulateurs -nobox
+#
+echo "\
+exclure(-1,['AR','AB','AU','AD','AS','NF','A1','A2'])
+exclure(-1,['A3','A4','AE','FR','PC','PE','PR','RN','SN'])
+exclure(-1,['AH','AG','AW','AV','AI','N0','N2','N3','N4'])
+exclure(-1,['O1','O5','O6','O7','O8','O9','S7','S8'])
+exclure(-1,['2F','LA','LH','LO','MG','ML','MT','ZP'])" |\
+reditfst -s ${exp}_restant -ds -d ${exp}_surface -nobox
+#
+r.delf -dn ${exp}_restant
+#
+# Diagnostique des variables multi-niveaux (independamment les unes des autres)
+for outfile in ${liste} surface
+do
+#
+  if [ ${gaussian} = NON ]; then
+    echo "desire(-1,['>>','^^'])" | \
+    reditfst -s dernier -ds -d ${exp}_${outfile} -nobox
+  fi
+#
+  Climat_diag -exp ${exp}_${outfile} -covar NON \
+            -graphe NON -tri NON -vents NON -gaussian ${gaussian} \
+            -destin . -travail ${travail}/$$ -debug ${debug} \
+            -do_diag ${do_diag} -zoncal ${zoncal}
+#
+  if [ -s ${DIAGNOSTIC_EXIT} ]; then
+    echo "Dans Climat_diag_phy: Arret apres Climat_diag sur ${outfile}"
+    exit 99
+  fi
+#
+done
+#
+# Joindre les resultats des diagnostiques multi-niveaux
+#
+if [ ${zoncal} = OUI ] ; then zonal_join='_rmsz _zonal'; fi
+#
+for ordre in _moyenne _variance
+do
+#
+  for type in " " ${zonal_join}
+  do
+#
+    tous=d${exp}_surface${ordre}${type}
+#
+    for outfile in ${liste}
+    do
+      tous="${tous} d${exp}_${outfile}${ordre}${type}"
+    done
+#
+    ${RDIAG} joinup ${destin}/${outnam}_nonacc${ordre}${type} ${tous}
+#
+  done
+#
+done
+#
+if [ ${gaussian} = NON ]; then
+  echo "desire(-1,['>>','^^'])" | \
+  reditfst -s dernier -ds -d ${exp}_accumulateurs -nobox
+fi
+#
+graphe=${zoncal}
+#
+# Diagnostiquer tous les accumulateurs d'un seul coup
+Climat_surfacc_mean -exp ${exp}_accumulateurs -outnam ${outnam}_accumul \
+        -deltah ${deltah} -varscal ${varscal} -graphe ${graphe} \
+        -gaussian ${gaussian} -lon ${lon} -lat ${lat} -tri NON \
+        -travail ${travail}/$$ -destin ${destin} -debug ${debug}
+#
+if [ -s ${DIAGNOSTIC_EXIT} ]; then
+  echo "Dans Climat_diag_phy: Arret apres make_surfacc_mean"
+  exit 99
+fi
+#
+# Faire le menage si tout a fonctionne
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+  cd ${destin}
+  if [ ${nouveau_travail} = OUI ]; then rm -rf ${travail} ; fi
+  if [ ${bnce} = OUI ]; then
+     Climat_mv2cfs -pref ${exp} \
+            -arcnam ${b_addres}/${outnam} \
+            -mach ${b_mach} -clean ${clean} \
+            -travail ${rep} -info
+     if [ $? != 0 ]; then
+       echo "probleme avec Climat_mv2cfs dans Climat_diag_phy..."
+       exit 4
+     fi
+  fi
+  r.echo "Climat_diag_phy: Ending at `date`"
+  exit 0
+fi
+#
+exit 5

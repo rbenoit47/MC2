@@ -1,0 +1,128 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R MFODQA  -  CALCULE LA DERIVEE SELON T DE QSAT
+*              -  (EAU SEULEMENT)
+*
+#include "phy_macros_f.h"
+      SUBROUTINE MFODQA(DQ,TT,PX,LNPS,MODP,NI,NK,N)
+*
+#include "impnone.cdk"
+*
+      INTEGER NI, NK, N, MODP
+      REAL DQ(NI,NK), TT(NI,NK)
+      REAL PX(NK), LNPS(NI,*)
+      REAL TEMP1
+*
+*Author
+*          N. Brunet  (Jan91)
+*
+*Revision
+* 001      B. Bilodeau  (August 1991)- Adaptation to UNIX
+* 002      B. Bilodeau  (January 2001) - Automatic arrays
+*
+*Object
+*          to calculate the derivative of QSAT(saturation specific
+*          humidity) according to T (water phase considered only for
+*          all temperatures)
+*
+*Arguments
+*
+*          - Output -
+* DQ       derivative of QSAT (saturation specific humidity)
+*
+*          - Input -
+* TT       temperature in Kelvins
+* PX       see MODP
+* LNPS     see MODP
+* MODP     pressure mode (SI units only):
+*          =0; pressure level in PX
+*          =1; sigma level in PX and PS(surface pressure) in LNPS
+*          =2; sigma level in PX and logarithm of sigma level in
+*          LNPS
+*          =3; all points of pressure in LNPS(NI,*) in Pascals
+*          =4; sigma level in PX and logarithm of sigma level in
+*          LNPS(in millibars unless using SI units)
+*          =5; logarithm of pressure level in PX(in millibars unless
+*          using SI units)
+* NI       horizontal dimension
+* NK       vertical dimension
+* N        number of points to process
+*
+*IMPLICITES
+#include "consphy.cdk"
+*MODULES
+      EXTERNAL INCTPHY
+**
+*--------------------------------------------------------------------
+      REAL QS
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( PN , REAL , (N) )
+*
+************************************************************************
+*
+      INTEGER K, I
+#include "dintern.cdk"
+#include "fintern.cdk"
+*--------------------------------------------------------------------
+#include "initcph.cdk"
+*
+*
+      DO 10 K=1,NK
+*
+#include "modpr2.cdk"
+*
+      DO 15 I=1,N
+         TEMP1 = PN(I)
+         QS = FOQSA(TT(I,K),TEMP1)
+         DQ(I,K) = FODQA(QS,TT(I,K))
+15    CONTINUE
+10    CONTINUE
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,83 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r intedge  --  Interpolate value on the horizontal edges of a cube.
+*
+      subroutine intedge (f,ni,nj,nk,nis,njs,nks)
+      implicit none
+*
+      integer ni,nj,nk,nis,njs,nks
+      real f (nis,njs,nks)
+*
+*AUTHOR     Michel Desgagne                    Nov    1993
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (intedge)
+*     Interpolate value on the horizontal edges of a cube.
+*     Interpolation is linear.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    f         I/O   R     A    cube on which to interpolate edges
+*    nis        I     I    S    dimension maximale du vecteur selon X
+*    njs        I     I    S    dimension maximale du vecteur selon Y
+*    nks        I     I    S    dimension maximale du vecteur selon Z
+*    ni         I     I    S    dimension de la grille selon X
+*    nj         I     I    S    dimension de la grille selon Y
+*    nk         I     I    S    dimension de la grille selon Z
+*
+*IMPLICIT
+*
+*
+*MODULES
+*
+**
+      integer i,j,k
+*----------------------------------------------------------------------
+*
+      do 10 k=1,nk
+         do 1 j=2,nj-1
+c            f(1 ,j,k) = 2.*f(2   ,j,k) - f(3   ,j,k)
+c            f(ni,j,k) = 2.*f(ni-1,j,k) - f(ni-2,j,k)
+            f(1 ,j,k) = f(2   ,j,k)
+            f(ni,j,k) = f(ni-1,j,k)
+ 1       continue
+*    
+         do 2 i=1,ni
+c            f(i ,1,k) = 2.*f(i   ,2,k) - f(i   ,3,k)
+c            f(i,nj,k) = 2.*f(i,nj-1,k) - f(i,nj-2,k)
+            f(i ,1,k) = f(i   ,2,k)
+            f(i,nj,k) = f(i,nj-1,k)
+ 2       continue
+ 10   continue
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

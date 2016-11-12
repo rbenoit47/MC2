@@ -1,0 +1,126 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P kdifsimp
+      subroutine kdifsimp(km,ue,z,z0,f,kmin,nk,n)
+
+#include "impnone.cdk"
+ 
+      real km(n,nk),ue(n),z(n,nk),z0(n),f(n)
+      real a,b,ah,fmin,h,G,lnro,ci,par,ff,df
+      real kmin,fe
+      integer nk,n,it,i,j
+
+*Author
+*      Yves Delage (August 1999)
+*
+*Revisions
+* 001      S. Laroche (Nov 2002) - bug fix in lnro
+*
+*
+*Object
+*      Calculates vertical diffusion coefficient and friction velocity for
+*      simplified physics using resistance theory (JAS 25, 1015-1020)
+*
+*Arguments
+
+*         - Output -
+
+*KM     diffusion coefficients (m2/s)
+*UE     linearized friction velocity, used to calculate transfer
+*       coefficient for the surface layer (m/s)
+
+*         - Input -
+
+*Z      height of levels for KM (m)
+*Z0     roughness length (m)
+*F      Coriolis factor (1/s)
+*KMIN   minimum value for km (DIFBAK)
+*NK     number of levels
+*N      horizontal dimension
+
+*
+#include "consphy.cdk"
+*
+**
+
+*  constantes physiques
+
+      data a,b /1.0, 5.0 /
+      save a,b
+
+*  parametres formels
+
+      data G, ah, fmin /10., 0.05, 5.e-5 /
+      save G, ah, fmin
+
+*  calcul de la vitesse de frottement
+      do 50 i=1,n
+      fe=max(abs(f(i)),fmin)
+      lnro = log(G/(sqrt(fe*1.e-4)*z0(i)))
+      ci=30.
+*     do it=1,3
+        par=sqrt((KARMAN*ci)**2-b**2)
+        ff=a-lnro+log(ci)+par
+        df=1/ci+1/par*KARMAN**2*ci
+        ci=ci-ff/df
+        par=sqrt((KARMAN*ci)**2-b**2)
+        ff=a-lnro+log(ci)+par
+        df=1/ci+1/par*KARMAN**2*ci
+        ci=ci-ff/df
+        par=sqrt((KARMAN*ci)**2-b**2)
+        ff=a-lnro+log(ci)+par
+        df=1/ci+1/par*KARMAN**2*ci
+        ci=ci-ff/df
+      ue(i)=G/ci
+   50 continue
+
+*  calcul du coefficient de diffusion
+      do 100 j=1,nk
+      do 100 i=1,n
+      h=ah*ue(i)/max(abs(f(i)),fmin)
+      km(i,j)=max(kmin,KARMAN*(z(i,j)+z0(i))*ue(i)*exp(-z(i,j)/h))
+  100 continue 
+
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

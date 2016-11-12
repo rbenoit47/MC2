@@ -1,0 +1,73 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r invtdy -- Invert levels of a 3D dynamics matrix
+*
+      subroutine invtdy (fnew, nif, njf, nkf,
+     $                   f, lminx, lmaxx, lminy, lmaxy, lnk)
+      implicit none
+*
+      integer nif,njf,nkf,lminx,lmaxx,lminy,lmaxy,lnk
+      real fnew(nif*njf,nkf),f(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+*AUTHOR    Michel Desgagne                      Mar 1996
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (invtdy2)
+*      Invert the levels from f and stores them in fnew
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    fnew       O    R     A    field containing inverted levels
+*      f        I    R     A    input field to invert
+*     nif       I    I     S    first  hor. dimension of fnew
+*     njf       I    I     S    second hor. dimension of fnew
+*     nkf       I    I     S    vertical dimension of fnew
+*     nis       I    I     S    first  dimension of f
+*     njs       I    I     S    second dimension of f
+*      nk       I    I     S    vertical dimension of f and fnew
+*      ni       I     I    S    computational hor. dimension along X
+*      nj       I     I    S    computational hor. dimension along Y
+*      
+*IMPLICIT
+#include "lcldim.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,k,nkompte
+*----------------------------------------------------------------------
+*
+      nkompte=lnk/2    
+      do 1 k=1,nkompte
+         do 1 j=1,ldnj
+            do 1 i=1,ldni
+               fnew((j-1)*ldni+i,k)     = f (i,j,lnk-k+1)
+               fnew((j-1)*ldni+i,lnk-k+1)= f (i,j,k)
+ 1    continue
+      if (mod(lnk,2).ne.0) then
+         do 2 j=1,ldnj
+            do 2 i=1,ldni
+               fnew((j-1)*ldni+i,nkompte+1) = f(i,j,nkompte+1)
+ 2       continue
+      endif
+*
+      if (nkf.gt.lnk) then
+         do 3 j=1,ldnj
+            do 3 i=1,ldni
+               fnew((j-1)*ldni+i,nkf)=fnew((j-1)*ldni+i,nkf-1)
+ 3       continue
+      endif
+*
+      do 4 k=1,nkf
+         do 4 i=ldni*ldnj+1,nif*njf
+            fnew(i,k) = fnew(ldni*ldnj,k)
+ 4    continue
+*            
+*----------------------------------------------------------------------
+      return
+      end

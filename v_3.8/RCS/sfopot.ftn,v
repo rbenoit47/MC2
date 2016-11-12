@@ -1,0 +1,82 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***fonction sfopot - resout l'eqn de Poisson pour la temperature
+*
+      function sfopot(t0, p0, pf)
+*
+#include "impnone.cdk"
+*
+      real sfopot, t0, p0, pf
+*
+*author
+*      N. Brunet (sept 2000)
+*
+*object
+*      solve Poisson equation for temperature
+*      if PF=100000 pa, yields standard theta temperature
+*
+*arguments
+*
+*      t0 - temperature (K) at a given pressure p0
+*      p0 - pressure (pa)
+*      pf - pressure (pa) at the target level
+*
+*      result is in deg K
+*
+*IMPLICITES
+#include "consphy.cdk"
+*MODULES
+      EXTERNAL INCTPHY
+*
+**
+*--------------------------------------------------------------------
+#include "dintern.cdk"
+#include "fintern.cdk"
+*--------------------------------------------------------------------
+#include "initcph.cdk"
+*
+      sfopot = fopoit(t0, p0, pf)
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

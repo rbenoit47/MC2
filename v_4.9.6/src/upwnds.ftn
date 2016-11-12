@@ -1,0 +1,399 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r upwnds -- Special Upstream interpolation in cartesian coord.
+*
+      subroutine upwnds  ( fup, f, xd, yd, zd, szd,
+     $                    lminx,lmaxx,lminy,lmaxy,lnk,igrid )
+*
+      implicit none
+*
+      integer lminx, lmaxx, lminy, lmaxy, lnk, igrid
+      real    fup(lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        f  (lminx:lmaxx,lminy:lmaxy,lnk)
+      real*8  xd (lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        yd (lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        zd (lminx:lmaxx,lminy:lmaxy,lnk),
+     $        szd(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+*
+*AUTHOR       C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *                     SPECIAL CALCULATIONS OF                     *
+*    *                                                                 *
+*    *                      upstream values fup                        *
+*    *                                                                 *
+*    *                           of field   f                          *
+*    *                                                                 *
+*    *          assuming rectilinear Lagrangian displacements          *
+*    *                                                                 *
+*    *                   equal to        xd, yd, zd                    *
+*    *                                                                 *
+*    *        ( tri-quadratic cartesian interpolation scheme )         *
+*    *                                                                 *
+*    *******************************************************************
+*
+*ARGUMENTS
+*     _________________________________________________________________
+*    |         |                                                 |     |
+*    |   NAME  | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |    fup  | field updated with upstream values of f         |  o  |
+*    |         |                                                 |     |
+*    |      f  | field that  is to be updated                    |  i  |
+*    |         |                                                 |     |
+*    |     xd  | lagrangian displacement along X                 |  i  |
+*    |     yd  | lagrangian displacement along  Y                |  i  |
+*    |     zd  | lagrangian displacement along   Z               |  i  |
+*    |         |                                                 |     |
+*    |    szd  | true vertical displacement at mid-range         |  i  |
+*    |         |                                                 |     |
+*    |  lminx  | starting index along X                          |  i  |
+*    |  lmaxx  | ending   index along X                          |  i  |
+*    |  lminy  | starting index along  Y                         |  i  |
+*    |  lmaxy  | ending   index along  Y                         |  i  |
+*    |    lnk  | size in direction      Z                        |  i  |
+*    |         |                                                 |     |
+*    |  igrid  | grid parameter along Z                          |  i  |
+*    |_________|_________________________________________________|_____|
+*
+*
+#include "nbcpu.cdk"
+#include "levels.cdk"
+#include "yomdyn1.cdk"
+#include "topo.cdk"
+#include "dynmem.cdk"
+#include "partopo.cdk"
+*
+      integer i, j, k, ix, jy, lz, kz
+      integer kzmm(ldni,ldnj,gnk),kznm(ldni,ldnj,gnk),kzpm(ldni,ldnj,gnk),
+     $        kzmn(ldni,ldnj,gnk),kznn(ldni,ldnj,gnk),kzpn(ldni,ldnj,gnk),
+     $        kzmp(ldni,ldnj,gnk),kznp(ldni,ldnj,gnk),kzpp(ldni,ldnj,gnk)
+      real*8  capx, capy, capz, capz1, pt5, one, two,
+     $        c1, c2, c3, d1, d2, d3,
+     $        f1, f2, f3, g1, g2, g3
+      parameter (pt5=0.5d0,one=1.0d0,two=2.0d0)
+      real hh(lminx:lmaxx,lminy:lmaxy,lnk),hm(lminx:lmaxx,lminy:lmaxy,lnk)
+      real*8 fz(lminx:lmaxx,lminy:lmaxy,0:lnk)
+      real*8 fz1(lminx:lmaxx,lminy:lmaxy,0:lnk)
+      logical carti
+*
+*----------------------------------------------------------------------
+*
+*     ***** tri-quadratic interpolation *****
+*     *****  in generalized coordinates *****
+*     *****             or              *****
+*     *****  in cartesian coordinates   *****
+*
+*----------------------------------------------------------------------
+*
+*     ***** tri-quadratic interpolation *****
+*
+      call hauteur_omp (hh,'HT',hh0,lmaxx-lminx+1,lmaxy-lminy+1,lnk )
+      call hauteur_omp (hm,'HM',hh0,lmaxx-lminx+1,lmaxy-lminy+1,lnk )
+*
+*
+      do lz = lnk,1,-1
+      do k = 1, lnk
+         do j = 1, ldnj-north
+         do i = 1, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k) + pt5
+            ix   = int(capx) - hx
+*
+            capy = dble(j+hy) - yd(i,j,k) + pt5
+            jy   = int(capy) - hy
+*
+            if(hm(ix-1,jy-1,lz).gt.hh(i,j,k)-szd(i,j,k)) kzmm(i,j,k)=lz
+            if(hm(ix  ,jy-1,lz).gt.hh(i,j,k)-szd(i,j,k)) kznm(i,j,k)=lz
+            if(hm(ix+1,jy-1,lz).gt.hh(i,j,k)-szd(i,j,k)) kzpm(i,j,k)=lz
+            if(hm(ix-1,jy  ,lz).gt.hh(i,j,k)-szd(i,j,k)) kzmn(i,j,k)=lz
+            if(hm(ix  ,jy  ,lz).gt.hh(i,j,k)-szd(i,j,k)) kznn(i,j,k)=lz
+            if(hm(ix+1,jy  ,lz).gt.hh(i,j,k)-szd(i,j,k)) kzpn(i,j,k)=lz
+            if(hm(ix-1,jy+1,lz).gt.hh(i,j,k)-szd(i,j,k)) kzmp(i,j,k)=lz
+            if(hm(ix  ,jy+1,lz).gt.hh(i,j,k)-szd(i,j,k)) kznp(i,j,k)=lz
+            if(hm(ix+1,jy+1,lz).gt.hh(i,j,k)-szd(i,j,k)) kzpp(i,j,k)=lz
+*
+         enddo
+         enddo
+      enddo
+      enddo
+*
+      do k=1, lnk-1
+         if(k.eq.1) then
+            do j= 1-hy, ldnj+hy
+            do i= 1-hx, ldni+hx
+               fz(i,j,0) = 0.
+               fz(i,j,lnk) = 0.
+               fz1(i,j,0) = 0.
+               fz1(i,j,lnk) = 0.
+            end do
+            end do
+         endif
+         do j= 1-hy, ldnj+hy
+         do i= 1-hx, ldni+hx
+            fz(i,j,k) = f(i,j,k+1)-f(i,j,k)
+            fz1(i,j,k) = (f(i,j,k+1)-f(i,j,k))*gg0r(i,j,k)
+         end do
+         end do
+      end do
+*
+      do 20 k = 1, lnk
+         do j = 1, ldnj-north
+*VDIR UNROLL=2
+         do i = 1, ldni-east
+*
+            capx = dble(i+hx) - xd(i,j,k) + pt5
+            ix   = int(capx)
+            capx = capx - dble(ix) - pt5
+            ix   = ix - hx
+*
+            capy = dble(j+hy) - yd(i,j,k) + pt5
+            jy   = int(capy)
+            capy = capy - dble(jy) - pt5
+            jy   = jy - hy
+*
+            capz = dble(k) - zd(i,j,k) + pt5
+            kz   = int(capz)
+            capz = capz - dble(kz) - pt5
+            capz1= capz
+*
+            c1 = - pt5 * capx * ( one - capx )
+            c2 = ( one - capx)* ( one + capx )
+            c3 = + pt5 * capx * ( one + capx )
+*
+            d1 = - pt5 * capy * ( one - capy )
+            d2 = ( one - capy)* ( one + capy )
+            d3 = + pt5 * capy * ( one + capy )
+*
+*         Interpolate vertically around grid point (ix-1,jy-1,kz)
+*
+            f1   = f(ix-1,jy-1,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix-1,jy-1,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix-1,jy-1,kz-1)
+*
+*         Interpolate vertically around grid point (ix  ,jy-1,kz)
+*
+            f2   = f(ix  ,jy-1,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix  ,jy-1,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix  ,jy-1,kz-1)
+*
+*         Interpolate vertically around grid point (ix+1,jy-1,kz)
+*
+            f3   = f(ix+1,jy-1,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix+1,jy-1,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix+1,jy-1,kz-1)
+*
+*
+*         Interpolate horizontally along x-axis
+*
+*
+            g1   = c1 * f1 + c2 * f2 + c3 * f3
+*
+*
+*         Interpolate vertically around grid point (ix-1,jy  ,kz)
+*
+            f1   = f(ix-1,jy  ,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix-1,jy  ,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix-1,jy  ,kz-1)
+*
+*         Interpolate vertically around grid point (ix  ,jy  ,kz)
+*
+            f2   = f(ix  ,jy  ,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix  ,jy  ,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix  ,jy  ,kz-1)
+*
+*         Interpolate vertically around grid point (ix+1,jy  ,kz)
+*
+            f3   = f(ix+1,jy  ,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix+1,jy  ,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix+1,jy  ,kz-1)
+*
+*
+*         Interpolate horizontally along x-axis
+*
+*
+            g2   = c1 * f1 + c2 * f2 + c3 * f3
+*
+*
+*         Interpolate vertically around grid point (ix-1,jy+1,kz)
+*
+            f1   = f(ix-1,jy+1,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix-1,jy+1,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix-1,jy+1,kz-1)
+*
+*         Interpolate vertically around grid point (ix  ,jy+1,kz)
+*
+            f2   = f(ix  ,jy+1,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix  ,jy+1,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix  ,jy+1,kz-1)
+*
+*         Interpolate vertically around grid point (ix+1,jy+1,kz)
+*
+            f3   = f(ix+1,jy+1,kz)
+     $           + pt5*capz*(one+capz1)*fz(ix+1,jy+1,kz)
+     $           + pt5*capz*(one-capz1)*fz(ix+1,jy+1,kz-1)
+*
+*
+*         Interpolate horizontally along x-axis
+*
+*
+            g3   = c1 * f1 + c2 * f2 + c3 * f3
+*
+*
+*
+*         Interpolate horizontally along y-axis
+*
+*
+            fup(i,j,k) = d1 * g1 + d2 * g2 + d3 * g3
+*
+*
+            carti=.true.
+*
+*
+*         Interpolate vertically around grid point (ix-1,jy-1,kz)
+*
+            kz=kzmm(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix-1,jy-1,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix-1,jy-1,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f1   = f(ix-1,jy-1,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix-1,jy-1,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix-1,jy-1,kz-1)
+*
+*         Interpolate vertically around grid point (ix  ,jy-1,kz)
+*
+            kz=kznm(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix,jy-1,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix  ,jy-1,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f2   = f(ix  ,jy-1,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix  ,jy-1,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix  ,jy-1,kz-1)
+*
+*         Interpolate vertically around grid point (ix+1,jy-1,kz)
+*
+            kz=kzpm(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix+1,jy-1,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix+1,jy-1,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f3   = f(ix+1,jy-1,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix+1,jy-1,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix+1,jy-1,kz-1)
+*
+*
+*         Interpolate horizontally along x-axis for line (jy-1,kz)=const.
+*
+*
+            g1   = c1 * f1 + c2 * f2 + c3 * f3
+*
+*
+*         Interpolate vertically around grid point (ix-1,jy,kz)
+*
+            kz=kzmn(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix-1,jy,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix-1,jy  ,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f1   = f(ix-1,jy  ,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix-1,jy  ,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix-1,jy  ,kz-1)
+*
+*         Interpolate vertically around grid point (ix  ,jy,kz)
+*
+            kz=kznn(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix,jy,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix  ,jy  ,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f2   = f(ix  ,jy  ,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix  ,jy  ,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix  ,jy  ,kz-1)
+*
+*         Interpolate vertically around grid point (ix+1,jy,kz)
+*
+            kz=kzpn(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix+1,jy,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix+1,jy  ,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f3   = f(ix+1,jy  ,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix+1,jy  ,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix+1,jy  ,kz-1)
+*
+*
+*         Interpolate horizontally along x-axis for line (jy,kz)=const.
+*
+*
+            g2   = c1 * f1 + c2 * f2 + c3 * f3
+*
+*
+*         Interpolate vertically around grid point (ix-1,jy+1,kz)
+*
+            kz=kzmp(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix-1,jy+1,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix-1,jy+1,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f1   = f(ix-1,jy+1,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix-1,jy+1,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix-1,jy+1,kz-1)
+*
+*         Interpolate vertically around grid point (ix  ,jy+1,kz)
+*
+            kz=kznp(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix,jy+1,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix  ,jy+1,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f2   = f(ix  ,jy+1,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix  ,jy+1,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix  ,jy+1,kz-1)
+*
+*         Interpolate vertically around grid point (ix+1,jy+1,kz)
+*
+            kz=kzpp(i,j,k)
+            capz = -szd(i,j,k)+(hh(i,j,k)-hh(ix+1,jy+1,kz))
+            if(kz.eq.1) capz=max(capz,0.0d0)
+            capz1= capz * gg0wr(ix+1,jy+1,kz)
+            if(kz.eq.1.and.capz.eq.0.) carti=.false.
+*
+            f3   = f(ix+1,jy+1,kz)
+     $           + pt5*capz*(one+capz1)*fz1(ix+1,jy+1,kz)
+     $           + pt5*capz*(one-capz1)*fz1(ix+1,jy+1,kz-1)
+*
+*
+*         Interpolate horizontally along x-axis for line (jy+1,kz)=const.
+*
+*
+            g3   = c1 * f1 + c2 * f2 + c3 * f3
+
+*
+*         Interpolate horizontally along y-axis
+*
+*
+            if(carti) fup(i,j,k) = d1 * g1 + d2 * g2 + d3 * g3
+*
+*
+         end do
+         end do
+*
+ 20   continue
+*
+*-----------------------------------------------------------------------
+      return
+      end

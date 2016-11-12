@@ -1,0 +1,15 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer ipqc,ipqr,ipqi,ipqg,ipen,ntrphy,bghyd,edhyd,idatim,
+     $        fni,fnj,fnk,doni,donj,max1d,df2d,df3d,cmemsiz,
+     $        sizebus,sizdbus,sizpbus,sizvbus,
+     $        sizobus,sizobusc,endphyci
+      real deet, dt, endphycr
+      real*8 momwh
+*
+      common /phycomi/ ipqc,ipqr,ipqi,ipqg,ipen,ntrphy,bghyd,edhyd,
+     $                 idatim(14),fni,fnj,fnk,doni,donj,max1d,
+     $                 sizebus,sizdbus,sizpbus,sizvbus,sizobus,
+     $                 sizobusc,df2d,df3d,cmemsiz,endphyci
+      common /phycomr/ deet,dt,endphycr
+      common /phycomr8/ momwh
+

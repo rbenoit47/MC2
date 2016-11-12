@@ -1,0 +1,39 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine cofadi2 (dge,a,nbr,epsi,ni,nk)
+      implicit none
+*
+      integer nbr, ni, nk
+      real*8  dge, a, epsi
+*
+#include "consdyn_8.cdk"
+#include "yomdyn1.cdk"
+*
+      integer l, gn2dxz, k, nim, nkm
+      real*8  gammax, gammin, a1, con
+*
+*---------------------------------------------------------------------
+*
+      con = 1.d0/(dble(grdx)*dble(grdx))
+      gn2dxz = 0
+      nim = max(1,ni-1)
+      nkm = max(1,nk-1)
+      l = 3
+      if ( gn2dxz .eq. 1 ) l = 2
+*
+      gammax = max(4.0d0, 4.0d0*con)
+      gammin = min( (pi_8/(dble(nkm)))**2, con*(pi_8/dble(nim))**2)
+*
+      a1 = ( 1.0 + epsi**( 1.0 / dble(2*l) ) ) /
+     $     ( 1.0 - epsi**( 1.0 / dble(2*l) ) )
+*
+      nbr = int(0.999999 + 1.0 + log(sqrt(gammax/gammin)) / log(a1))
+*
+      a = exp( log( sqrt( gammax / gammin ) ) / dble(nbr-1) )
+*
+      dge =gammin/(exp(log(sqrt(gammax/gammin))/dble(nbr-1)))**2/a**2
+*
+*---------------------------------------------------------------------
+      return
+      end
+

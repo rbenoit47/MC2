@@ -1,0 +1,96 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P DIFUVD1
+*
+      SUBROUTINE DIFUVD1 (E, SC, A, B, C, U, D, N, NU, NK)
+*
+#include "impnone.cdk"
+      INTEGER N, NU, NK
+      REAL E(N, NK), A(N, NK), B(N, NK), C(N, NK), U(NU, NK), D(N, NK)
+      REAL SC
+*
+*Author
+*          R. Benoit(Mar 89)
+*
+*Object
+*          to produce the tri-diagonal: E=SC*(A,B,C)*U + D
+*
+*Arguments
+*
+*          - Output -
+* E        result of (product +D)
+*
+*          - Input -
+* SC       factor of the operator
+* A        lower-diagonal
+* B        diagonal
+* C        upper-diagonal
+* U        vector to multiply on matrix(A,B,C)
+* D        inhomogeneous term to add
+* N        1st dimension (for all except for U)
+* NU       1st dimension of U
+* NK       second dimension
+*
+*
+*LANGAGE CFT
+**
+*
+      INTEGER K, I
+*
+      DO 10 K=1,NK
+*     FAIRE D'ABORD TERME DIAGONAL ET AJOUT DU TERME D DANS ACCUMULATEUR
+         DO 1 I=1,N
+1           E(I,K)=D(I,K)+SC*B(I,K)*U(I,K)
+         IF (K.GT.1) THEN
+            DO 2 I=1,N
+2              E(I,K)=E(I,K)+SC*A(I,K)*U(I,K-1)
+         ENDIF
+         IF (K.LT.NK) THEN
+            DO 3 I=1,N
+3              E(I,K)=E(I,K)+SC*C(I,K)*U(I,K+1)
+         ENDIF
+10       CONTINUE
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

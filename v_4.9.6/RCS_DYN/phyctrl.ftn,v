@@ -1,0 +1,283 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine phyctrl (prout,status)
+      implicit none
+*
+      logical prout
+      integer status
+*
+*     ##########################################
+*     #  Initialization of controle parameters #
+*     #  (see MC2 user guide for descriptions) #
+*     ##########################################
+*
+#include "lcldim.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "yomdyn.cdk"
+#include "partopo.cdk"
+#include "rec.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+*
+      character*8  dumc
+      character*10 nmlname
+      integer unnml,pnerrdirf,pnflag1,pnflag2,i,nfold,status2,status3,
+     $        longueur
+      data unnml /11/
+*
+*----------------------------------------------------------------------
+      status  = -1
+      status2 = -1
+      status3 = -1
+      nmlname = 'physics'
+      pfbtyp  ='prosplit'
+*
+      if (.not.modrstrt) then
+         radia   ='newrad'
+         radftp  ='STD'
+         fluvert ='clef'
+         schmsol ='fcrest'
+         mixing  ='BLAC62'
+         convec  ='oldkuo'
+         stcond  ='conds'
+         gwdrag  ='gwd86'
+         shlcvt(1)  ='conres'
+         shlcvt(2)  ='nil'
+         dzsedi  = -1.
+         hrclip  = -1.
+         ktdflt  = 0.
+         as      = 12.
+         beta    = 1.
+         nstepsor_p = gnnt
+*     
+         mxadj    = 20
+         kntrad   = 6
+         moyhr    = 0
+         nsloflux = 0
+         lheat    = 1
+         runlgt   =-1
+*
+         kfcmom_L= .true.
+         kfctrig = 0.05
+         kfcrad  = 1500.
+         kfcdepth= 4000.
+         kfcdlev = 0.5
+         kfcdet  = 0.
+         kfctimec= 3600.
+         kfctimea= 3600.
+         kkl     = 0.1
+         kfcpcp  = 'ORI'
+*     
+         hcad  =0.6
+         hfad  =1.
+         hmad  =1.
+*     
+         strato  =.false. 
+         agregat =.true.
+         incore  =.false.
+         advectke=.false.
+         diffuw  =.false.
+         dbgmem  =.false.
+         evap    =.true.
+         wet     =.true.
+         satuco  =.true.
+         inilwc  =.false.
+         snowmelt=.false.
+         stomate =.false.
+         typsol  =.false.
+         bkgalb  =.true.
+         snoalb  =.true.
+         cortm   =.false.
+         drylaps =.true.
+* 210
+*   * Secondary switches only active with fluvert= SIMP
+*
+         drag =.false.
+         chauf=.true.
+*
+         do i=1,npolist
+            upolist(i) = '!@@#$%^&*'
+         end do
+*
+* *** Updating configuration with namelist pil_cfgs
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $         form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9991
+         endif
+*
+         rewind ( unnml )
+         read (unnml, nml=physics, end = 9120)
+         write (6,601) nmlname
+*
+         close (unnml)
+*
+         nstepsor_p = max(1,nstepsor_p)
+         call low2up  (pfbtyp,dumc)
+         gnpfb = 1
+         if (dumc.eq.'PROSPLIT') gnpfb = 1
+         if (dumc.eq.'GIRARD1' ) gnpfb = 2
+         if (diffuw) then
+            write (6,101) 'diffuw = .t.'
+            goto 9991
+         endif
+         call low2up  (shlcvt(1),dumc)
+         shlcvt(1) = dumc
+         call low2up  (shlcvt(2),dumc)
+         shlcvt(2) = dumc
+ 101     format (/1x,'OPTION: ',a,' NEVER BEEN FULLY TESTED'/)
+*
+         status2 = 1
+*        
+      else
+*
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $        'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         call rphypar (un_rstrt)
+         call mod_rstrt (un_rstrt,prout,status2,'PHY')
+*
+      endif
+*
+*     Print controle parameters
+*
+      if (prout) then
+      print*
+      write (6, nml=physics_print)
+      print*
+      endif
+*
+      call serctrl (prout,status3)
+      call diactrl (prout,runlgt)
+*
+      if ((status2.eq.1).and.(status3.eq.1)) status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*----------------------------------------------------------------------
+ 601  format (' CONFIGURATION UPDATED WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+*
+      return
+      end
+*
+      subroutine rphypar (fnrstrt)
+      implicit none
+      integer fnrstrt
+*
+*AUTHOR     Michel Desgagne                   Jan   1994
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT
+*     Read physics configuration on a restart file
+*
+*FILES
+*     unit= pnrstrt: restart file
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    pnrstrt    I     I    S    restart file unit
+*
+*IMPLICIT
+#include "physnml.cdk"
+#include "physcom.cdk"
+*
+*MODULES
+*
+**
+*----------------------------------------------------------------------
+*
+      read  (fnrstrt)  radia,fluvert,schmsol,convec,stcond,upolist,
+     $                 mxadj,kntrad,lheat,hcad,hfad,hmad,snoalb,
+     $                 dbgmem,evap,wet,gwdrag,advectke,diffuw,
+     $                 inilwc,snowmelt,stomate,typsol,satuco,drag,
+     $                 chauf,incore,radftp,nstepsor_p,
+     $                 hrclip,gnpfb,shlcvt,moyhr,nsloflux,ktdflt,dzsedi,
+     $                 mixing,kfcmom_l,kfctrig,kfcrad,kfcdepth,kfcdlev,
+     $                 kfcdet,kfctimec,kfctimea,agregat,bkgalb,drylaps,
+     $                 as,beta,kfcpcp,kkl,strato
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine wphypar (fnrstrt)
+      implicit none
+      integer fnrstrt
+*
+*AUTHOR     Michel Desgagne                   Jan   1994
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT
+*     Write physics configuration on a restart file
+*
+*FILES
+*     unit= pnrstrt: restart file
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    pnrstrt    I     I    S    restart file unit
+*
+*IMPLICIT
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+*----------------------------------------------------------------------
+*
+      write (fnrstrt)  radia,fluvert,schmsol,convec,stcond,upolist,
+     $                 mxadj,kntrad,lheat,hcad,hfad,hmad,snoalb,
+     $                 dbgmem,evap,wet,gwdrag,advectke,diffuw,
+     $                 inilwc,snowmelt,stomate,typsol,satuco,drag,
+     $                 chauf,incore,radftp,nstepsor_p,
+     $                 hrclip,gnpfb,shlcvt,moyhr,nsloflux,ktdflt,dzsedi,
+     $                 mixing,kfcmom_l,kfctrig,kfcrad,kfcdepth,kfcdlev,
+     $                 kfcdet,kfctimec,kfctimea,agregat,bkgalb,drylaps,
+     $                 as,beta,kfcpcp,kkl,strato
+*
+      call wsercfg (fnrstrt)
+      call wdiacfg (fnrstrt)
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

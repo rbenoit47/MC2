@@ -1,0 +1,105 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P INISOILI
+*
+      SUBROUTINE INISOILI( f, fsiz, ni )
+*
+*
+#include "impnone.cdk"
+*
+*
+      INTEGER ni, fsiz
+      REAL f(fsiz)
+*
+*
+*Author
+*         Stephane Belair (February 1999)
+*
+*
+*Revision
+* 001     S. Belair (Feb 2000)
+*            Calculations for sand and clay are done outside the
+*            subroutine (in INISURF)
+*            Use the bus "f"
+* 002     B. Bilodeau (Nov 2000) - New comdeck phybus.cdk
+*
+*
+*Object
+*         Initialize the soil properties from the sand and clay
+*         fraction for 5 layers of the soil
+*
+*
+*Arguments
+*
+*             - Input/Output -
+* F           permanent bus 
+*
+*             - Input -
+* NI          longueur d'une tranche horizontale
+*
+*
+      INTEGER I
+*
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+*
+*
+      DO i=0,ni-1
+        f(wsat  + i)  =  0.001*( -1.08*f(sand+i) + 494.305 )
+        f(wwilt + i)  =  37.1342E-3*SQRT(MAX(1.,f(clay+i)))
+        f(wfc   + i)  =  89.0467E-3 * MAX(1.,f(clay+i))**0.3496
+        f(bcoef + i)  =  0.137 * f(clay+i)  + 3.501
+        f(cgsat + i)  =  -1.557E-2 * f(sand+i)
+     1                   -  1.441E-2 * f(clay+i) + 4.7021
+        f(cgsat + i)  = 1.E-6 * f(cgsat+i) 
+        f(c1sat + i)  = 0.01*( 5.58*f(clay+i) + 84.88 )
+        f(c2ref + i)  = 13.815 * MAX(1.,f(clay+i))**(-0.954)
+        f(c3ref + i)  = 5.327 * MAX(1.,f(clay+i))**(-1.043)
+        f(acoef + i)  = 732.42E-3 * MAX(1.,f(clay+i))**(-0.539)
+        f(pcoef + i)  = 0.134 * f(clay+i) + 3.4
+      END DO
+*
+*
+      RETURN 
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

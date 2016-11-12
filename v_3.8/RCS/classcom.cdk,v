@@ -1,0 +1,75 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*
+*
+*     COMMON BLOCKS DU SCHEMA "CLASS"
+*     -------------------------------
+*
+      REAL*8 RRGASD,RRGASV,GGRAV,SBC,VKC,CT,
+     +       ZOLNS,ZOLNI,ZORATG,BEEM,CLHVAP,ZOLNG,SLTHICK,HCPSNI,
+     +       ALFAH,FAC,GAMRH,GAMRM,VMIN,TCW,TCICE,TCSAND,TCCLAY,TCOM,
+     +       TCSAPW,TCSAPI,HCPW,HCPICE,HCPSOL,HCPOM,GROWYR,CANEXT,
+     +       SPHW,SPHICE,SPHVEG,SPHAIR,RHOW,RHOICE,RHOSNI,TCGLAC,CLHMLT,
+     +       THLMIN,PPI,TCSATW,TCSATI,B,THPOR,THLRAT,PSISAT,GRKSAT,
+     +       GRKTLD,TCDRYS,TCDRYP,RHOSOL,RHOOM,HCPSND,HCPCLY,PRA,
+     +       FTHFC,RSLEAFMN,ZBLEND
+      INTEGER IBSEVAP,AGGRUF
+      LOGICAL TOPO
+*
+      COMMON /CLASS2/ RRGASD,RRGASV,GGRAV,SBC,VKC,CT,SLTHICK,BEEM,ALFAH,
+     +                FAC,GAMRH,GAMRM,VMIN
+      COMMON /CLASS3/ TCW,TCICE,TCSAND,TCCLAY,TCOM,TCDRYS,TCDRYP,
+     +                TCSATW(16),TCSATI(16),TCSAPW,TCSAPI,RHOSOL,
+     +                RHOOM,HCPSND,HCPCLY
+      COMMON /CLASS4/ HCPW,HCPICE,HCPSOL,HCPOM,HCPSNI,SPHW,SPHICE,
+     +                SPHVEG,SPHAIR,RHOW,RHOICE,RHOSNI,TCGLAC,CLHMLT,
+     +                CLHVAP
+      COMMON /CLASS5/ B(13),THPOR(18),THLRAT(13),THLMIN,PSISAT(18),
+     +                GRKSAT(18),GRKTLD(18)
+      COMMON /CLASS6/ PPI,GROWYR(18,4,2),ZOLNG,ZOLNS,ZOLNI,ZORATG
+      COMMON /CLASS7/ CANEXT(4)
+      COMMON /CLASS8/ PRA
+      COMMON /CLASS9/ IBSEVAP,AGGRUF,TOPO
+      COMMON /CLASS10/ FTHFC,RSLEAFMN(4),ZBLEND
+*
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

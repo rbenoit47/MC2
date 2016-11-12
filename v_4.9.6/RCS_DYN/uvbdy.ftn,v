@@ -1,0 +1,82 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine uvbdy
+      implicit none
+*
+#include "yomdyn.cdk"
+#include "dynmem.cdk"
+#include "nbcpu.cdk"
+*
+      integer i, j, k, id, jd, iff, jf
+*
+*----------------------------------------------------------------------
+*
+*** Imposing boundary conditions for the elliptic problem:
+*** we impose normal winds:        u at west  and east  boundaries
+***                          and   v at south and north boundaries
+      id = 1-hx*(1-west)
+      jd = 1-hy*(1-south)
+      iff= ldni-east+hx*(1-east)
+      jf = ldnj-north+hy*(1-north)
+
+!$omp do
+      do k=1,gnk-1
+         if (north.gt.0) then
+            do i=id,iff
+               vp(i,ldnj,k) = vnestt(i,ldnj,k)
+            end do
+         endif
+        if (south.gt.0) then
+            do i=id,iff
+               vp(i,1,k) =  vnestt(i,1,k)
+            end do
+         endif
+         if (east.gt.0) then
+            do j=jd,jf
+               up(ldni,j,k) = unestt(ldni,j,k)
+            end do
+         endif
+         if (west.gt.0) then
+            do j=jd,jf
+               up(1,j,k) = unestt(1,j,k)
+            end do
+         endif
+      enddo
+!$omp enddo
+*
+!$omp single
+      call rpn_comm_xch_halo (up,minx,maxx,miny,maxy,ldni,ldnj,
+     $                    2*gnk,hx,hy,period_x,period_y,ldni,0)
+!$omp end single
+*
+*---------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+@

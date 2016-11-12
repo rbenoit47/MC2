@@ -1,0 +1,131 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r gc_ddisp - on great circles: doubling displacements
+*
+      subroutine gc_ddisp ( xd, yd, lat0, lminx, lmaxx, lminy, lmaxy )
+      implicit none
+*
+      integer lminx, lmaxx, lminy, lmaxy
+      real*8 xd(lminx:lmaxx,lminy:lmaxy,*),
+     $       yd(lminx:lmaxx,lminy:lmaxy,*),lat0(lminy:lmaxy)
+*
+*
+*
+*AUTHOR    C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *               ANDRE ROBERT  SEMI-LAGRANGIAN SCHEME              *
+*    *                                                                 *
+*    *        DOUBLING the DISPLACEMENTS  x , y  on GREAT CIRCLES      *
+*    *                                     d   d                       *
+*    *                                                                 *
+*    *                                  _________________              *
+*    *                                 |  +              |             *
+*    *       the VECTOR formula is     | R =2*(R.R0)R-R0 |             *
+*    *                                 |_________________|             *
+*    *                                                                 *
+*    *            +                                                    *
+*    *     where R  = upstream position with double displacements      *
+*    *                                                                 *
+*    *           R  = upstream position with single displacements      *
+*    *                                                                 *
+*    *           R0 =          position                                *
+*    *                                                                 *
+*    *                                                                 *
+*    *      vector calculations are done in CARTESIAN COORDINATES      *
+*    *                                                                 *
+*    *******************************************************************
+*
+*
+*ARGUMENTS
+*     _________________________________________________________________
+*    |         |                                                 |     |
+*    |  NAME   | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |    xd   | lagrangian displacement along X                 | i/o |
+*    |    yd   | lagrangian displacement along  Y                | i/o |
+*    |         |                                                 |     |
+*    |  lat0   | latitudes (along Y) of model grid               |  i  |
+*    |         |                                                 |     |
+*    | lminx   | starting index along X                          |  i  |
+*    | lmaxx   | ending   index along X                          |  i  |
+*    | lminy   | starting index along  Y                         |  i  |
+*    | lmaxy   | ending   index along  Y                         |  i  |
+*    |_________|_________________________________________________|_____|
+*
+*
+#include"lcldim.cdk"
+#include"yomdyn1.cdk"
+*
+      integer i,j,k
+      real*8 two,one,zero,r0r,lon0,x0,y0,z0,lon,lat,xx,yy,zz,dlon,dlat,
+     $       dlamda
+*
+      parameter (two=2.0d0, one = 1.0d0, zero=0.0d0)
+************************************************************************
+      lon0   = zero          ! arbitrarily
+      dlamda = dble(grdx)
+*
+      do k=1,gnk-1
+      do j=1,ldnj-north
+      do i=1,ldni-east
+*
+         dlon = xd(i,j,k) * dlamda
+         dlat = yd(i,j,k) * dlamda
+*
+         x0  = cos(lat0(j))
+         y0  = zero
+         z0  = sin(lat0(j))
+*
+         lon = lon0   +dlon
+         lat = lat0(j)+dlat
+*
+         xx  = cos(lat)*cos(lon)
+         yy  = cos(lat)*sin(lon)
+         zz  = sin(lat)
+*
+         r0r = ( x0 * xx + y0 * yy + z0 * zz )
+*
+         xx  = two * r0r * xx - x0
+         yy  = two * r0r * yy - y0
+         zz  = two * r0r * zz - z0
+         zz  = min(one,max(zz,-one))
+*
+         dlon = atan( yy/ xx ) - lon0
+         dlat = asin ( zz )    - lat0(j)
+*
+         xd(i,j,k) = dlon / dlamda
+         yd(i,j,k) = dlat / dlamda
+*
+      enddo
+      enddo
+      enddo
+*
+      return
+      end
+@

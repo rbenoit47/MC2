@@ -1,0 +1,93 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_casc
+      subroutine out_casc ( qpmod, tmod, hmod, umod, vmod, swmod, clmod,
+     $                                       msf,trname,ng,lnk,ip2,unf )
+      implicit none
+*
+      character* (*) trname(*)
+      integer ng,lnk,ip2,unf
+      real qpmod(ng,*), tmod(ng,*), hmod(ng,*), umod(ng,*), vmod(ng,*),
+     $     swmod(ng,*), clmod(ng,lnk,*), msf(ng)
+*
+**
+#include "lcldim.cdk"
+#include "levels.cdk"
+#include "grd.cdk"
+#include "sor.cdk"
+*
+      integer i,k,kk,nkp,lv(3)
+      real u(ng,lnk+1),v(ng,lnk+1),zmq(lnk+1),m
+*
+*------------------------------------------------------------------
+*
+      nkp = lnk + 1
+      do k=2,nkp
+      do i=1,ng
+         m = sqrt(msf(i))
+         u(i,k) = umod(i,k-1) * m
+         v(i,k) = vmod(i,k-1) * m
+      end do
+      end do
+      do i=1,ng
+         u(i,1) = u(i,2)
+         v(i,1) = v(i,2)
+      end do
+      if (staguv) call out_stguv ( u,v,minx,maxx,miny,maxy,nkp )
+*
+      lv(1) = 1
+      lv(2) = lnk
+      lv(3) = 1
+*
+      do k=1,lnk
+         zmq(k+1) = zm(k)
+      end do
+      zmq(1) = zt(1)
+*
+      call ecris_fst ( tmod,minx,maxx,miny,maxy,ztr,'BUOY',1.0,
+     $                                  ip2,0,lnk,lv,'CSC',unf )
+      call ecris_fst ( hmod,minx,maxx,miny,maxy,ztr,'HU  ',1.0,
+     $                                  ip2,0,lnk,lv,'CSC',unf )      
+      call ecris_fst (swmod,minx,maxx,miny,maxy,zt ,'WZ  ',1.0,
+     $                                  ip2,0,lnk,lv,'CSC',unf )
+*
+      if (Grdc_trnm_S(1).eq.'@#$%') then
+         do k=1,ntr
+            call ecris_fst ( clmod(1,1,k),minx,maxx,miny,maxy,ztr,
+     $                       trname(k),1.0,ip2,0,lnk,lv,'CSC',unf )  
+         end do
+      else
+         do kk=1,max_trnm
+            if (Grdc_trnm_S(kk).eq.'@#$%') goto 87
+            do k=1,ntr
+               if (Grdc_trnm_S(kk).eq.trname(k))
+     $           call ecris_fst ( clmod(1,1,k),minx,maxx,miny,maxy,ztr,
+     $                            trname(k),1.0,ip2,0,lnk,lv,'CSC',unf )
+            end do
+         end do
+      endif
+*
+ 87   lv(2) = nkp
+      call ecris_fst (    u,minx,maxx,miny,maxy,zmq,'UU  ',1.0,
+     $                                  ip2,0,nkp,lv,'CSC',unf )   
+      call ecris_fst (    v,minx,maxx,miny,maxy,zmq,'VV  ',1.0,
+     $                                  ip2,0,nkp,lv,'CSC',unf )   
+      call ecris_fst (qpmod,minx,maxx,miny,maxy,zmq,'PREG',1.0,
+     $                                  ip2,0,nkp,lv,'CSC',unf )
+*
+*------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+
+
+
+
+
+
+

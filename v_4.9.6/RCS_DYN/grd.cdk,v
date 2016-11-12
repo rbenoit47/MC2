@@ -1,0 +1,61 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      integer Grd_ni,Grd_nj,Grd_iref,Grd_jref,Grd_id,
+     $        Grd_ig1,Grd_ig2,Grd_ig3,Grd_ig4,
+     $        Grd_ig1p,Grd_ig2p,Grd_ig3p,Grd_ig4p,endgrdi
+      real Grd_latr,Grd_lonr,Grd_dx,Grd_dgrw,Grd_phir,
+     $     Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2,endgrdr
+      character*1 Grd_proj_S,endgrdc
+*
+      common /gril_i/ Grd_ni,Grd_nj,Grd_iref,Grd_jref,Grd_id,
+     $                Grd_ig1,Grd_ig2,Grd_ig3,Grd_ig4,
+     $                Grd_ig1p,Grd_ig2p,Grd_ig3p,Grd_ig4p,endgrdi
+      common /gril_r/ Grd_latr,Grd_lonr,Grd_dx,Grd_dgrw,Grd_phir,
+     $                Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2,endgrdr
+      common /gril_c/ Grd_proj_S,endgrdc
+*
+      integer Grdc_ni,Grdc_nj,Grdc_iref,Grdc_jref,Grdc_id,
+     $        Grdc_gid,Grdc_gif,Grdc_gjd,Grdc_gjf,Grdc_ndt,
+     $        Grdc_nsor,Grd_ig1c,Grd_ig2c,Grd_ig3c,Grd_ig4c,endGrdci
+      real Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_dgrw,Grdc_phir,
+     $     Grdc_xlat1,Grdc_xlon1,Grdc_xlat2,Grdc_xlon2,endGrdcr
+      character*1 Grdc_proj_S,endGrdcc
+      integer max_trnm
+      parameter (max_trnm=1000)
+      character*4 Grdc_trnm_S(max_trnm),endGrdcc2
+*
+      common /gril2_i/ Grdc_ni,Grdc_nj,Grdc_iref,Grdc_jref,Grdc_id,
+     $                 Grdc_gid,Grdc_gif,Grdc_gjd,Grdc_gjf,Grdc_ndt,
+     $                 Grdc_nsor,Grd_ig1c,Grd_ig2c,Grd_ig3c,Grd_ig4c,
+     $                 endGrdci
+      common /gril2_r/ Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_dgrw,Grdc_phir,
+     $                 Grdc_xlat1,Grdc_xlon1,Grdc_xlat2,Grdc_xlon2,
+     $                 endGrdcr
+      common /gril2_c / Grdc_proj_S,endGrdcc
+      common /gril2_c2/ Grdc_trnm_S,endGrdcc2
+
+
+
+@

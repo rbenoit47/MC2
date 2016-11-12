@@ -1,0 +1,119 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r tracers
+*
+      subroutine tracers(trname, maxntr, boot)
+      implicit none
+*
+      logical boot
+      integer maxntr
+      character*8 trname(maxntr)
+*
+*AUTHOR   Michel Desgagne     Apr   1996
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (tracers)
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    cl        I/O    R    A  tracers                 at time (t*)
+*    nis        I     I    S  max. horizontal dimension along X
+*    njs        I     I    S  max. horizontal dimension along Y
+*    nks        I     I    S  max. vertical dimension
+*    ni         I     I    S  computational horizontal dimension along X
+*    nj         I     I    S  computational horizontal dimension along Y
+*    nk         I     I    S  computational vertical   dimension 
+*    ntr       I/O    I    S  number of tracers
+*    boot      I/O    L    S  boot flag
+*
+*IMPLICIT
+#include "tracers.cdk"
+#include "yomdyn.cdk"
+#include "dynmem.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+      integer i,j,k,n
+**
+*----------------------------------------------------------------------
+*40
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*                           BOOT - BEGIN
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*
+      if (boot) then
+*30
+*
+*    * Tracers requirement
+*
+         ntrdyn = 0
+         if (theoc) then
+            ntrdyn  = ntrdyn + 1
+            ntr     = ntr    + 1
+            itheoc  = ntr
+            trname(ntr) = 'BU'
+         endif
+         iconta = 0
+         if (glconta) then
+            ntrdyn  = ntrdyn + 1
+            ntr     = ntr    + 1
+            iconta  = ntr
+            trname(ntr) = 'XC'
+         endif
+         if (gnmaphy.eq.2) then
+            ntrdyn  = ntrdyn + 1
+            ntr     = ntr    + 1
+            ismphys = ntr
+            trname(ntr) = 'XP'
+         endif
+         boot = .false.
+*
+         if (myproc.eq.0) then
+            print*, 'TRACERS= ',(trname(i),i=1,ntr)
+         endif
+*
+         return
+*
+      endif
+*290
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*                           BOOT - END
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+
+
+
+
+@

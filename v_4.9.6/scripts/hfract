@@ -1,0 +1,16 @@
+#!/bin/ksh
+#
+   HH=`date '+%H'`
+   MM=`date '+%M'`
+   SS=`date '+%S'`
+   if [ $1 -eq 0 ] ; then
+     echo "scale=10; $HH + ($MM*60. + $SS) / 3600. " | bc -l
+   else
+     fc=$(echo "scale=10; $HH + ($MM*60. + $SS) / 3600. " | bc -l)
+     nsec=$(echo "scale=1; ($fc - $2) * 3600." | bc -l)
+     if [ $nsec -lt 0 ] ; then
+       nsec=$(echo "scale=1; (24.-$2 + $fc) * 3600." | bc -l)
+     fi
+     echo $nsec
+   fi
+#

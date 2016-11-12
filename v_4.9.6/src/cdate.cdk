@@ -1,0 +1,5 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      character*16 Pil_runstrt_S,
+     $             gcrunstrt,gcrunend,gcjobstrt,gcjobend,endcdt
+
+      common /cdate/  gcrunstrt,gcrunend,gcjobstrt,gcjobend,endcdt

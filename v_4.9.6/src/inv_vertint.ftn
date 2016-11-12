@@ -1,0 +1,51 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r inv_vertint  -- 
+*
+      subroutine inv_vertint (fup,f,zd,href,ng,nk,nkref)
+*
+      implicit none
+*
+#include "sor.cdk"
+*
+      integer ng,nk,nkref
+      real    fup(ng,nk),f(ng,nkref),zd(ng,nk,2),href(ng,0:nkref+2)
+*
+      integer i,k
+      real dum
+*
+*----------------------------------------------------------------------
+*    
+      if (levtyp.ne.'P') then
+         call vertint3 (fup,f,zd,href,ng,nk,nkref)
+         return
+      endif
+*
+      do k=1,nkref/2
+      do i=1,ng
+         dum            = f (i,k)
+         f(i,k)         = f (i,nkref-k+1)
+         f(i,nkref-k+1) = dum
+      end do
+      end do
+*
+      call vertint3 (fup,f,zd,href,ng,nk,nkref)
+*
+      do k=1,nkref/2
+      do i=1,ng
+         dum            = f (i,k)
+         f(i,k)         = f (i,nkref-k+1)
+         f(i,nkref-k+1) = dum
+      end do
+      end do
+      do k=1,nk/2
+      do i=1,ng
+         dum           = fup (i,k)
+         fup(i,k)      = fup (i,nk-k+1)
+         fup(i,nk-k+1) = dum
+      end do
+      end do
+*
+*----------------------------------------------------------------------
+*    
+      return
+      end

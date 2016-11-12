@@ -1,0 +1,324 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r slag3d -- Upstream interpolation: Semi-Lagrangian Scheme
+*
+#if defined (NEC)
+#define UPWND3 v_upwnd3
+#endif
+      subroutine slag3d  (qpup,uup,vup,swup,tpup,hmup,clup,
+     $                    qp  ,u  ,v  ,sw  ,tp  ,hm  ,cl  ,
+     $                    xd, yd, zd, xdu, ydu, zdu, fxx, fyy, fzz,
+     $                    lminx, lmaxx, lminy, lmaxy)
+      implicit none
+*
+      integer lminx, lmaxx, lminy, lmaxy
+      real qpup(*),  uup(*),  vup(*), swup(*),
+     $     tpup(*), hmup(*), clup(*)
+      real   qp(*),    u(*),    v(*), sw(*),
+     $       tp(*),   hm(*),   cl(*)
+      real*8 xd(lminx:lmaxx,lminy:lmaxy,*), 
+     $     yd(lminx:lmaxx,lminy:lmaxy,*), zd(lminx:lmaxx,lminy:lmaxy,*),
+     $    xdu(lminx:lmaxx,lminy:lmaxy,*),ydu(lminx:lmaxx,lminy:lmaxy,*),
+     $    zdu(lminx:lmaxx,lminy:lmaxy,*),fxx(lminx:lmaxx,lminy:lmaxy,*),
+     $    fyy(lminx:lmaxx,lminy:lmaxy,*),fzz(lminx:lmaxx,lminy:lmaxy,*)
+*
+*
+*AUTHORs       M. Desgagne & C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *               ANDRE ROBERT  SEMI-LAGRANGIAN SCHEME              *
+*    *                                                                 *
+*    *                 CALCULATES upstream values fup                  *
+*    *                                                                 *
+*    *                      of model RHS fields   f                    *
+*    *                                                                 *
+*    *          assuming rectilinear Lagrangian displacements          *
+*    *                                                                 *
+*    *                             equal to                            *
+*    *                                                                 *
+*    *                            xd, yd, zd                           *
+*    *                                                                 *
+*    *        and taking into account the type of grids involved       *
+*    *                                                                 *
+*    * ( displacement fields xd, yd, zd known for the grid of type-q ) *
+*    *                                                                 *
+*    *******************************************************************
+*
+*ARGUMENTS
+*     _________________________________________________________________
+*    |         |                                                 |     |
+*    |  NAME   | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |  qpup   | uptream values of variable qp                   |  o  |
+*    |   uup   | uptream values of variable  u                   |  o  |
+*    |   vup   | uptream values of variable  v                   |  o  |
+*    |  swup   | uptream values of variable sw                   |  o  |
+*    |  tpup   | uptream values of variable tp                   |  o  |
+*    |  hmup   | uptream values of variable hm                   |  o  |
+*    |  clup   | uptream values of variable cl                   |  o  |
+*    |         |                                                 |     |
+*    |    qp   | variable qp on grid of type-q                   |  i  |
+*    |     u   | variable  u on grid of type-u                   |  i  |
+*    |     v   | variable  v on grid of type-v                   |  i  |
+*    |    sw   | variable sw on grid of type-w                   |  i  |
+*    |    tp   | variable tp on grid of type-w                   |  i  |
+*    |    hm   | variable hm  "   "      "                       |  i  |
+*    |    cl   | variable cl  "   "      "                       |  i  |
+*    |         |                                                 |     |
+*    |    xd   | lagrangian displacement along X                 |  i  |
+*    |    yd   | lagrangian displacement along  Y                |  i  |
+*    |    zd   | lagrangian displacement along   Z               |  i  |
+*    |   szd   | lagrangian displacement along   z (true heigth) |  i  |
+*    |         |                                                 |     |
+*    |   xdu   | adjusted lagrangian displacement along X   (wrk)|     |
+*    |   ydu   | adjusted lagrangian displacement along  Y  (wrk)|     |
+*    |   zdu   | adjusted lagrangian displacement along   Z (wrk)|     |
+*    |         |                                                 |     |
+*    |   xdd   | second difference along X                  (wrk)|     |
+*    |   ydd   | second difference along  Y                 (wrk)|     |
+*    |   zdd   | second difference along   Z                (wrk)|     |
+*    |         |                                                 |     |
+*    | lminx   | starting index along X                          |  i  |
+*    | lmaxx   | ending   index along X                          |  i  |
+*    | lminy   | starting index along  Y                         |  i  |
+*    | lmaxy   | ending   index along  Y                         |  i  |
+*    |_________|_________________________________________________|_____|
+*
+*
+#include "dynmem.cdk"
+#include "semilag.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+*
+**
+      character*3 lag_intp ! main choices: 'cub', 'qua', 'lin'
+      integer i, j, k, n, kp1, nkt
+      real*8 ebound,wbound,sbound,nbound,tbound,bbound,epsilon,zero,one,
+     $       pt5, sixteen, nine, c11, c22, w1,w2,w3,w4,w5,w6
+      parameter ( zero= 0.0d0, one = 1.0d0 )
+      parameter ( nine= 9.0d0, sixteen = 16.0d0 )
+      parameter ( pt5 = 0.5d0, epsilon = 1.d-8 )
+*---------------------------------------------------------------------
+*
+      lag_intp="cub"
+*
+*     Free-slip solid wall on top and bottom boundaries
+*
+      bbound = one          + epsilon
+      tbound = dble(gnk-1)  - epsilon
+*
+*     Free-slip solid wall on processor horizontal boundaries
+*     if Courant number exceeds what is allowed by hx and hy
+*
+      wbound = dble(1            - hx + 1) + epsilon
+      ebound = dble(ldni - east  + hx - 1) - epsilon
+      sbound = dble(1            - hy + 1) + epsilon
+      nbound = dble(ldnj - north + hy - 1) - epsilon
+*    
+      if (Tsl_ic) then
+         print*, 'Tsl_ic=.true. NOT VALID --see slag3d ---ABORT'
+         call mc2stop(-1)
+*        midpoint cubic interpolation
+c         c11 = nine/sixteen
+c         c22 = -one/sixteen
+      else
+*        midpoint linear interpolation
+         c11 = pt5
+c         c22 = zero
+      endif
+*
+*
+***********************************************************************
+*
+*     Contribution to Momentum equation along the X-axis: uup
+*
+*         cubic interpolation or averaging of displacements along X
+*
+***********************************************************************
+*
+!$omp do
+      do k=1,gnk-1
+      do j=1,ldnj-north
+      do i=1+west,ldni-east
+         xdu(i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,
+     $                c11*(xd(i  ,j,k) + xd(i-1,j,k))))
+c     $                   +c22*(xd(i+1,j,k) + xd(i-2,j,k)) ))
+         ydu(i,j,k) = min(dble(j)-sbound,max(dble(j)-nbound,
+     $                c11*(yd(i  ,j,k) + yd(i-1,j,k))))
+c     $                   +c22*(yd(i+1,j,k) + yd(i-2,j,k)) ))
+         zdu(i,j,k) = min(dble(k)-bbound,max(dble(k)-tbound,
+     $                c11*(zd(i  ,j,k) + zd(i-1,j,k))))
+c     $                   +c22*(zd(i+1,j,k) + zd(i-2,j,k)) ))
+      end do
+      end do
+      end do
+!$omp enddo
+*
+      call UPWND3 (uup,u,xdu,ydu,zdu,fxx,fyy,fzz,
+     $             minx,maxx,miny,maxy,gnk-1,west,0,lag_intp)
+*     
+*
+***********************************************************************
+*
+*     Contribution to Momentum equation along Y-axis: vvp
+*
+*         cubic interpolation or averaging of displacements along Y
+*
+***********************************************************************
+*
+!$omp do
+      do k=1,gnk-1
+      do j=1+south,ldnj-north
+      do i=1,ldni-east
+         xdu(i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,
+     $                c11*(xd(i,j  ,k) + xd(i,j-1,k))))
+c     $                   +c22*(xd(i,j+1,k) + xd(i,j-2,k)) ))
+         ydu(i,j,k) = min(dble(j)-sbound,max(dble(j)-nbound,
+     $                c11*(yd(i,j  ,k) + yd(i,j-1,k))))
+c     $                   +c22*(yd(i,j+1,k) + yd(i,j-2,k)) ))
+         zdu(i,j,k) = min(dble(k)-bbound,max(dble(k)-tbound,
+     $                c11*(zd(i,j  ,k) + zd(i,j-1,k))))
+c     $                   +c22*(zd(i,j+1,k) + zd(i,j-2,k)) ))
+      end do
+      end do
+      end do
+!$omp enddo
+*
+      call UPWND3 (vup,v,xdu,ydu,zdu,fxx,fyy,fzz,
+     $             minx,maxx,miny,maxy,gnk-1,0,south,lag_intp)
+*
+*
+***********************************************************************
+*
+*     Contribution to Pressure equation: qpup
+*
+***********************************************************************
+*
+      nkt = gnk-1
+      if(flextop) nkt = gnk
+      tbound = dble(nkt) - epsilon
+*
+!$omp do
+      do k=1,nkt
+      do j=1,ldnj-north
+      do i=1,ldni-east
+         xdu(i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,xd(i,j,k)))
+         ydu(i,j,k) = min(dble(j)-sbound,max(dble(j)-nbound,yd(i,j,k)))
+         zdu(i,j,k) = min(dble(k)-bbound,max(dble(k)-tbound,zd(i,j,k)))
+      end do
+      end do
+      end do
+!$omp enddo
+*
+      call UPWND3  (qpup,qp,xdu,ydu,zdu,fxx,fyy,fzz,
+     $              minx,maxx,miny,maxy,nkt,0,0,lag_intp)
+*
+*
+***********************************************************************
+*
+*     Contributions to Vertical Momentum equation (swup), 
+*                          Thermodynamic equation (tpup),etc
+*
+*         cubic interpolation or averaging of displacements along Z
+*
+***********************************************************************
+*
+      tbound = dble(gnk) - epsilon
+*
+!$omp do
+      do j=1,ldnj-north
+      do i=1,ldni-east
+         xdu(i,j,1  ) = min(dble(i)-wbound,max(dble(i)-ebound,
+     $                                       dble(xd(i,j,1))))
+         xdu(i,j,gnk) = min(dble(i)-wbound,max(dble(i)-ebound,
+     $                                       dble(xd(i,j,gnk))))
+         ydu(i,j,1  ) = min(dble(j)-sbound,max(dble(j)-nbound,
+     $                                       dble(yd(i,j,1))))
+         ydu(i,j,gnk) = min(dble(j)-sbound,max(dble(j)-nbound,
+     $                                       dble(yd(i,j,gnk))))
+         zdu(i,j,1  ) = min(dble(1)-bbound,max(dble(1)-tbound,
+     $                                       dble(zd(i,j,1))))
+         zdu(i,j,gnk) = min(dble(gnk)-bbound,max(dble(gnk)-tbound,
+     $                                       dble(zd(i,j,gnk))))
+      end do
+      end do
+!$omp enddo
+*
+c         do i=1,ldni-east
+c            w1 = pt5*(xd(i,j,2    ) + xd(i,j,1    ))
+c            w2 = pt5*(yd(i,j,2    ) + yd(i,j,1    ))
+c            w3 = pt5*(zd(i,j,2    ) + zd(i,j,1    ))
+c            w4 = pt5*(xd(i,j,gnk-1) + xd(i,j,gnk-2))
+c            w5 = pt5*(yd(i,j,gnk-1) + yd(i,j,gnk-2))
+c            w6 = pt5*(zd(i,j,gnk-1) + zd(i,j,gnk-2))
+c            xdu(i,j,2    ) = min(dble(i)-wbound,max(dble(i)-ebound,w1))
+c            ydu(i,j,2    ) = min(dble(i)-wbound,max(dble(i)-ebound,w2))
+c            zdu(i,j,2    ) = min(dble(2)-bbound,max(dble(2)-tbound,w3))
+c            xdu(i,j,gnk-1) = min(dble(i)-wbound,max(dble(i)-ebound,w4))
+c            ydu(i,j,gnk-1) = min(dble(i)-wbound,max(dble(i)-ebound,w5))
+c            zdu(i,j,gnk-1) = min(dble(gnk-1)-bbound,
+c     $                       max(dble(gnk-1)-tbound,w6))
+c         end do
+!$omp do
+      do k=2,gnk-1
+      do j=1,ldnj-north
+      do i=1,ldni-east
+         w1 = c11*(xd(i,j,k  ) + xd(i,j,k-1))
+c     $           +c22*(xd(i,j,k+1) + xd(i,j,k-2))
+         w2 = c11*(yd(i,j,k  ) + yd(i,j,k-1))
+c     $           +c22*(yd(i,j,k+1) + yd(i,j,k-2))
+         w3 = c11*(zd(i,j,k  ) + zd(i,j,k-1))
+c     $           +c22*(zd(i,j,k+1) + zd(i,j,k-2))
+         xdu(i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,w1))
+         ydu(i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,w2))
+         zdu(i,j,k) = min(dble(k)-bbound,max(dble(k)-tbound,w3))
+      end do
+      end do
+      end do
+!$omp enddo
+*
+      call UPWND3 (swup,sw,xdu,ydu,zdu,fxx,fyy,fzz,
+     $             minx,maxx,miny,maxy,gnk,0,0,lag_intp)
+*
+      call UPWND3 (tpup,tp,xdu,ydu,zdu,fxx,fyy,fzz,
+     $             minx,maxx,miny,maxy,gnk,0,0,lag_intp)
+*
+      call UPWND3 (hmup,hm,xdu,ydu,zdu,fxx,fyy,fzz,
+     $             minx,maxx,miny,maxy,gnk,0,0,lag_intp)
+*
+      do n=1,ntr
+         call UPWND3 (clup((n-1)*dim3d+1),cl((n-1)*dim3d+1),xdu,ydu,zdu,
+     $                fxx,fyy,fzz,minx,maxx,miny,maxy,gnk,0,0,lag_intp)
+      end do
+*
+*---------------------------------------------------------------------
+      return
+      end
+@

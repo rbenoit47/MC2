@@ -1,0 +1,186 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r nest_intt -- Linear interpolation in time of nesting data
+*
+      subroutine nest_intt (stepno,trname,ntrname,dtf,whenby1)
+      implicit none
+*
+      logical whenby1
+      integer stepno,ntrname
+      character*8 trname(ntrname)
+      real dtf
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*    stepno    I     I    S    numero du pas de temps en cours
+*
+*IMPLICIT
+#include "dynmem.cdk"
+#include "lun.cdk"
+#include "cdate.cdk"
+#include "nesting.cdk"
+#include "partopo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "halo.cdk"
+#include "nbcpu.cdk"
+*
+**
+      character*16 datev
+      character*22 root_filename,filename
+      integer i,j,k,n,pniterp,nia,nja,nka,open_bmf,i0,in,j0,jn,err
+      integer yy,mo,dd,hh,mm,ss,dum,ifb
+      real*8  a,b,dayfrac,tx,dt,pt5,one,sid,rsid
+      parameter(pt5=0.5d0, one=1.0d0, sid=86400.0d0)
+      common /DUMMY1/ rsid,dt,tx,dayfrac
+*-----------------------------------------------------------------------
+*
+!$omp single
+      rsid=one/sid
+      dt = dble(grdt)
+      dayfrac = dble(stepno)*abs(dt)*rsid 
+      call incdatsd (datev,gcrunstrt,dayfrac)
+      call prsdate (yy,mo,dd,hh,mm,ss,dum,datev)
+      call pdfjdate2 (tx,yy,mo,dd,hh,mm,ss)
+*
+      if ((datev.gt.current_nest) .and. 
+     $     .not.((stepno.eq.1).and.(whenby1)) )then
+         whenby1 = .true.
+*     
+         dtf = (tx-tf_nest) * sid / dt
+         dayfrac = dble(Pil_nesdt)*rsid
+         call incdatsd (datev,current_nest,dayfrac)
+         current_nest = datev
+         call prsdate (yy,mo,dd,hh,mm,ss,dum,current_nest)
+         call pdfjdate2 (tf_nest,yy,mo,dd,hh,mm,ss)
+         root_filename='../bm'//datev(1:15)//'_'     
+*
+         if (stepno.gt.1) then
+            do k=1,gnk
+               do j=1-hy,ldnj+hy
+               do i=1-hx,ldni+hx
+                   unestt(i,j,k) =  unesta(i,j,k)
+                   vnestt(i,j,k) =  vnesta(i,j,k)
+                  swnestt(i,j,k) = swnesta(i,j,k)
+                  qpnestt(i,j,k) = qpnesta(i,j,k)
+                  tpnestt(i,j,k) = tpnesta(i,j,k)
+                  hmnestt(i,j,k) = hmnesta(i,j,k)
+               end do
+               end do
+               do n=1,ntr
+                  do j=1-hy,ldnj+hy
+                  do i=1-hx,ldni+hx
+                     clnestt(i,j,k,n) = clnesta(i,j,k,n)
+                  end do
+                  end do
+               end do
+            end do
+            do j=1-hy,ldnj+hy
+            do i=1-hx,ldni+hx
+               qpnestt(i,j,0) = qpnesta(i,j,0)
+            end do
+            end do
+         endif
+*
+         err = 0
+         if (south_L) then
+            filename = root_filename(1:21)//'s'
+            err = open_bmf (filename,nia,nja,nka,gngalsig,halo)
+            call s_rdvint (unesta,vnesta,swnesta,tpnesta,hmnesta,
+     $                     qpnesta,clnesta,trname,ntrname,datev,
+     $                     minx,maxx,miny,maxy,gnk,nia,nja,nka,1)
+         endif
+         if (north_L) then
+            filename = root_filename(1:21)//'n'
+            err = open_bmf (filename,nia,nja,nka,gngalsig,halo)
+            call s_rdvint (unesta,vnesta,swnesta,tpnesta,hmnesta,
+     $                     qpnesta,clnesta,trname,ntrname,datev,
+     $                     minx,maxx,miny,maxy,gnk,nia,nja,nka,2)
+         endif
+         if (west_L) then
+            filename = root_filename(1:21)//'w'
+            err = open_bmf (filename,nia,nja,nka,gngalsig,halo)
+            call s_rdvint (unesta,vnesta,swnesta,tpnesta,hmnesta,
+     $                     qpnesta,clnesta,trname,ntrname,datev,
+     $                     minx,maxx,miny,maxy,gnk,nia,nja,nka,3)
+         endif
+         if (east_L) then
+            filename = root_filename(1:21)//'e'
+            err = open_bmf (filename,nia,nja,nka,gngalsig,halo)
+            call s_rdvint (unesta,vnesta,swnesta,tpnesta,hmnesta,
+     $                     qpnesta,clnesta,trname,ntrname,datev,
+     $                     minx,maxx,miny,maxy,gnk,nia,nja,nka,4)
+         endif         
+c         call rpn_comm_xch_halo (unesta,minx,maxx,miny,maxy,ldni,ldnj,
+c     $                              1,hx,hy,period_x,period_y,ldni,0)
+c         call rpn_comm_xch_halo (vnesta,minx,maxx,miny,maxy,ldni,ldnj,
+c     $                              1,hx,hy,period_x,period_y,ldni,0)
+*
+         call mc2stop (min(err,0))
+*
+         do j=1-hy,ldnj+hy-1
+         do i=1-hx,ldni+hx-1
+            swnesta(i,j,1) =  -sbxy(i,j) * pt5 *
+     $    ( gg1(i+1,j,1)*unesta(i+1,j,1) + gg1(i,j,1)*unesta(i,j,1)
+     $    + gg2(i,j+1,1)*vnesta(i,j+1,1) + gg2(i,j,1)*vnesta(i,j,1) )
+         end do
+         end do
+*
+      else
+*
+         dtf = 1.0
+*
+      endif
+!$omp end single
+!$omp barrier
+*
+      a = (tf_nest-tx)/ (tf_nest - tx + (dble(dtf)*dt * rsid) )
+      b = one - a
+*
+!$omp do
+      do k=1,gnk
+         do j=1-hy,ldnj+hy
+         do i=1-hx,ldni+hx
+             unestt(i,j,k) =  a* unestt(i,j,k) + b* unesta(i,j,k)
+             vnestt(i,j,k) =  a* vnestt(i,j,k) + b* vnesta(i,j,k)
+            swnestt(i,j,k) =  a*swnestt(i,j,k) + b*swnesta(i,j,k)
+            qpnestt(i,j,k) =  a*qpnestt(i,j,k) + b*qpnesta(i,j,k)
+            tpnestt(i,j,k) =  a*tpnestt(i,j,k) + b*tpnesta(i,j,k)
+            hmnestt(i,j,k) =  a*hmnestt(i,j,k) + b*hmnesta(i,j,k)
+         end do
+         end do
+         do n=1,ntr
+         do j=1-hy,ldnj+hy
+         do i=1-hx,ldni+hx
+            clnestt(i,j,k,n) =  a*clnestt(i,j,k,n)+b*clnesta(i,j,k,n)
+         end do
+         end do
+         end do
+         if (k.eq.1) then
+            do j=1-hy,ldnj+hy
+            do i=1-hx,ldni+hx
+                qpnestt(i,j,0) =  a*qpnestt(i,j,0) + b*qpnesta(i,j,0)
+            end do
+            end do
+         endif
+      end do
+!$omp enddo
+*
+*-----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

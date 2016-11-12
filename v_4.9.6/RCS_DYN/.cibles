@@ -1,0 +1,38 @@
+#
+#
+#   Targets to load SISL  (guillimin)
+#   adapted from .cibles of gemclim
+#
+mc2: mc2ntr mc2dm
+
+mc2ntr:
+	makebidon mc2ntr;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o $(EXTOBJ) -libpath $(LIBPATH) -optf "=$(LFLAGS)" -o $(mainntr) $(OMP) -libappl "$(LIBS)" -librmn $(RMN) -codebeta $(CODEBETA) $(MPI) $(DEBUG);\
+	/bin/cp $(mainntr) $(PWD)/$(mainntr) ; /bin/rm -f $(mainntr)* bidon.o
+
+mc2ntr___:
+	makebidon mc2ntr;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o $(EXTOBJ) -libpath $(LIBPATH) -optf "=$(LFLAGS)" -o $(mainntr) $(OMP) -libappl "$(LIBS)" -librmn $(RMN) -codebeta $(CODEBETA) $(MPI) $(DEBUG)
+
+mc2dm:
+	makebidon mc2dm;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o $(EXTOBJ) -libpath $(LIBPATH) -optf "=$(LFLAGS)" -o $(maindm) $(OMP) -libappl "$(LIBS)" -librmn $(RMN) -codebeta $(CODEBETA) $(MPI) $(DEBUG);\
+	/bin/cp $(maindm) $(PWD)/$(maindm) ; /bin/rm -f $(maindm)* bidon.o
+
+mc2_nompi: mc2ntr_nompi mc2dm_nompi
+
+mc2ntr_nompi:
+	make mc2ntr COMM="$(COMM) rpn_commstubs_40509" MPI=
+
+mc2dm_nompi:
+	make mc2dm  COMM="$(COMM) rpn_commstubs_40509" MPI=
+
+geophy: geophy.o
+	makebidon geophy
+	$(RBUILD) -obj $(LCLPO)/geophy.o $(LCLPO)/bidon.o -opt "=$(LFLAGS)" -o geophy.Abs -librmn $(RMN)
+	/bin/rm -f $(LCLPO)/geophy.o $(LCLPO)/bidon.o
+
+#

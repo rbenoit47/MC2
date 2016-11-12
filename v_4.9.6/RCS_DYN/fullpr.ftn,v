@@ -1,0 +1,85 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r fullpr
+*
+      subroutine fullpr ( prw, prt, prm, qp, ht, hm, ng, nk )
+      implicit none
+*
+      integer ng,nk
+      real prw(ng,nk),prt(ng,nk),prm(ng,nk+1),
+     $     qp(ng,nk+1),ht(ng,nk),hm(ng,nk+1)
+*
+      integer i,k,ktop(ng*nk),kbot(ng*nk)
+      real posv(ng*nk*2),hww(ng*(nk+4)),tr1(ng,nk+1),
+     $     qstr(ng,nk+1),dum1(ng,nk),dum2(ng,nk),ortsr(ng,nk+1)
+*
+*----------------------------------------------------------------------
+*
+*** Compute full pressure (prm) from model pressure perturbation (qp) 
+*
+      call qntstar(qstr,dum1,dum2,ortsr,ht,hm,ng,0,nk)
+*
+      do k=1,nk+1
+      do i=1,ng
+         tr1(i,k) = qp(i,k) * ortsr(i,k)
+      end do
+      end do
+*
+      do k=1,nk+1
+      do i=1,ng
+         prm(i,k) = exp(qstr(i,k) + tr1(i,k))
+      end do
+      end do
+*
+*** Compute full pressure on thermodynamics levels (prt) from model 
+*   pressure perturbation (qp)
+*
+*     * Vertical cubic interpolation on thermo. level
+*
+      call posiz3   ( posv,hww,hm,ht,ktop,kbot,ng,nk,nk+1 )
+      call vertint3 ( prt,tr1,posv,hww,ng,nk,nk+1 )
+*
+*     * Compute full pressure
+*
+      call qntstar(qstr,dum1,dum2,ortsr,ht,ht,ng,1,nk)
+*
+      do k=1,nk
+      do i=1,ng
+         prt(i,k) = exp(qstr(i,k) + prt(i,k)) 
+         prw(i,k) = prt(i,k)
+      end do            
+      end do
+      do i=1,ng
+         prw(i ,1) = prm(i ,   1) 
+         prw(i,nk) = prm(i ,nk+1) 
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+@

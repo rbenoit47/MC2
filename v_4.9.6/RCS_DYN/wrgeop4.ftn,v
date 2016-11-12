@@ -1,0 +1,67 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wrgeop4
+*
+      subroutine wrgeop4 ( geobus,geosize,ni,nj)
+      implicit none
+*
+      integer geosize,ni,nj
+      real geobus(geosize)
+*
+#include "lesbus.cdk"
+#include "geobus.cdk"
+#include "lun.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,ier,l,m,splice
+      real wk1,wk2,busd
+      pointer (pawk1 , wk1 (ni,nj)), (pawk2, wk2(ni,nj)),
+     $        (pabusd, busd(*))
+*
+*----------------------------------------------------------------------
+*
+      write(un_geo) geotop,geospc
+*
+      write(un_geo) (geonm (i,1),i=1,geotop),(geonm (i,2),i=1,geotop)
+      write(un_geo) (geopar(i,1),i=1,geotop),(geopar(i,2),i=1,geotop),
+     $                (geopar(i,3),i=1,geotop)
+*
+      splice=ni-7
+      m = geosize/splice
+*
+      do j=1,splice
+         write(un_geo) (geobus(i),i=(j-1)*m+1,j*m)
+      end do
+      if (splice*m+1.le.geosize)
+     $     write(un_geo) (geobus(i),i=splice*m+1,geosize)
+*      
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+@

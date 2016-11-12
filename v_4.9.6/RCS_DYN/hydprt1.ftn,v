@@ -1,0 +1,146 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r hydprt1 -- Computes hydrostatic pressure on thermodymic levels
+*
+      subroutine hydprt1 (prt,dez,psm,tl,ngf,nkf,tp,sbxy,
+     $      odx,ody,area,zun,ztn,hh0,lminx,lmaxx,lminy,lmaxy,lnk)
+      implicit none
+*
+      integer ngf,nkf,lminx,lmaxx,lminy,lmaxy,lnk
+      real prt(ngf,nkf),dez(ngf,nkf),
+     $     psm(ngf),tl(nkf),area(ngf),zun(ngf),ztn(ngf)
+      real tp(lminx:lmaxx,lminy:lmaxy,*),
+     $     sbxy(lminx:lmaxx,lminy:lmaxy),
+     $     hh0(lminx:lmaxx,lminy:lmaxy,2)
+      real*8 odx(*),ody(*)
+*
+*AUTHOR   Michel Desgagne           Mar   1996
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    prt        O     R    A    hydrostatic presure on thermo. lvls
+*    dez        O     R    A    vertical distances between grid points
+*    psm        O     R    A    surface pressure (t-dt)
+*    nif        I     I    S    physics horizontal dimension
+*    njf        I     I    S    physics horizontal dimension
+*    nkf        I     I    S    physics vertical   dimension
+*    qm         I     R    A    log. pressure (t-dt)
+*    tm         I     R    A    temperature   (t-dt)
+*    qp         I     R    A    log. pressure (t)
+*    tp         I     R    A    temperature   (t)
+*    h0         I     R    A    topography
+*    nis        I     I    S    max. horizontal dimension along X
+*    njs        I     I    S    max. horizontal dimension along Y
+*    ni         I     I    S    computational dimension along X
+*    nj         I     I    S    computational dimension along Y
+*    nk         I     I    S    vertical dimension
+*
+*IMPLICIT
+#include "yomdyn1.cdk"
+#include "consdyn_8.cdk"
+#include "levels.cdk"
+#include "lcldim.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,k
+      real p00,gamma
+      real ztg(minx:maxx,miny:maxy,lnk),zmg(minx:maxx,miny:maxy,0:lnk),
+     $     w1(minx:maxx,miny:maxy)
+      data gamma /6.5e-3/
+*
+**----------------------------------------------------------------------
+*     * Computing physical heights of thermo. and dynamic levels
+*
+      p00  = 100000.
+      gamma= 6.5e-3
+*
+!$omp parallel
+      call hauteur_omp ( ztg,'HT',hh0,maxx-minx+1,maxy-miny+1,lnk )
+      call hauteur_omp ( zmg(minx,miny,1),'HM',hh0,maxx-minx+1,
+     $                                         maxy-miny+1,lnk )
+*
+!$omp do
+      do j=1,ldnj
+*
+         do i=1,ldni
+         zmg(i,j,0) = hh0(i,j,1)
+         prt ((j-1)*ldni+i,nkf-1)= prt ((j-1)*ldni+i,nkf  )*
+     $       exp(-grav_8*(ztg(i,j,1)-zmg(i,j,0))/
+     $       (rgasd_8*(tp(i,j,1)+gamma*(zmg(i,j,1)-zmg(i,j,0))/2.)))
+         w1(i,j)               = prt ((j-1)*ldni+i,nkf-1)*
+     $       exp(-grav_8*(zmg(i,j,1)-ztg(i,j,1))/
+     $       (rgasd_8*(5.*tp(i,j,1)/6.+tp(i,j,2)/6.)))
+         prt ((j-1)*ldni+i,nkf-2)= w1(i,j)*
+     $       exp(-grav_8*(ztg(i,j,2)-zmg(i,j,1))/
+     $       (rgasd_8*(2.*tp(i,j,2)/3.+tp(i,j,1)/3.)))
+         w1(i,j)= w1(i,j)*exp(-grav_8*(zmg(i,j,2)-zmg(i,j,1))
+     $                         /(rgasd_8*tp(i,j,2)))
+         zun((j-1)*ldni+i) = -1
+         ztn((j-1)*ldni+i) = -1
+         area((j-1)*ldni+i) = 1./(odx(1)*ody(j)) / sbxy(i,j)
+         dez((j-1)*ldni+i,nkf-1)= ztg(i,j,2)-ztg(i,j,1)
+         dez((j-1)*ldni+i,1)    = ztg(i,j,lnk)-ztg(i,j,lnk-1)
+         end do
+*
+         do k=3,lnk
+         do i=1,ldni
+            prt((j-1)*ldni+i,nkf-k)=w1(i,j)*
+     $             exp(-grav_8*(ztg(i,j,k)-zmg(i,j,k-1))/
+     $             (rgasd_8*(0.75*tp(i,j,k)+0.25*tp(i,j,k-1))))
+            w1(i,j)=w1(i,j)*
+     $             exp(-grav_8*(zmg(i,j,k)-zmg(i,j,k-1))/
+     $             (rgasd_8*tp(i,j,k)))
+            dez((j-1)*ldni+i,nkf-(k-1))=ztg(i,j,k)-ztg(i,j,k-1)
+         end do
+         end do
+*
+      end do
+!$omp end do
+!$omp end parallel
+*
+      do k=nkf,2,-1
+         tl(k) = ztr(k-1)
+      end do
+      tl(1) = 0.
+*
+      do k=1,nkf
+      do i=ldni*ldnj+1,ngf
+         prt(i,k) = prt(ldni*ldnj,k)
+         dez(i,k) = dez(ldni*ldnj,k)
+      end do
+      end do
+*
+      do i=ldni*ldnj+1,ngf
+         psm(i) = psm(ldni*ldnj)
+         zun(i) = zun(ldni*ldnj)
+         ztn(i) = ztn(ldni*ldnj)
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

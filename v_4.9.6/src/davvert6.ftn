@@ -1,0 +1,87 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r davvert6 Pilotage vertical
+*
+      subroutine davvert6 (fn,fd,lminx,lmaxx,lminy,lmaxy,lnk,zz,
+     $                                          fnzspng,frzspng)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk,fnzspng
+      real fn(lminx:lmaxx,lminy:lmaxy,lnk),
+     $     fd(lminx:lmaxx,lminy:lmaxy,lnk),zz(lnk)
+      real frzspng
+*
+*AUTHOR
+*
+*REVISION
+*     M. Giguere                            Jul   1992
+*           - nesting frontiere superieure
+*     Yves Chartier/Michel Desgagne     Oct/Nov   1992
+*           - implicit none
+*           - nis,njs,nks,ni,nj,nk
+*           - structural documentation
+*     M. Giguere                            Apr   1993
+*           - epaisseur eponge en GAL-CHEN
+*           - ks 
+*     Guy Bergeron                          Aout  1993
+*           - commentaire dans l'en-tete
+*           - commentaire dans le code
+*           - correspondance avec les equations de la formulation
+*             du modele
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (davvert6)
+*     Effectue le pilotage vertical au toit du modele tel que decrit
+*     par l'equation (4.2.1).
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    fn         O     R    A    variable qui est pilotee
+*    fd         I     R    A    variable du modele pilote
+*    ni         I     I    S    dimension de la grille selon X
+*    nj         I     I    S    dimension de la grille selon Y
+*    nk         I     I    S    dimension de la grille selon Z
+*    fnzspng   I/O    I    S    # of levels on which vertical nesting
+*                               is applied (>= 4 <= nk-1)
+*    frzspng    I     R    S    maximum value of the weighting function
+*
+*IMPLICIT
+#include "lcldim.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,k,kmin
+      real*8 alpha,beta,c,zmin,zero,one,p1,p9
+      parameter (zero = 0.0d0, one = 1.0d0, p1 = 0.1d0, p9 = 0.9d0)
+*
+*----------------------------------------------------------------------
+*100
+*     * Vertical nesting with weighting function of the form:
+*     *                "c = beta*alpha**2"
+*     *     with:    beta = constant
+*     *             alpha = (zz - zmin)/(ztop - zmin)
+*
+      beta  = min(one,max(zero,dble(frzspng)))
+*
+      kmin  = gnk-1-fnzspng
+      zmin  = p9*zt(kmin) + p1*zt(kmin-1)
+*
+      do k=kmin,gnk
+        alpha=(zz(k) - zmin)/(zt(gnk) - zmin)
+        c    = beta*alpha*alpha
+        do j=1,ldnj
+        do i=1,ldni
+           fn(i,j,k) = (one-c)*fn(i,j,k) + c*fd(i,j,k)
+        end do
+        end do
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end

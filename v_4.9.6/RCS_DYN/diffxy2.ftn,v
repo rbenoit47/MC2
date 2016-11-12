@@ -1,0 +1,134 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r diffxy
+*
+      subroutine diffxy2 (f,w,lminx,lmaxx,lminy,lmaxy,lnk,
+     $                                   is,js,ks,fact,kh)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk,is,js,ks
+      real f(lminx:lmaxx,lminy:lmaxy,lnk),w(*)
+      real fact,kh(lnk)
+*
+*OBJECT
+*     computes a,b and c for gsoly:
+*
+*       a=-d2     c=-d2       b=1-a-c
+*
+*     at all interior points. valid also at the
+*     boundary points except for the following:
+*          a=0 at the right boundary
+*          c=0 at the left boundary
+*
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR   Georges Jakimow                   Jan   1989
+*
+*HISTORY
+*     Michel Desgagne                       Avril 1993
+*           - standardisation for MC2
+**
+#include "lcldim.cdk"
+#include "nbcpu.cdk"
+*
+      integer i,j,k,nit,njt,nkt
+      real c1,c2,c3,c4,a,b,c
+      pointer (paa, a(lminx:lmaxx,lminy:lmaxy,nk)),
+     $        (pab, b(lminx:lmaxx,lminy:lmaxy,nk)),
+     $        (pac, c(lminx:lmaxx,lminy:lmaxy,nk))
+*----------------------------------------------------------------------
+*
+      paa = loc(w(        1))
+      pab = loc(w(  dim3d+1))
+      pac = loc(w(2*dim3d+1))
+*
+      nit = ldni - is
+      njt = ldnj - js
+      nkt = nk   - ks
+*
+      do k=1,nkt
+         c1  = kh(k) * fact
+         c2  = 1. + c1+c1 - c1**2./(1.+2.*c1)
+         c3  = 1. + c1 - c1**2./(1.+2.*c1)
+         c4  = 1. + c1
+         do i=1,nit
+            do j=1,njt
+               a(i,j,k) = -c1
+               b(i,j,k) =  c2
+               c(i,j,k) = -c1
+            end do
+         end do
+         do j=1,njt
+            a(nit,j,k) = 0.0
+            c(  1,j,k) = 0.0
+            b(nit,j,k) = c3
+            b(  1,j,k) = c4
+         end do
+         do i=2,nit
+            do j=1,njt
+               f(i,j,k) = f(i,j,k)-c(i,j,k)*f(i-1,j,k)/b(i-1,j,k)
+            end do
+         end do
+         do j=1,njt
+            f(nit,j,k) = f(nit,j,k)/b(nit,j,k)
+         end do
+         do i=nit-1,1,-1
+            do j=1,njt
+               f(i,j,k) = (f(i,j,k)-a(i,j,k)*f(i+1,j,k))/b(i,j,k)
+            end do
+         end do
+*
+         do j=1,njt
+            a(nit,j,k) = -c1
+            c(  1,j,k) = -c1
+            b(nit,j,k) =  c2
+            b(  1,j,k) =  c2
+         end do
+         do i=1,nit
+            a(i,njt,k) = 0.0
+            c(i,  1,k) = 0.0
+            b(i,njt,k) = c3
+            b(i,  1,k) = c4
+         end do
+         do j=2,njt
+            do i=1,nit
+               f(i,j,k)=f(i,j,k)-c(i,j,k)*f(i,j-1,k)/b(i,j-1,k)
+            end do
+         end do
+         do i=1,nit
+            f(i,njt,k)=f(i,njt,k)/b(i,njt,k)
+         end do
+         do j=njt-1,1,-1
+            do i=1,nit
+               f(i,j,k)=(f(i,j,k)-a(i,j,k)*f(i,j+1,k))/b(i,j,k)
+            end do
+         end do
+      end do
+*    
+*----------------------------------------------------------------------
+      return
+      end
+@

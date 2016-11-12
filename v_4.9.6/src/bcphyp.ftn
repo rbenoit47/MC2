@@ -1,0 +1,70 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine bcphyp
+      implicit none
+*
+#include "maxdim.cdk"
+#include "physnml.cdk"
+#include "serinml.cdk"
+#include "diagnml.cdk"
+#include "yomdyn.cdk"
+      include "mpif.h"
+*
+      integer nw,fact,ierr
+      integer bidon(2), l2, l1
+*------------------------------------------------------------------
+      l2 = loc(bidon(2))
+      l1 = loc(bidon(1))
+      fact = l2 - l1
+*
+      l2 = loc(endphync)
+      l1 = loc(radia   )
+      nw = ( l2 - l1 )
+      call MPI_bcast (radia    ,nw,MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endseric)
+      l1 = loc(surface )
+      nw = ( l2 - l1 ) 
+      call MPI_bcast (surface  ,nw,MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(enddiagc)
+      l1 = loc(zsurfac )
+      nw = ( l2 - l1 ) 
+      call MPI_bcast (zsurfac  ,nw,MPI_CHARACTER,0,MPI_COMM_WORLD,ierr )
+*
+      l2 = loc(endphyni)
+      l1 = loc(kntrad  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (kntrad    ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endserii)
+      l1 = loc(statij  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (statij    ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(enddiagi)
+      l1 = loc(statijd )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (statijd   ,nw,MPI_INTEGER,0,MPI_COMM_WORLD,ierr )
+*
+      l2 = loc(endphynr )
+      l1 = loc(hcad     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (hcad      ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(endserir )
+      l1 = loc(statll   )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (statll    ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(enddiagr )
+      l1 = loc(statlld  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (statlld   ,nw,MPI_REAL   ,0,MPI_COMM_WORLD,ierr )
+*
+      l2 = loc(endphynl )
+      l1 = loc(dbgmem   )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (dbgmem   ,nw,MPI_LOGICAL  ,0,MPI_COMM_WORLD,ierr )
+      l2 = loc(enddiagl )
+      l1 = loc(diagzon  )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (diagzon  ,nw,MPI_LOGICAL  ,0,MPI_COMM_WORLD,ierr )
+      call MPI_bcast (go4it    ,1 ,MPI_LOGICAL  ,0,MPI_COMM_WORLD,ierr )
+*
+*------------------------------------------------------------------
+      return
+      end

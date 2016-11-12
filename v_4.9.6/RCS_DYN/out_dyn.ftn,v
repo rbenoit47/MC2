@@ -1,0 +1,195 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine out_dyn (trname)
+      implicit none
+*
+      character*8 trname(*)
+*
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "sor.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "topo.cdk"
+*
+      include 'mpif.h'      
+      character*6 ptstep
+      character*128 progfile
+      character*256 sormc2
+      integer unf,pnprog,n,ztmp(nk_out+2),k,i,j,ncharf,clostep,err
+      real , dimension(:,:,:  ), allocatable :: wk1,wk2,wk3
+      real , dimension(:,:,:,:), allocatable :: wktr
+      data unf /23/
+      logical isopen,boot,ontime
+      data isopen,boot /.false.,.true./
+      data clostep /-1/
+      save isopen,clostep,progfile,ncharf,boot
+*
+*------------------------------------------------------------------
+*
+      call rpn_comm_xch_halo (qpp,minx,maxx,miny,maxy,ldni,ldnj,
+     $              ndynvar*gnk+1,hx,hy,period_x,period_y,ldni,0)
+*
+      if (Grdc_proj_S .ne. '@@') call out_dync (trname)
+*
+      if (out_runt) then
+         do i=1, nlevtyp
+            if (levtyp_S(i).ne.'@@') then
+               levtyp = levtyp_S(i)
+               if (levtyp.eq.'G') out_kind=0
+               if (levtyp.eq.'P') out_kind=2
+               if (levtyp.eq.'H') out_kind=0
+               call out_dynr (trname)
+            endif
+         end do
+         return
+      endif
+*
+#if ! defined (T3E)
+      bprogfile = '../zmc2.prog_d'
+#else
+      bprogfile = 'zmc2.prog_d'
+#endif
+*
+      if (gnnls.lt.0) return
+*
+      ontime = .false.
+      if (gnnls.eq.0) then
+         nstepsor_d = 0
+         if (gnstepno.eq.0) ontime = .true.
+         if (gnstepno.gt.0) isopen = .true.
+      else
+         if (mod(gnstepno,gnnls).eq.0) then
+            ontime = .true.
+         endif
+      endif
+*
+      if (.not.isopen) then
+         clostep = min (endstepno,gnstepno+nstepsor_d-1)
+         if (boot) clostep = min (endstepno , clostep + 1)
+         if (myproc.eq.0) then
+            write(ptstep,'(I6.6)') clostep
+            ncharf   = index(bprogfile,' ') - 1
+            progfile = bprogfile(1:ncharf)//'_'//ptstep(1:6)
+            write (6,101) unf,progfile(1:ncharf+7)
+            open (unf,file=progfile,access='SEQUENTIAL',
+     $                               form='UNFORMATTED')
+            call wridrec (unf,g_if-g_id+1,g_jf-g_jd+1,
+     $                      xpx(g_id+hx),ypx(g_jd+hy))
+            write (unf) ntr
+            write (unf) (trname(i),i=1,ntr)
+         endif
+         call wrsf (unf)
+      endif
+      isopen=.true.
+*
+*     Are OUTPUT required for this timestep?
+*
+      if ( ontime .and. (.not.boot.or.(gnstepno.lt.1)) ) then
+*
+      pnprog = int (dble(gnstepno) * grdt / 3600. + 1.e-12)
+*
+      if (myproc.eq.0) then
+         write (6,103) pnprog,gnstepno
+         write (unf)   pnprog,gnstepno
+      endif
+*
+      ztmp(1) = 1
+      ztmp(2) = 2
+      allocate (wk1(g_if-g_id+1,g_jf-g_jd+1,nk_out  ))
+      allocate (wk2(g_if-g_id+1,g_jf-g_jd+1,nk_out+1))
+      allocate (wk3(g_if-g_id+1,g_jf-g_jd+1,2))
+      allocate (wktr(g_if-g_id+1,g_jf-g_jd+1,nk_out,ntr))
+*
+      call glbcolc2 (wk3,g_id,g_if,g_jd,g_jf,hh0,minx,maxx,miny,maxy,2,
+     $                                                          ztmp,2)
+      if (myproc.eq.0) write (unf) wk3
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,up,minx,maxx,miny,maxy,
+     $                                            gnk,z_out,nk_out)
+      if (myproc.eq.0) write (unf) wk1
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,vp,minx,maxx,miny,maxy,
+     $                                            gnk,z_out,nk_out)
+      if (myproc.eq.0) write (unf) wk1
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,swp,minx,maxx,miny,maxy,
+     $                                            gnk,z_out,nk_out)
+      if (myproc.eq.0) write (unf) wk1
+*
+      do i=1,nk_out
+         ztmp(i) = z_out(i)
+      end do
+      ztmp(nk_out+1) = z_out(nk_out) + 1
+      call glbcolc2 (wk2,g_id,g_if,g_jd,g_jf,qpp,minx,maxx,miny,maxy,
+     $                                          gnk+1,ztmp,nk_out+1)
+      if (myproc.eq.0) write (unf) wk2
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,tpp,minx,maxx,miny,maxy,
+     $                                             gnk,z_out,nk_out)
+      if (myproc.eq.0) write (unf) wk1
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,hmp,minx,maxx,miny,maxy,
+     $                                             gnk,z_out,nk_out)
+      if (myproc.eq.0) write (unf) wk1
+      do n=1,ntr
+         call glbcolc2 (wktr(1,1,1,n),g_id,g_if,g_jd,g_jf,
+     $                  clp(1-hx,1-hy,1,n),minx,maxx,miny,maxy,gnk,
+     $                                               z_out,nk_out)
+      end do
+*
+      if (myproc.eq.0) then
+         if (ntr.gt.0) write (unf) wktr
+      endif
+*
+      deallocate (wk1,wk2,wk3,wktr)
+*
+      endif
+*
+      boot=.false.
+*
+      if (gnstepno.eq.clostep) then
+         if (myproc.eq.0) then
+            close (unf)
+            write (6,102) unf,progfile(1:ncharf+7)
+            write(ptstep,'(I6.6)') clostep
+            sormc2='runsor -prog '//ptstep//' -dyn'//
+     $      ' 1> sormc2_'//ptstep//'.dout 2> sormc2_'//ptstep//'.derr &'
+            if (launchsor) call system (sormc2)
+         endif
+         isopen=.false.
+      endif
+*
+ 101  format (' OPENING FORTRAN UNIT=',i3,' FILE = ',a)
+ 102  format (' CLOSING FORTRAN UNIT=',i3,' FILE = ',a)
+ 103  format (1x,'SAVING PROGNOSTIC FIELDS ON zmc2.prog:   ','PROG',
+     $        i4,'H    STEPNO:',i5)
+*
+*------------------------------------------------------------------
+      return
+      end
+@

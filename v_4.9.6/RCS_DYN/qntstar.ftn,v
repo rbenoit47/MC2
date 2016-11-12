@@ -1,0 +1,185 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r qntstar
+      subroutine qntstar(qstr,nstr2,gotstr,ortstr,hh1,hh2,ng,kd,kf)
+
+      implicit none
+*
+      integer ng,kd,kf
+      real gotstr(ng,kf), ortstr(ng,kd:kf),
+     $      nstr2(ng,kf),   qstr(ng,kd:kf),
+     $        hh1(ng,kf),    hh2(ng,kd:kf)
+*
+#include "consdyn_8.cdk"
+#include "yomdyn1.cdk"
+*
+      integer i,k
+      real*8 p00,t00,th00,n002,a00,c00,exp00,c5,c6,h1,h2,
+     $           t01,th01,n012,a01,c01,exp01,
+     $       hhh,tstr,pistr,aai,boa,alfa,talfa,atboa,zero,pt5,one
+      real*8 w1(ng), w1exp(ng), w2(ng), w2exp(ng)
+      real tstr1  ! done with a purpose
+      parameter(zero=0.d0,pt5=.5d0,one=1.d0)
+*
+*---------------------------------------------------------------------
+*
+      p00   = dlog(100000.0d0)
+      th00  = tzero_star
+*
+      if (ttop_star.ge.0.) then
+***** hyperbolic temperature profile
+***** three parameters: t00, t01, htrop
+*
+      t00   = tzero_star
+      t01   = ttop_star
+*
+      boa   = - (t00-t01)/t00
+      aai   = grav_8*htrop_star/(rgasd_8*t00)/(one-boa**2)
+      c00   = grav_8*grav_8/(cpd_8*t00)
+      c01   = boa*grav_8/htrop_star
+*
+      do k=1,kf
+      do i=1,ng
+         hhh   = hh1(i,k)
+         alfa  = hhh / htrop_star
+         talfa = tanh( alfa )
+         tstr  = t00 * ( one + boa * talfa )
+*
+         gotstr(i,k) = grav_8 / tstr
+          nstr2(i,k) = ( c00 + c01*( one - talfa**2 ) )
+     $                   / ( one + boa * talfa )
+      end do
+      end do
+*
+      do k=kd,kf
+      do i=1,ng
+         hhh   = hh2(i,k)
+         alfa  = hhh / htrop_star
+         talfa = tanh( alfa )
+         atboa = pt5*dlog((one+boa)/(one-boa))
+         tstr  = t00 * ( one + boa * talfa )
+*
+         ortstr(i,k) = one / (rgasd_8 * tstr )
+           qstr(i,k) = p00 - aai*(alfa-boa*dlog( cosh(alfa+atboa)
+     $                                          /cosh(atboa) ) )
+      end do
+      end do
+*
+      else if(ntrop_star.ne.0.) then
+***** standard temperature profile
+***** four parameters: t00, n002, htrop_star, n012
+*
+      t00   = tzero_star
+      n002  = ntrop_star**2
+*
+***** if  ntrop_star  < 0., this is the isothermal profile
+***** if  ntrop_star  < 0., one parameter only: t00
+      if (ntrop_star.lt.0.) n002 = grav_8*grav_8/(cpd_8*t00)
+      a00   = n002/grav_8
+      c00   = grav_8/(cpd_8*th00*a00)
+*
+      exp00 = exp ( a00 * htrop_star )
+      th01  = t00 * exp00
+      t01   = th01 * ( one - c00 + c00 / exp00 )
+      n012  = nstrat_star**2
+      if (nstrat_star.lt.0.) n012 = grav_8*grav_8/(cpd_8*t01)
+      a01   = n012/grav_8
+      c01   = grav_8/(cpd_8*th01*a01)
+      c5 = one - c00 - c01
+      c6 = cpd_8 / rgasd_8
+*
+      do k=1,kf
+         do i=1,ng
+            h1  = hh1(i,k)
+            w1(i) = a00 * min(h1,dble(htrop_star))
+            w2(i) = a01 * max(h1-dble(htrop_star),zero)
+         end do
+         call vexp (w1exp, w1, ng)
+         call vexp (w2exp, w2, ng)
+         do i=1,ng
+            tstr  = t00 * (w1exp(i)*w2exp(i)*c5 
+     $              + w2exp(i)*c00 + w1exp(i)*c01)
+            gotstr(i,k) = grav_8 / tstr
+            nstr2 (i,k) = n002
+            if(hhh.gt.htrop_star) nstr2(i,k) = n012
+         end do
+      end do
+      do k=kd,kf
+         do i=1,ng
+            h2  = hh2(i,k)
+            w1(i) = a00 * min(h2,dble(htrop_star))
+            w2(i) = a01 * max(h2-dble(htrop_star),zero)
+         end do
+         call vexp (w1exp, w1, ng)
+         call vexp (w2exp, w2, ng)
+         call vrec (w1, w1exp, ng)
+         call vrec (w2, w2exp, ng)
+         do i=1,ng
+            w1(i) = c5 + c00 * w1(i) + c01 * w2(i)
+            tstr  = t00 * (w1exp(i)*w2exp(i)*c5 
+     $              + w2exp(i)*c00 + w1exp(i)*c01)
+            w2(i) = rgasd_8 * tstr
+         end do
+         call vrec (w2exp, w2, ng)
+         call vlog (w1exp, w1, ng)
+         do i=1,ng
+            ortstr(i,k) = w2exp(i)
+              qstr(i,k) = p00 + c6 * w1exp(i)
+         end do
+      end do
+*
+      else
+***** if  ntrop_star = 0., this is the isentropic profile
+***** one parameter only: t00
+*
+      t00   = tzero_star
+      n002  = ntrop_star
+      c00   = grav_8/(cpd_8*t00)
+*
+      do k=1,kf
+      do i=1,ng
+         hhh  = hh1(i,k)
+         pistr = one - c00 * hhh
+         tstr1 = t00 * pistr
+         gotstr(i,k) = grav_8 / tstr1
+         nstr2 (i,k) = n002
+      end do
+      end do
+*
+      do k=kd,kf
+      do i=1,ng
+         hhh  = hh2(i,k)
+         pistr = one - c00 * hhh
+         tstr  = t00 * pistr
+         ortstr(i,k) = one / (rgasd_8 * tstr )
+           qstr(i,k) = p00 + cpd_8 / rgasd_8 * dlog( pistr )
+      end do
+      end do
+*
+      endif
+*
+*---------------------------------------------------------------------
+      return
+      end
+@

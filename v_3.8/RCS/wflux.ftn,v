@@ -1,0 +1,256 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R WFLUX
+*
+      SUBROUTINE WFLUX (ROS,G,WC1,TO1,RE1,TR1,RMUE,RE2,TR2,LMX,ILG)
+#include "impnone.cdk"
+      REAL TOP(LMX)
+      INTEGER ILG,I,LMX
+      REAL*8 RI0(LMX),RI0D(LMX),RI1(LMX),RI1D(LMX),RK(LMX),RM2(LMX),WCP(LMX),WM(LMX)
+      REAL*8 X1(LMX),X2(LMX),XM2P(LMX),XP2P(LMX)
+      REAL*8 A11(LMX),A12(LMX),A13(LMX),A21(LMX),A22(LMX),A23(LMX),ALPHA(LMX)
+      REAL*8 AM2B(LMX),AP2B(LMX),BETA(LMX)
+      REAL*8 C1(LMX),C2(LMX),D(LMX),DT(LMX),EXKM(LMX),EXKP(LMX),EXMUO(LMX),FF(LMX)
+      REAL*8 GP(LMX),RP(LMX)
+      REAL*8 TMP1EXP(LMX),TMP2EXP(LMX)
+      REAL ROS(LMX),G(LMX),WC1(LMX),TO1(LMX),RE1(LMX),TR1(LMX),
+     1          RMUE(LMX),RE2(LMX),TR2(LMX)
+*
+*Author
+*          L.Garand (1989)
+*
+*Revision
+* 001      G.Pellerin(Mar90)Standard documentation
+* 002      D. Talbot (June 2003) - IBM conversion
+*               - calls to vexp routine (from massvp4 library)
+*               - divisions replaced by reciprocals
+*
+*Object
+*          to estimate layer transmission and reflexion using
+*          the Delta Eddington Approximation(vectorized version)
+*
+*Arguments
+*
+*          - Input -
+* ROS      reflectivity of underlaying layer
+* G        asymmetry factor
+* WC1      omega parameter
+* TO1      optical thickness / omega
+*
+*          - Output -
+* RE1      reflected radiation without reflexion from underlying
+*          layer
+* TR1      transmitted radiation without reflexion from underlying
+*          layer
+*
+*          - Input -
+* RMUE     cosine of equivalent sun zenith angle
+*
+*          - Output -
+* RE2      reflected radiation with reflexion from underlying layer
+* TR2      transmitted radiation with reflexion from underlying
+*          layer
+*
+*          - Input -
+* LMX      maximum number of profiles that can be requested
+* ILG      actual number of profiles requested
+*
+**
+C
+      REAL REC_RMUE(lmx)
+      real*8 REC_X2(LMX),REC_D(LMX)
+      real REC_3
+C
+      REC_3=1./3.
+C
+      DO I=1,ILG
+C
+      FF(I)=G(I)*G(I)
+      GP(I)=G(I)/(1.+G(I))
+      TOP(I)=(1.-WC1(I)*FF(I))*TO1(I)
+      WCP(I)=(1-FF(I))*WC1(I)/(1.-WC1(I)*FF(I))
+      DT(I)=2.*REC_3
+      X1(I)=1.-WCP(I)*GP(I)
+      WM(1)=1.-WCP(I)
+      REC_RMUE(I)=1.0/rmue(i)
+      RM2(I)=RMUE(I)*RMUE(I)
+C     apres plusieurs essais avec vsqrt ca ne valide pas
+      RK(I)=SQRT(3.*WM(1)*X1(I))
+      X2(I)=4.*(1.-RK(I)*RK(I)*RM2(I))
+C     ENDDO
+      
+C     ce call est tel que ca ne valide plus
+C     CALL VREC (REC_X2,X2,ILG)
+
+C     DO I=1,ILG
+      REC_X2(I)=1.0d0/X2(I)
+      RP(I)=SQRT(3.*WM(1)/X1(I))
+      ALPHA(I)=3.*WCP(I)*RM2(I)*(1.+GP(I)*WM(1))*REC_X2(I)
+      BETA(I)=3.*WCP(I)*RMUE(I)*(1.+3.*GP(I)*RM2(I)*WM(1))*REC_X2(I)
+      TMP1EXP(I)=-TOP(I)*REC_RMUE(I)
+      TMP2EXP(I)=RK(I)*TOP(I)
+      ENDDO
+
+      CALL VEXP (EXMUO,TMP1EXP,ILG)
+      CALL VEXP (EXKP,TMP2EXP,ILG)
+      CALL VREC (EXKM,EXKP,ILG)
+
+      DO I=1,ILG
+      XP2P(I)=1.+DT(I)*RP(I)
+      XM2P(I)=1.-DT(I)*RP(I)
+      AP2B(I)=ALPHA(I)+DT(I)*BETA(I)
+      AM2B(I)=ALPHA(I)-DT(I)*BETA(I)
+C
+C  WITHOUT REFLEXION FROM THE UNDERLYING LAYER
+C
+      A11(I)=XP2P(I)
+      A12(I)=XM2P(I)
+      A13(I)=AP2B(I)
+      A22(I)=XP2P(I)*EXKP(I)
+      A21(I)=XM2P(I)*EXKM(I)
+      A23(I)=AM2B(I)*EXMUO(I)
+      D(I)=A11(I)*A22(I)-A21(I)*A12(I)
+      ENDDO
+
+      CALL VREC (REC_D,D,ILG)
+ 
+      DO I=1,ILG
+      C1(I)=(A22(I)*A13(I)-A12(I)*A23(I))*REC_D(I)
+      C2(I)=(A11(I)*A23(I)-A21(I)*A13(I))*REC_D(I)
+      RI0(I)=C1(I)+C2(I)-ALPHA(I)
+      RI1(I)=RP(I)*(C1(I)-C2(I))-BETA(I)
+      RE1(I)=(RI0(I)-DT(I)*RI1(I))*REC_RMUE(I)
+      RI0D(I)=C1(I)*EXKM(I)+C2(I)*EXKP(I)-ALPHA(I)*EXMUO(I)
+      RI1D(I)=RP(I)*(C1(I)*EXKM(I)-C2(I)*EXKP(I))-BETA(I)*EXMUO(I)
+      TR1(I)=EXMUO(I)+(RI0D(I)+DT(I)*RI1D(I))*REC_RMUE(I)
+C
+C  WITH REFLEXION FROM THE UNDERLYING LAYER
+C
+      A21(I)=A21(I)-ROS(I)*XP2P(I)*EXKM(I)
+      A22(I)=A22(I)-ROS(I)*XM2P(I)*EXKP(I)
+      A23(I)=A23(I)-ROS(I)*EXMUO(I)*(AP2B(I)-RMUE(I))
+      D(I)=A11(I)*A22(I)-A21(I)*A12(I)
+      ENDDO
+
+      CALL VREC (REC_D,D,ILG)
+ 
+      DO I=1,ILG
+      C1(I)=(A22(I)*A13(I)-A12(I)*A23(I))*REC_D(I)
+      C2(I)=(A11(I)*A23(I)-A21(I)*A13(I))*REC_D(I)
+      RI0(I)=C1(I)+C2(I)-ALPHA(I)
+      RI1(I)=RP(I)*(C1(I)-C2(I))-BETA(I)
+      RE2(I)=(RI0(I)-DT(I)*RI1(I))*REC_RMUE(I)
+      RI0D(I)=C1(I)*EXKM(I)+C2(I)*EXKP(I)-ALPHA(I)*EXMUO(I)
+      RI1D(I)=RP(I)*(C1(I)*EXKM(I)-C2(I)*EXKP(I))-BETA(I)*EXMUO(I)
+      TR2(I)=EXMUO(I)+(RI0D(I)+DT(I)*RI1D(I))*REC_RMUE(I)
+C
+      ENDDO 
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d6 1
+a6 1
+      REAL TOP
+d8 7
+a14 3
+      REAL*8 RI0,RI0D,RI1,RI1D,RK,RM2,WCP,WM,X1,X2,XM2P,XP2P
+      REAL*8 A11,A12,A13,A21,A22,A23,ALPHA,AM2B,AP2B,BETA
+      REAL*8 C1,C2,D,DT,EXKM,EXKP,EXMUO,FF,GP,RP
+d23 3
+d59 43
+a101 21
+      DO 1 I=1,ILG
+      FF=G(I)*G(I)
+      GP=G(I)/(1.+G(I))
+      TOP=(1.-WC1(I)*FF)*TO1(I)
+      WCP=(1-FF)*WC1(I)/(1.-WC1(I)*FF)
+      DT=2./3.
+      X1=1.-WCP*GP
+      WM=1.-WCP
+      RM2=RMUE(I)*RMUE(I)
+      RK=SQRT(3.*WM*X1)
+      X2=4.*(1.-RK*RK*RM2)
+      RP=SQRT(3.*WM/X1)
+      ALPHA=3.*WCP*RM2*(1.+GP*WM)/X2
+      BETA=3.*WCP*RMUE(I)*(1.+3.*GP*RM2*WM)/X2
+      EXMUO=EXP(-TOP/RMUE(I))
+      EXKP=EXP(RK*TOP)
+      EXKM=1./EXKP
+      XP2P=1.+DT*RP
+      XM2P=1.-DT*RP
+      AP2B=ALPHA+DT*BETA
+      AM2B=ALPHA-DT*BETA
+d105 20
+a124 15
+      A11=XP2P
+      A12=XM2P
+      A13=AP2B
+      A22=XP2P*EXKP
+      A21=XM2P*EXKM
+      A23=AM2B*EXMUO
+      D=A11*A22-A21*A12
+      C1=(A22*A13-A12*A23)/D
+      C2=(A11*A23-A21*A13)/D
+      RI0=C1+C2-ALPHA
+      RI1=RP*(C1-C2)-BETA
+      RE1(I)=(RI0-DT*RI1)/RMUE(I)
+      RI0D=C1*EXKM+C2*EXKP-ALPHA*EXMUO
+      RI1D=RP*(C1*EXKM-C2*EXKP)-BETA*EXMUO
+      TR1(I)=EXMUO+(RI0D+DT*RI1D)/RMUE(I)
+d128 17
+a144 12
+      A21=A21-ROS(I)*XP2P*EXKM
+      A22=A22-ROS(I)*XM2P*EXKP
+      A23=A23-ROS(I)*EXMUO*(AP2B-RMUE(I))
+      D=A11*A22-A21*A12
+      C1=(A22*A13-A12*A23)/D
+      C2=(A11*A23-A21*A13)/D
+      RI0=C1+C2-ALPHA
+      RI1=RP*(C1-C2)-BETA
+      RE2(I)=(RI0-DT*RI1)/RMUE(I)
+      RI0D=C1*EXKM+C2*EXKP-ALPHA*EXMUO
+      RI1D=RP*(C1*EXKM-C2*EXKP)-BETA*EXMUO
+      TR2(I)=EXMUO+(RI0D+DT*RI1D)/RMUE(I)
+d146 1
+a146 1
+ 1    CONTINUE
+@

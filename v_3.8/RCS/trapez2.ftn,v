@@ -1,0 +1,74 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***FUNCTION TRAPEZ2
+*
+      REAL FUNCTION TRAPEZ2(DEL,F,N,NM)
+#include "impnone.cdk"
+      INTEGER N, NM, I
+      REAL F(N),DEL(NM)
+*
+*Author
+*          L.Garand (1989)
+*
+*Revision
+* 001      G.Pellerin(Mar90)Standard documentation
+*
+*Object
+*          to calculate integrals
+*
+*Arguments
+*
+*          - Input -
+* DEL      thickness of layers
+* F        variable to be integrated
+* N        dimension of F
+* NM       dimension of DEL
+*
+**
+*
+      TRAPEZ2=0.
+      DO 10 I=1,NM
+  10  TRAPEZ2=TRAPEZ2+(F(I)+F(I+1))/2.*DEL(I)
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

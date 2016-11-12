@@ -1,0 +1,73 @@
+#!/bin/ksh
+#
+. r.entry.dot
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+    -f       "0"     "1"   "[Compile local .ftn]"\
+    -objexp  "0"     "1"   "[Make objexp instead of make objloc]"\
+    -abs     "0"     "1"   "[Force the load]"\
+    -bin     ""      ""    "[Use pre-loaded main to execute]"\
+    -_status "ABORT" ""    "[return status]"\
+  ++ $*`
+#
+MAINntr=main${MODEL}ntr_${ARCH}_${MODEL_VERSION}.Abs
+MAINdm=main${MODEL}dm_${ARCH}_${MODEL_VERSION}.Abs
+echo "\n***** Main executables $MAINntr $MAINdm *****"
+abs_mach=${bin%% *}
+abs_path=${bin##* }
+if [ "$abs_path" = "$abs_mach" ] ; then abs_mach="" ; fi
+#
+rsh $MACH -n "/bin/rm -f $EXECDIR/$MAINntr $EXECDIR/$MAINdm"
+if [ $abs_path ] ; then
+   if [ $abs_mach ] ; then
+      if [ "$abs_mach" = "$MACH" ] ; then
+        echo " Establishing symbolic link"
+        echo " rsh $MACH -n ln -sf $abs_path/$MAINntr $EXECDIR_P/$MAINntr"
+        echo " rsh $MACH -n ln -sf $abs_path/$MAINdm $EXECDIR_P/$MAINdm"
+        rsh $MACH -n "ln -sf $abs_path/$MAINntr $EXECDIR/$MAINntr ; ln -sf $abs_path/$MAINdm $EXECDIR/$MAINdm"
+      else
+        echo " rcp $abs_mach:$abs_path/main${MODEL}*_${ARCH}_${MODEL_VERSION}.Abs $MACH:$EXECDIR_P"
+        rcp $abs_mach:$abs_path/main${MODEL}*_${ARCH}_${MODEL_VERSION}.Abs $MACH:$EXECDIR
+        rsh $MACH -n chmod 755 $EXECDIR/main*
+      fi
+   else
+      echo "nrcp $abs_path/main${MODEL}*_${ARCH}_${MODEL_VERSION}.Abs $MACH:$EXECDIR_P"
+      nrcp $abs_path/main${MODEL}*_${ARCH}_${MODEL_VERSION}.Abs $MACH:$EXECDIR
+      rsh $MACH -n chmod 755 $EXECDIR/main*
+   fi
+else
+  if [ ! -x $MAINntr -o ! -x $MAINdm ] ; then abs=1 ; fi
+  if [ $f -gt 0 ] ; then
+    if [ ! -s .exper_cour ] ; then
+      echo "\nThere is no active experiment. -- ABORT --\n"
+      abs=0
+    else
+      make clean
+      if [ $objexp -lt 1 ] ; then
+        make objloc
+      else
+        make objexp
+      fi
+      abs=1
+    fi
+  fi
+  if [ $abs -gt 0 ] ; then
+     make ${MODEL} ARCH=$ARCH
+  fi
+  if [ ! -x $MAINntr -o ! -x $MAINdm ] ; then
+    echo "\n COMPILING OR LOADING ERROR IN SCRIPT Um_loadbin \n"
+  else
+    echo "nrcp main${MODEL}*_${ARCH}_${MODEL_VERSION}.Abs $MACH:$EXECDIR_p"
+    nrcp main${MODEL}*_${ARCH}_${MODEL_VERSION}.Abs $MACH:$EXECDIR
+  fi
+fi
+#
+_status=`rsh $MACH -n "if [ -x $EXECDIR/$MAINntr -a -x $EXECDIR/$MAINdm ] ; then echo OK ; else echo ABORT ; fi"`
+#
+if [ "$_status" = "ABORT" ] ; then
+  echo " ERROR: $EXECDIR/main* on $MACH NOT AVAILABLE"
+fi
+echo " Um_loadbin status: "$_status
+echo "************************************************"
+. r.return.dot

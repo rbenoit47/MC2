@@ -1,0 +1,42 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r theo_sfc
+*
+*REVISION
+*
+* v4_96 - Yu W.      - Introduce Eole
+*
+      subroutine theo_sfc (geobus,ngeop)
+      implicit none
+*
+      integer ngeop
+      real geobus(ngeop)
+*
+#include "yomdyn.cdk"
+*
+*---------------------------------------------------------------------
+*
+      if (theocase.eq.'BUBBLE') then
+         call bulle_sfc ()
+         return
+      endif
+      if (theocase.eq.'MTN_PINTY1'
+     $.or.theocase.eq.'MTN_PINTY2'
+     $.or.theocase.eq.'MTN_SHAER') then
+         call mtn_sfc (geobus,ngeop)
+         return
+      endif
+*
+      if (theocase.eq.'BROOK') then
+         call brook_sfc (geobus,ngeop)
+         return
+      endif
+*
+      if ( theocase .eq. 'EOLE' ) then
+         call eole_sfc ( geobus, ngeop )
+         return
+      endif
+*
+*---------------------------------------------------------------------
+*
+      return
+      end

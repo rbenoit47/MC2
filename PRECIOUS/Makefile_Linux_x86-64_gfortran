@@ -1,0 +1,13 @@
+OPTIL  = 2
+OMP    = -openmp ON
+MPI    = -mpi
+# pour ma VM
+RMN    = rmn_015.2
+# bon COMM???
+COMM   = rpn_comm_4051609   #rpn_comm_40509
+PRIV   =
+BINDC  =
+TOOLS  = hpcsperf
+#FCOMPF = -debug 
+#DEBUG  = -debug
+

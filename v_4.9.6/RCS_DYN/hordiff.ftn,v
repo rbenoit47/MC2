@@ -1,0 +1,153 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.10.17.41.39;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r setdiff
+*
+      subroutine hordiff ( boot, w1, w2_8 )
+      implicit none
+*
+      logical boot
+      real w1(*)
+      real*8 w2_8(*)
+*
+*OBJECT
+*   * calculate horizontal diffusion
+*   * apply diffusive top sponge
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR     Pierre Pellerin                  Feb 1997
+*
+*HISTORY
+*
+**
+*
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynmem.cdk"
+#include "consdyn_8.cdk"
+#include "levels.cdk"
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+#include "topo.cdk"
+*    
+      integer kc,i,j,k,err,niter
+      real*8 del,wh,pis2,pt25,epsilon,nu_dif
+      real wrk(3*dim3d),khdim,decay_time
+      parameter (epsilon = 1.0d-12,pt25=0.25d0)
+      include "mpif.h"
+*
+*---------------------------------------------------------------------
+*
+      if (boot) then
+*
+         nu_dif = 0.d0
+         if (hord_del.gt.0) nu_dif = pt25*hord_lnr**(2./hord_del)
+         nu_dif = min(nu_dif,pt25-epsilon)
+*
+         if (nu_dif.le.epsilon) then
+            hord_type = 'NIL'
+            goto 999
+         endif
+*
+         if (hord_type.ne.'EXPLICIT') goto 999
+*
+!$omp single
+         if (myproc.eq.0) then
+*
+            write (6,105) 
+            write (6,106)
+*
+            niter  = int(4.*hord_nutop+0.99)
+            wh  = hord_nutop/max(1.,float(niter))
+            kc  = gnk-1-hord_zspng
+            pis2= pi_8/2.
+            del = max(zt(gnk-1)-zt(kc),1.e-18)
+*
+            do k=gnk-1,1,-1
+               kh(k) = nu_dif
+               if (k.le.kc) then
+                  nu(k) = 0.
+               else
+                  nu(k) = wh*cos(pis2*(zt(gnk-1)-zt(k))/del)**2
+               endif
+               khdim=kh(k)*(grdx*grdx)/abs(grdt)
+               write (6,101) khdim,nu_dif,niter,' * ',nu(k),k
+            end do
+            write (6,105)
+*
+*           decay_time:   time it takes for a given amplitude
+*                         to diminish by a factor 1/e
+*                         in timestep units
+*           hord_lnr*100: percent decrease per timestep
+*
+            decay_time = -1./
+     $                    dlog(1.d0 - (4.d0*nu_dif)**dble(hord_del/2.))
+*
+            write (6,107) decay_time,decay_time*grdt/3600.,
+     $                    hord_lnr*100.
+            write (6,105)
+*
+         endif
+*
+         call MPI_bcast (kh,maxdynlv,MPI_REAL,0,MPI_COMM_WORLD,err)
+         call MPI_bcast (nu,maxdynlv,MPI_REAL,0,MPI_COMM_WORLD,err)
+*
+!$omp end single
+         goto 999
+*
+      endif
+*
+*   * Explicit horizontal diffusion and top sponge
+*
+      if (hord_type.eq.'EXPLICIT') then
+!$omp single
+         if (myproc.eq.0) print*, 'EXPLICIT horizontal diffusion'
+!$omp end single
+         call exhrdif2 ( w1, w2_8 )
+      endif
+*
+!$omp single
+      if (hord_zspng.ge.1) then
+         if (myproc.eq.0) print*, 'sponge layer'
+         call topspng2 ( wrk )
+      endif
+!$omp end single
+*
+ 999  boot = .false.
+*
+ 101  format (e14.7,f14.7,i6,a3,f10.7,i5)
+ 105  format (54('*'))
+ 106  format ('        HORIZONTAL DIFFUSION COEFFICIENTS:'/
+     $         4x,'K (m2/s)',11x,'NU',10x,'NU_SPNG',6x,'LEVEL#')
+ 107  format (' Decaying time-scale of shortest wave is:'/
+     $        3x,e14.7,' timesteps (',e14.7,' hours)'/
+     $        3x,e14.7,' % decrease per timestep')
+*---------------------------------------------------------------------
+      return
+      end
+
+
+
+@

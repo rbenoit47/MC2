@@ -1,0 +1,306 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ztetps
+      subroutine ztetps ( tmod,hmod,prw,prt,prm,hw,ht,hm,rf,
+     $                                      ng,nk,nksor,ip2)
+      implicit none
+*
+      integer ng,nk,nksor,ip2
+      real tmod(ng,nk),hmod(ng,nk),prw(ng,nk),prt(ng,nk),
+     $     prm(ng,nk+1),hw(ng,nk),ht(ng,nk),hm(ng,nk+1),rf(nksor)
+*
+*OBJECT
+*     conversion des champs de temperature (tt),
+*     de hauteur du geopotentiel (gz),
+*     et de pression au niveau de la mer (pn)
+*
+*METHOD
+*
+**
+#include "consdyn_8.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+#include "rec.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+*
+      integer i,j,k,nkmap,err,ktop(ng*nk),kbot(ng*nk)  !RB2016 ng,
+      integer gltt,glth,glgz,glp0,glpn,glh1,glh2,glp1,glp2,glbuoy,
+     $        gltprm,gltstr
+      real c2,gamma,gsrgam,q,r,rap_p,tmoy,wke
+      real gzpres(ng,nksor),ttmod(ng,nk),ttpres(ng,nksor),
+     $     tr1(ng,nksor),tr2(ng,nk),pnm(ng),zm_tmp(nk+1)
+      real posv
+      pointer (paposv, posv(ng,nksor,2,3))
+      real gotsr(ng,nk),dum3(ng,0:nk),dum1(ng,0:nk),dum2(ng,nk)
+*
+*------------------------------------------------------------------
+*
+      call qntstar(dum1,dum2,gotsr,dum3,ht,hm,ng,0,nk)
+      do k=1,nk
+      do i=1,ng
+         ttmod(i,k)= (tmod(i,k)+grav_8)/gotsr(i,k)
+      end do
+      end do
+*
+      print*, '=====> ZTETPS'
+*
+      gltt=-1
+      glth=-1
+      glgz=-1
+      glp0=-1
+      glpn=-1
+      glh1=-1
+      glh2=-1
+      glp1=-1
+      glp2=-1
+      glbuoy=-1
+      gltprm=-1
+      gltstr=-1
+      do i=1,nvardyn
+         if (udolist(i).eq.'TT') gltt=i
+         if (udolist(i).eq.'TH') glth=i
+         if (udolist(i).eq.'GZ') glgz=i
+         if (udolist(i).eq.'P0') glp0=i
+         if (udolist(i).eq.'PN') glpn=i
+         if (udolist(i).eq.'H1') glh1=i
+         if (udolist(i).eq.'H2') glh2=i
+         if (udolist(i).eq.'P1') glp1=i
+         if (udolist(i).eq.'P2') glp2=i
+         if (udolist(i).eq.'BUOY') glbuoy=i
+         if (udolist(i).eq.'TPRM') gltprm=i
+         if (udolist(i).eq.'TSTR') gltstr=i
+      end do
+      if (levtyp.ne.'P') glgz = -1
+      if (levtyp.eq.'H') glth = -1
+      if (levtyp.ne.'G') then
+         glh1 = -1
+         glh2 = -1
+         glp1 = -1
+         glp2 = -1
+         glbuoy=-1
+         gltprm=-1
+         gltstr=-1
+      endif
+*
+      do k=1,nksor
+      do i=1,ng
+         tr1(i,k) = rf(k)
+      end do
+      end do
+*
+      gamma = 0.0065
+      gsrgam= grav_8/(rgasd_8*gamma)
+*
+      if ((levtyp.ne.'G').and.(nksor.gt.0)) then
+*
+         call hpalloc (paposit, ng*  nksor*6  , err,1)
+         call hpalloc (pahuv  , ng* (nk+4)*2  , err,1)
+         call hpalloc (pahtt  , ng* (nk+3)*2  , err,1)
+         call hpalloc (pahww  , ng* (nk+3)*2  , err,1)
+         paposv = paposit
+*
+         if (levtyp.eq.'P') then
+            if (glgz.gt.0) then
+            call inv_posiz (posv(1,1,1,1),huv,prm,tr1,ktop,kbot,
+     $                                           ng,nksor,nk+1)
+            call inv_vertint (gzpres,hm,posv(1,1,1,1),huv,ng,
+     $                                           nksor,nk+1)
+            endif
+            call inv_posiz (posv(1,1,1,1),hww,prw ,tr1,ktop,kbot,
+     $                                            ng,nksor,nk  )
+            call inv_posiz (posv(1,1,1,2),huv,prm ,tr1,ktop,kbot,
+     $                                            ng,nksor,nk+1)
+            call inv_posiz (posv(1,1,1,3),htt,prt,tr1,ktop,kbot,
+     $                                            ng,nksor,nk  )
+         elseif (levtyp.eq.'H') then
+            call posiz3 (posv(1,1,1,1),hww,hw ,tr1,ktop,kbot,
+     $                                           ng,nksor,nk)
+            call posiz3 (posv(1,1,1,2),huv,hm ,tr1,ktop,kbot,
+     $                                           ng,nksor,nk+1)
+            call posiz3 (posv(1,1,1,3),htt,ht,tr1,ktop,kbot,
+     $                                           ng,nksor,nk)
+         endif
+*
+         call inv_vertint (ttpres,ttmod,posv(1,1,1,3),htt,ng,nksor,nk)
+*     
+*     * corrige les tt entre pr au sol et 1000mb.
+*     * calcul selon t(p)=ts*(pr/ps)**c2
+*
+*
+         if (levtyp.eq.'P') then
+            c2   = rgasd_8*gamma/grav_8
+            do k=1,nksor
+            do i=1,ng
+               rap_p = max(1.,rf(nksor+1-k)/prt(i,1))
+               ttpres(i,k)= ttpres(i,k)*rap_p**c2
+            end do
+            end do
+         endif
+*
+*     * corrige les gz entre pr au sol et 1000 mb.
+*     * calcul selon gz=h0-h*ln(pr/ps)/(1.-epsl*ln(pr/ps))
+*                  avec h=r*ts/g
+*
+         if (glgz.gt.0) then
+            c2   = rgasd_8/grav_8
+            do 33 i=1,ng
+               do k=1,nksor
+                  if(rf(nksor+1-k).lt.prm(i,1)) goto 33
+                  rap_p = rf(nksor+1-k)/prm(i,1)
+                  tmoy = (ttmod(i,1)+ttpres(i,1))*.5
+                  gzpres(i,k)= hm(i,1)-c2*tmoy*alog(rap_p)
+               end do
+ 33         continue
+         endif
+*
+         do k=1,nksor
+         do i=1,ng
+            ttpres(i,k) = ttpres(i,k) - tcdk_8
+         end do
+         end do
+*
+      else   ! No vertical interpolation
+*
+         do k=1,nk
+         do i=1,ng
+            tr2(i,k) = ttmod(i,k) - tcdk_8
+         end do
+         end do
+*
+      endif
+*
+      if (levtyp.ne.'G') then
+*
+         if (nksor.gt.0) then
+*
+         if (glgz.gt.0) then
+            print*, 'GZ ',(table_out(i,glgz),i=1,3)
+            call ecris2_fst (gzpres,rf,'GZ',-1,ip2,0,0.1,ng,nksor,
+     $                                         table_out(1,glgz))
+         endif
+*
+         if (gltt.gt.0) then
+            print*, 'TT ',(table_out(i,gltt),i=1,3)
+            call ecris2_fst (ttpres,rf,'TT',-1,ip2,0,1.0,ng,nksor,
+     $                                         table_out(1,gltt))
+         endif
+         if (glth.gt.0) then
+            do k=1,nksor
+            do i=1,ng
+               gzpres(i,k) = (ttpres(i,k)+tcdk_8)
+     $                      *(1.e5/(rf(nksor-k+1)))**cappa_8
+            end do
+            end do
+            print*, 'TH ',(table_out(i,glth),i=1,3)
+            call ecris2_fst (gzpres,rf,'TH',-1,ip2,0,1.0,ng,nksor,
+     $                                         table_out(1,glth))
+         endif
+*
+         endif
+*
+      else
+*
+         if (glbuoy.gt.0) then
+            print*, 'BUOY',(table_out(i,glbuoy),i=1,3)
+            call ecris2_fst (tmod,ztr,'BUOY',-1,ip2,0,1.0,ng,nk,
+     $                                      table_out(1,glbuoy))
+         endif
+         if (gltt.gt.0) then
+            print*, 'TT ',(table_out(i,gltt),i=1,3)
+            call ecris2_fst (tr2,ztr,'TT',-1,ip2,0,1.0,ng,nk,
+     $                                    table_out(1,gltt))
+         endif
+*
+         if (glth.gt.0) then
+            do k=1,nk
+            do i=1,ng
+               tr2(i,k) = (tr2(i,k)+tcdk_8)*(1.e5/prt(i,k))**cappa_8
+            end do
+            end do
+            print*, 'TH ',(table_out(i,glth),i=1,3)
+            call ecris2_fst (tr2,ztr,'TH',-1,ip2,0,1.0,ng,nk,
+     $                                    table_out(1,glth))
+         endif
+         if (gltprm.gt.0) then
+            do k=1,nk
+            do i=1,ng
+               tr2(i,k) = tmod(i,k) / gotsr(i,k)
+            end do
+            end do
+            print*, 'TPRM',(table_out(i,gltprm),i=1,3)
+            call ecris2_fst (tr2,ztr,'TPRM',-1,ip2,0,1.0,ng,nk,
+     $                                    table_out(1,gltprm))
+         endif
+         if (gltstr.gt.0) then
+            do k=1,nk
+            do i=1,ng
+               tr2(i,k) = grav_8 / gotsr(i,k) - tcdk_8
+            end do
+            end do
+            print*, 'TSTR',(table_out(i,gltstr),i=1,3)
+            call ecris2_fst (tr2,ztr,'TSTR',-1,ip2,0,1.0,ng,nk,
+     $                                    table_out(1,gltstr))
+         endif
+
+*
+*   * Ecriture de P1 et P2 (Pression thermo. et pression moment.
+*
+         do k=1,nk
+            zm_tmp(k+1) = zm(k)
+         end do
+         zm_tmp(1) = zt(1)
+*
+         if (gnstepno.eq.0) then
+            if (glh1.gt.0) then
+               print*, 'H1 ',(table_out(i,glh1),i=1,3)
+               call ecris2_fst (ht,ztr,'H1',-1,ip2,0,1.0,ng,nk,
+     $                                       table_out(1,glh1))
+            endif
+*     
+            if (glh2.gt.0) then
+               print*, 'H2 ',(table_out(i,glh2),i=1,3)
+               call ecris2_fst (hm,zm_tmp,'H2',-1,ip2,0,1.0,ng,nk+1,
+     $                                           table_out(1,glh2))
+            endif
+         endif
+         if (glp1.gt.0) then
+            print*, 'P1 ',(table_out(i,glp1),i=1,3)
+            call ecris2_fst (prt,ztr,'P1',-1,ip2,0,0.01,ng,nk,
+     $                                      table_out(1,glp1))
+         endif
+         if (glp2.gt.0) then
+            table_out(2,glp2) = table_out(2,glp2) + 1
+            print*, 'P2 ',(table_out(i,glp2),i=1,3)
+            call ecris2_fst (prm,zm_tmp,'P2',-1,ip2,0,0.01,ng,nk+1,
+     $                                         table_out(1,glp2))
+         endif
+*            
+      endif 
+*  
+*   * Surface pressure and PNM in mb.
+*
+      if (glp0.gt.0)
+     $    call ecris2_fst (prw,0.,'P0',12001,ip2,0,0.01,ng,1,
+     $                                table_out(1,glp0))
+      if (glpn.gt.0) then
+         c2 = rgasv_8/rgasd_8-1.
+         do i=1,ng
+            pnm(i) = prt(i,1)*  (1. + gamma*ht(i,1) / 
+     $              (ttmod(i,1)*(1. + hmod(i,1)*c2)))**gsrgam
+         end do
+         call ecris2_fst (pnm,0.,'PN',0,ip2,0,0.01,ng,1,
+     $                               table_out(1,glpn))
+      endif
+*
+      do k=1,nk
+      do i=1,ng
+         tmod(i,k) = ttmod(i,k)
+      end do
+      end do
+*
+*--------------------------------------------------------------------
+      return
+      end
+
+
+

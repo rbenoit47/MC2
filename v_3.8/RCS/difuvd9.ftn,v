@@ -1,0 +1,109 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+      SUBROUTINE DIFUVD9 (SE, STAGE, S, n, NK, KA)
+#include "impnone.cdk"
+      INTEGER n, NK, KA
+      REAL SE(n,NK), S(n,NK)
+      LOGICAL STAGE
+*
+      INTEGER K, I
+      LOGICAL INIT
+      DATA INIT /.TRUE./
+      SAVE INIT
+*
+*Author
+*          R. Benoit (Mar 89)
+*
+*Object
+*          to calculate the centered sigma levels
+*
+*Arguments
+*
+*          - Output -
+* SE       sigma levels for ('E')
+*
+*          - Input -
+* STAGE    .TRUE. for 'E' (staggered) level intervals
+* S        sigma levels
+* N        1st horizontal dimension
+* NK       vertical dimension
+* KA       level to extract
+*
+**
+*
+1000  CONTINUE
+*
+      IF (STAGE) THEN
+*
+         DO 1 K=1,KA-1
+            do 1 i=1,n
+1           SE(i,K)=(S(i,K)+S(i,K+1))/2
+         DO 4 K=KA,NK
+            do 4 i=1,n
+4           SE(i,K)=1
+      ELSE
+*
+         DO 2 K=1,NK
+            do 2 i=1,n
+2           SE(i,K)=S(i,K)
+      ENDIF
+*
+      IF (INIT) THEN
+*
+*     PRINT *,' S/R DIFUVD9...STAGE= ',STAGE
+*     PRINT '(3A10/(I10,2F10.6))' , 'K','S(1,K)','SE(1,K)',
+*    %                              (K,S(1,K),SE(1,K),K=1,NK)
+*     PRINT *,' KA=',KA,' NK=',NK
+*     IF (KA.LT.NK) PRINT *,'  '
+*     IF (KA.LT.NK) PRINT *,' ***************************'
+*     IF (KA.LT.NK) PRINT *,' * ANEMOMETRE 5M INACTIF   *'
+*     IF (KA.LT.NK) PRINT *,' ***************************'
+*     IF (KA.LT.NK) PRINT *,'  '
+*     PRINT *,' RAPPORT DE CENTRAGE DU NIVEAU KA au point 1'
+*     PRINT *,' (1-S(1,KA))/(1-S(1,KA-1))=',(1-S(1,KA))/(1-S(1,KA-1))
+      INIT = .FALSE.
+      ENDIF
+*
+      RETURN
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

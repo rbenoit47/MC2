@@ -1,0 +1,161 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r gc_itraj - on great circles: improving trajectories
+*
+      subroutine gc_itraj ( xd, yd, ud, vd, lat0, 
+     $                      lminx, lmaxx, lminy, lmaxy )
+      implicit none
+*
+      integer lminx, lmaxx, lminy, lmaxy
+      real*8 xd(lminx:lmaxx,lminy:lmaxy,*),
+     $       yd(lminx:lmaxx,lminy:lmaxy,*),
+     $       ud(lminx:lmaxx,lminy:lmaxy,*),
+     $       vd(lminx:lmaxx,lminy:lmaxy,*),lat0(lminy:lmaxy)
+*
+*
+*AUTHOR    C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *               ANDRE ROBERT  SEMI-LAGRANGIAN SCHEME              *
+*    *                                                                 *
+*    *                            CALCULATES                           *
+*    *                                                                 *
+*    *         HORIZONTAL TRAJECTORIES  x , y   ON GREAT CIRCLES       * 
+*    *                                   d   d                         *
+*    *                                                                 *
+*    *         the vector FORMULA giving the upstream position  R      *
+*    *             of a given grid point (destination position) R0     *
+*    *           in terms of the wind at the upstream position  V      *
+*    *                                                                 *
+*    *         being                                                   *
+*    *                                                                 *
+*    *              R  = R0 cos(alpha) - Vm/|Vm| sin(alpha)            *
+*    *                                                                 *
+*    *         where                                                   *
+*    *                                                                 *
+*    *                     Vm  = V - R0 ( R0.V )                       *
+*    *                                                                 *
+*    *                    |Vm| = sqrt( Vm.Vm )                         *
+*    *                                                                 *
+*    *                   alpha = sqrt( V.V ) * dt                      *
+*    *                                                                 *
+*    *                                                                 *
+*    *(n.b. vector calculations are performed in cartesian coordinates)*
+*    *                                                                 *
+*    *******************************************************************
+*
+*
+*ARGUMENTS
+*     _________________________________________________________________
+*    |         |                                                 |     |
+*    |  NAME   | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |    xd   | lagrangian displacement along X                 | i/o |
+*    |    yd   | lagrangian displacement along  Y                | i/o |
+*    |         |                                                 |     |
+*    |    ud   | velocity along X                                |  i  |
+*    |    vd   | velocity along  Y                               |  i  |
+*    |         |                                                 |     |
+*    |  lat0   | latitudes (along Y) of model grid               |  i  |
+*    |         |                                                 |     |
+*    | lminx   | starting index along X                          |  i  |
+*    | lmaxx   | ending   index along X                          |  i  |
+*    | lminy   | starting index along  Y                         |  i  |
+*    | lmaxy   | ending   index along  Y                         |  i  |
+*    |_________|_________________________________________________|_____|
+*
+*
+#include"lcldim.cdk"
+#include"yomdyn1.cdk"
+*
+      integer i,j,k
+      real*8 one,zero,uu,vv,ww,ru,aa,sna,csa,umod,dlon,dlat,ulon,ulat,
+     $       lon,lat,xx,yy,zz,lon0,x0,y0,z0,dlamda,fact
+*
+      parameter (one = 1.0d0, zero = 0.0d0)
+************************************************************************
+      lon0   = zero          ! arbitrarily
+      dlamda = dble(grdx)    ! to be checked
+      fact   = one           ! to be specified
+*                            ! in particular may sure of the sign ??
+*
+      do k=1,gnk-1
+      do j=1,ldnj-north
+      do i=1,ldni-east
+*
+         dlon = xd(i,j,k) * dlamda
+         dlat = yd(i,j,k) * dlamda
+*
+         ulon = ud(i,j,k) * fact
+         ulat = vd(i,j,k) * fact
+*
+         x0  = cos(lat0(j))
+         y0  = zero
+         z0  = sin(lat0(j))
+*
+         lon = lon0   +dlon
+         lat = lat0(j)+dlat
+*
+         xx  = cos(lat)*cos(lon)
+         yy  = cos(lat)*sin(lon)
+         zz  = sin(lat)
+*
+         uu  = ( - ulon * yy - ulat * xx * zz )
+         vv  = (   ulon * xx - ulat * yy * zz )
+         ww  =     ulat * cos(lat)
+*
+         ru  = xx * uu + yy * vv + zz * ww
+*
+         uu  = uu - xx * ru
+         vv  = vv - yy * ru
+         ww  = ww - zz * ru
+*
+         umod  = sqrt( uu * uu + vv * vv + ww * ww )
+*
+         aa  = sqrt( ulat**2 + ulon**2 )
+         sna = sin( aa )
+         csa = sqrt( one - sna**2 )
+*
+         xx  = csa * x0 - sna * uu / umod
+         yy  = csa * y0 - sna * vv / umod
+         zz  = csa * z0 - sna * ww / umod
+         zz  = min(one,max(zz,-one))
+*
+         dlon = atan( yy/xx ) - lon0
+         dlat = asin( zz )    - lat0(j)
+*
+         xd(i,j,k) = dlon / dlamda
+         yd(i,j,k) = dlat / dlamda
+*
+      enddo
+      enddo
+      enddo
+*
+      return
+      end
+@

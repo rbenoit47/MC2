@@ -1,0 +1,54 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r humspe2
+*
+      subroutine humspe2 (q,td,pmod,nis,njs,nks,ni,nj,nk,is,js,ks)
+      implicit none
+*
+      integer nis,njs,nks,ni,nj,nk,is,js,ks
+      real q(nis,njs,nks),td(nis,njs,nks),pmod(nis,njs,nks)
+*
+*OBJECT
+*     calcul de l'humidite specifique (g vapeur / kg air humide)
+*     dans q a partir du point de rosee td et de la pression pmod.
+*     q et et td peuvent etre equivalences dans l'appel.
+*
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR  Rene Laprise                       Mar   1989
+*
+*HISTORY
+*     Yves Chartier/Michel Desgagne     Oct/Nov   1992
+*           - implicit none
+*           - nis,njs,nks,ni,nj,nk
+*           - structural documentation
+*           - in lining
+*     Michel Giguere/Michel Desgagne        Dec   1992
+*           - mks units
+*
+**
+c
+      integer i,j,k,nit,njt,nkt
+      real a,b,e1,e2,con
+c
+      data a/21.656/, b/5418.0/, e1/.622/, e2/0.378/
+c-----------------------------------------------------------------
+c
+      nit=ni-is
+      njt=nj-js
+      nkt=nk-ks
+c
+c     * con: transforme de pmod les pascals en millibars
+c
+      con= 0.01
+c
+      do 1 k=1,nkt
+         do 1 j=1,njt
+            do 1 i=1,nit
+             q(i,j,k)=  e1/(con*pmod(i,j,k)*exp(b/(td(i,j,k)) - a) - e2)
+ 1    continue
+c
+c-----------------------------------------------------------------
+      return
+      end

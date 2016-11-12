@@ -1,0 +1,34 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*
+      REAL   TTT, PRS, QQQ, EEE, TVI, QST
+      REAL   T00, PR0, TF, PF,FFF , DDFF
+      REAL   QSM , DLEMX
+      REAL*8 FOEW,FODLE,FOQST,FODQS,FOEFQ,FOQFE,FOTVT,FOTTV,FOHR
+      REAL*8 FOLV,FOLS,FOPOIT,FOPOIP
+      REAL*8 FOEWA,FODLA,FOQSA,FODQA,FOHRA
+      REAL*8 FESI,FDLESI,FESMX,FDLESMX,FQSMX,FDQSMX
+*
+      INTRINSIC DSIGN
+@

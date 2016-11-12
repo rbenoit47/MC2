@@ -1,0 +1,333 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P CALCDIAG
+      subroutine calcdiag (d,f,v,dsiz,fsiz,vsiz,
+     $                     dt,trnch,kount,ni,nk)
+*
+#include "phy_macros_f.h"
+#include "impnone.cdk"
+*
+      integer dsiz,fsiz,vsiz,trnch,kount,ni,nk
+      real dt
+      real d(dsiz),f(fsiz), v(vsiz)
+*
+*
+*Author
+*          B. Bilodeau Feb 2003
+*
+*Revisions
+*
+*Object
+*          to calculate averages and accumulators 
+*          of tendencies and diagnostics
+*
+*Arguments
+*
+*          - Input/Output -
+* D        dynamic bus
+* F        permanent bus
+*
+*          - Input -
+* V        volatile (output) bus
+*
+*          - Input -
+* DSIZ     dimension of d
+* FSIZ     dimension of f
+* VSIZ     dimension of v
+* TRNCH    slice number
+* KOUNT    timestep number
+* DT       length of timestep
+* N        horizontal running length
+* NK       vertical dimension
+*
+*
+*IMPLICITES
+*
+#include "indx_sfc.cdk"
+#include "consphy.cdk"
+#include "phybus.cdk"
+#include "options.cdk"
+*
+*MODULES
+*
+**
+      INTEGER I
+      REAL MOYHRI
+*
+*****************************************************************
+*     PRECIPITATION RATES AND ACCUMULATIONS                     *
+*     -------------------------------------                     *
+*****************************************************************
+* 
+      if (moyhr.gt.0) moyhri= 1./float(moyhr)
+*
+      if (kount.gt.0) then
+*
+*VDIR NODEP
+         do i=0,ni-1
+*
+*           taux des precipitations convectives
+            v(rc+i) = f(tsc+i) + f(tlc+i)
+*
+*           taux des precipitations stratiformes
+            v(rr+i) = f(tss+i) + f(tls+i)
+*
+*           taux total
+            v(rt+i) = v(rc+i) + v(rr+i)
+*
+*           asc : accumulation des precipitations solides convectives
+            f(asc+i) = f(asc+i) + f(tsc+i) * dt
+*
+*           ass : accumulation des precipitations solides stratiformes
+            f(ass+i) = f(ass+i) + f(tss+i) * dt
+*
+*           alc : accumulation des precipitations liquides convectives
+            f(alc+i) = f(alc+i) + f(tlc+i) * dt
+*
+*           als : accumulation des precipitations liquides stratiformes
+            f(als+i) = f(als+i) + f(tls+i) * dt
+*
+*           pc : accumulation des precipitations convectives
+            v(pc+i) = f(alc+i) + f(asc+i)
+*
+*           ae : accumulation des precipitations stratiformes
+            v(ae+i) = f(als+i) + f(ass+i)
+*
+*           pr : accumulation des precipitations totales
+            v(pr+i) = v(pc+i) + v(ae+i)
+*
+*
+*              The tlip is set to zero for the use of       
+*                 other schemes than mixed phase
+* 
+	 if (istcond.ne.5) v(tlip+i)=0 
+*
+*           RN : ACCUMULATION DES PRECIPITATIONS de PLUIE
+*           AZR: ACCUMULATION DES PRECIPITATIONS VERGLACLACANTES
+            if  ( d(tplus+(nk-2)*ni+i) .lt. tcdk ) then
+              F(AZR+I) = F(AZR+I) +
+     $                     (1.-V(TLIP+I))*(F(TLS+I)+F(TLC+I))*DT
+            else
+              F(RN+I)  = F(RN+I)  +
+     $                     (1.-V(TLIP+I))*(F(TLS+I)+F(TLC+I))*DT
+            endif
+*
+*           AIP: ACCUMULATION DES PRECIPITATIONS RE-GELEES
+*
+            F(AIP+I) = F(AIP+I) +
+     $                   V(TLIP+I)*(F(TLS+I)+F(TLC+I))*DT
+*
+*           SN: ACCUMULATION DES PRECIPITATIONS de neige
+*
+            F(SN+I) = F(ASS+I) + F(ASC+I)
+*
+         end do
+*
+      endif
+*
+*
+*
+*****************************************************************
+*     AVERAGES                                                  *
+*     --------                                                  *
+*****************************************************************
+*
+*
+      if ((moyhr.gt.0).and.(kount.gt.0)) then
+*VDIR NODEP
+         do i = 0, ni-1
+            f(fcmy +i) = f(fcmy +i) + v(fc + (indx_agrege-1)*ni+i)
+            f(fvmy +i) = f(fvmy +i) + v(fv + (indx_agrege-1)*ni+i)
+            f(kshalm +i)= f(kshalm +i)+ v(kshal +i)                  
+            if (mod((kount),moyhr).eq.0) then
+                f(fcmy   +i) = f(fcmy  +i)  * moyhri
+                f(fvmy   +i) = f(fvmy  +i)  * moyhri
+                f(kshalm +i) = f(kshalm +i) * moyhri
+            endif
+         end do
+*VDIR NODEP
+         do i = 0, ni*(nk-1)-1
+            f(ccnm   +i) = f(ccnm   +i) + f(ccn +i)
+            f(tim    +i) = f(tim    +i) + f(ti  +i)
+            f(t2m    +i) = f(t2m    +i) + f(t2  +i)
+            f(ugwdm  +i) = f(ugwdm  +i) + v( ugwd+i)
+            f(vgwdm  +i) = f(vgwdm  +i) + v( vgwd+i)
+            f(udifvm +i) = f(udifvm +i) + v(udifv+i)
+            f(vdifvm +i) = f(vdifvm +i) + v(vdifv+i)
+            f(tdifvm +i) = f(tdifvm +i) + v(tdifv+i)
+            f(qdifvm +i) = f(qdifvm +i) + v(qdifv+i)
+            f(hushalm+i) = f(hushalm+i) + v(hushal+i)
+            f(tshalm +i) = f(tshalm +i) + v(tshal+i)
+            f(lwcm   +i) = f(lwcm   +i) + f(lwc+i)
+            f(iwcm   +i) = f(iwcm   +i) + f(iwc+i)
+*
+            if (mod((kount),moyhr).eq.0) then
+               f(ccnm   +i) = f(ccnm   +i) * moyhri
+               f(tim    +i) = f(tim    +i) * moyhri
+               f(t2m    +i) = f(t2m    +i) * moyhri
+               f(ugwdm  +i) = f(ugwdm  +i) * moyhri
+               f(vgwdm  +i) = f(vgwdm  +i) * moyhri
+               f(udifvm +i) = f(udifvm +i) * moyhri
+               f(vdifvm +i) = f(vdifvm +i) * moyhri
+               f(tdifvm +i) = f(tdifvm +i) * moyhri
+               f(qdifvm +i) = f(qdifvm +i) * moyhri
+               f(zctem  +i) = f(zctem  +i) * moyhri
+               f(zstem  +i) = f(zstem  +i) * moyhri
+               f(zcqem  +i) = f(zcqem  +i) * moyhri
+               f(zsqem  +i) = f(zsqem  +i) * moyhri
+               f(zsqcem +i) = f(zsqcem +i) * moyhri
+               f(hushalm+i) = f(hushalm+i) * moyhri
+               f(tshalm +i) = f(tshalm +i) * moyhri
+               f(lwcm   +i) = f(lwcm   +i) * moyhri
+               f(iwcm   +i) = f(iwcm   +i) * moyhri
+*
+            endif
+         end do
+*
+         if (iconvec.eq.6.or.iconvec.eq.11) then
+         do i = 0, ni*(nk-1)-1
+            f(tfcpm  +i) = f(tfcpm  +i) + f(tfcp +i)
+            f(hufcpm +i) = f(hufcpm +i) + f(hufcp+i)
+            f(qckfcm +i) = f(qckfcm +i) + f(qckfc+i)
+            f(umfkfcm +i) = f(umfkfcm +i) + f(umfkfc+i)
+            f(dmfkfcm +i) = f(dmfkfcm +i) + f(dmfkfc+i)
+*
+            if (mod((kount),moyhr).eq.0) then
+               f(tfcpm  +i) = f(tfcpm  +i) * moyhri
+               f(hufcpm +i) = f(hufcpm +i) * moyhri
+               f(qckfcm +i) = f(qckfcm +i) * moyhri
+               f(umfkfcm +i) = f(umfkfcm +i) * moyhri
+               f(dmfkfcm +i) = f(dmfkfcm +i) * moyhri
+            endif
+         end do
+         do i=0, ni-1
+            f(capekfcm +i) = f(capekfcm+i) + f(capekfc+i)
+            f(wumkfcm +i) = f(wumkfcm+i) + f(wumaxkfc+i)
+            f(zbaskfcm +i) = f(zbaskfcm+i) + f(zbasekfc+i)
+            f(ztopkfcm +i) = f(ztopkfcm+i) + f(ztopkfc+i)
+            f(kkfcm+i) = f(kkfcm+i) + v(kkfc+i)
+*
+            if (mod((kount),moyhr).eq.0) then
+                f(capekfcm +i) = f(capekfcm +i) * moyhri
+                f(wumkfcm+i) = f(wumkfcm+i) * moyhri
+                f(zbaskfcm+i) = f(zbaskfcm+i) * moyhri
+                f(ztopkfcm+i) = f(ztopkfcm+i) * moyhri
+                f(kkfcm+i) = f(kkfcm+i) * moyhri
+            endif
+*
+         end do
+         endif
+*
+      endif
+*
+*
+*****************************************************************
+*     ACCUMULATORS                                              *
+*     ------------                                              *
+*****************************************************************
+*
+      if (kount.gt.0) then
+*
+*VDIR NODEP
+         do i = 0,ni-1
+*
+*                        Accumulation of precipitation (in m)
+*
+          f(rainaf+i) = f(rainaf+i) + v(rainrate+i)*dt
+          f(snowaf+i) = f(snowaf+i) + v(snowrate+i)*dt
+*
+          if (iradia.ge.1) then
+          f(eiaf    +i) = f(eiaf +i) + f(ei  +i) * dt
+          f(evaf    +i) = f(evaf +i) + f(ev  +i) * dt
+          f(fiaf    +i) = f(fiaf +i) + f(fdsi+i) * dt
+          f(fsaf    +i) = f(fsaf +i) + f(fdss+i) * dt
+          f(ivaf    +i) = f(ivaf +i) + v(iv  +i) * dt
+          f(ntaf    +i) = f(ntaf +i) + f(nt  +i) * dt
+          f(flusolaf+i) = f(flusolaf+i) +
+     1                    v(flusolis+i) * dt
+          endif
+*
+          if (ifluvert.ge.1) then
+          f(suaf +i) = f(suaf +i) + v(ustress+i) * dt
+          f(svaf +i) = f(svaf +i) + v(vstress+i) * dt
+          f(fqaf +i) = f(fqaf +i) + f(fq  +i) * dt
+          f(siaf +i) = f(siaf +i) + v(fnsi+i) * dt
+          f(flaf +i) = f(flaf +i) + v(fl  +i) * dt
+          f(fcaf +i) = f(fcaf +i) +
+     +           v(fc + (indx_agrege-1)*ni+i) * dt
+          f(fvaf +i) = f(fvaf +i) +
+     +           v(fv + (indx_agrege-1)*ni+i) * dt
+          endif
+*
+          if (ischmsol.eq.3) then
+*
+*                        Accumulation of evaporation (in kg/m2)
+*
+            f(legaf   +i) = f(legaf   +i) + v(leg   +i) * dt / CHLC
+            f(leraf   +i) = f(leraf   +i) + v(ler   +i) * dt / CHLC
+            f(letraf  +i) = f(letraf  +i) + v(letr  +i) * dt / CHLC
+            f(levaf   +i) = f(levaf   +i) + v(lev   +i) * dt / CHLC
+            f(lesaf   +i) = f(lesaf   +i) + v(les   +i) * dt 
+     1                                                  / (CHLC+CHLF)
+*
+*                        Accumulation of drained water 
+*                        (soil base water flux, in kg/m2 or mm);
+*                        factor 1000 is for density of water.
+*
+            f(drainaf +i) = f(drainaf +i) 
+     1                   - 1000. * f(drain+i) * f(rootdp+i)
+*
+*                        Accumulation of surface runoff (in kg/m2 or mm)
+*
+            f(overflaf+i) = f(overflaf+i) + v(overfl+i)
+*
+          endif
+*
+          end do
+*
+      endif
+*
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

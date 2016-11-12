@@ -1,0 +1,99 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine glbcolc (f2rc,bni,bnj,f2cc,lminx,lmaxx,lminy,lmaxy,lnk)
+
+      implicit none
+      integer bni,bnj,lminx,lmaxx,lminy,lmaxy,lnk
+      real f2rc(bni,bnj,lnk), f2cc(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+#include "partopo.cdk"
+#include "lcldim.cdk"
+      include 'mpif.h'
+*
+      integer i, j, k, iproc, tag, err
+      integer len, lenx, leny
+      integer MPI_status(MPI_status_size)
+      real buf
+      pointer (pabuf, buf(*))
+      data    tag /210/
+*
+*----------------------------------------------------------------------
+*
+      len = (maxldni+1) * (maxldnj+1) * lnk 
+      call hpalloc (pabuf, len, err, 1)
+*
+      if (myproc.eq.0) then
+*
+*       Copy local data (LD) segment to global field on processor 1
+*
+         do k = 1, lnk
+            do j = 1, ldnj
+            do i = 1, ldni
+               f2rc(i,j,k) = f2cc(i,j,k) 
+            enddo
+            enddo
+         enddo
+*            
+*       Receive the local data (LD) segments from all other processors
+*
+         do iproc = 1, numproc-1
+            lenx = gc_ld(2,iproc) - gc_ld(1,iproc) + 1
+            leny = gc_ld(4,iproc) - gc_ld(3,iproc) + 1
+            len  = lenx*leny*lnk
+            call MPI_recv(buf, len, MPI_REAL, iproc, tag,
+     $                    MPI_COMM_WORLD, MPI_status, err)
+            len = 0
+            do k = 1, lnk
+            do j = gc_ld(3,iproc), gc_ld(4,iproc)
+            do i = gc_ld(1,iproc), gc_ld(2,iproc)
+               len = len + 1
+               f2rc(i,j,k) = buf(len)
+            enddo
+            enddo
+            enddo 
+         enddo 
+
+      else
+*
+*       Send local data (LD) segment to processor 1
+*
+         len = 0
+         do k = 1, lnk
+            do j = 1, ldnj
+            do i = 1, ldni
+               len = len + 1
+               buf(len) = f2cc(i,j,k)
+            enddo
+            enddo
+         enddo
+         call MPI_send(buf, len, MPI_REAL, 0, tag, MPI_COMM_WORLD, err)
+*
+      endif
+*
+      call hpdeallc (pabuf ,err,1)
+*----------------------------------------------------------------------
+      return
+      end
+*
+@

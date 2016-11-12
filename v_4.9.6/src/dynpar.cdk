@@ -1,0 +1,13 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+*              IMPORTANT MODEL PARAMETERS
+*
+*               may be run-time-dependent!
+*
+      real*8 
+     %       c00 ,c00t,c01 ,c01t,c02 ,c03 ,c04 ,c05 ,
+     %       c06 ,c11 ,c13 ,c14
+
+      common /dynpar/
+     %       c00 ,c00t,c01 ,c01t,c02 ,c03 ,c04 ,c05 ,
+     %       c06 ,c11 ,c13 ,c14

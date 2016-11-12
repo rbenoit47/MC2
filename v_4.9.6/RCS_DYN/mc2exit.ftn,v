@@ -1,0 +1,62 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r mc2exit
+      subroutine mc2exit (exitcode)
+      implicit none
+      integer exitcode
+**
+*AUTHOR   Yves Chartier                     Nov 1993
+*
+*REVISION
+*
+*LANGUAGE:  fortran 77
+*
+*OBJECT
+*     Universal subroutine for stopping a program
+*     
+*FILES
+*
+*ARGUMENTS
+*     NAMES     I/O  TYPE  A/S  DESCRIPTION
+*     exitcode   I     I    S   exit code passed when exiting the subroutine
+*
+*IMPLICIT
+*
+*MODULES
+*
+**
+#if defined (NEC) || defined (HPPA)
+      call flush(6)
+#endif
+#if !defined (NEC)
+      call exit(exitcode)
+#else
+      stop
+#endif      
+
+      return
+      end
+      
+
+@

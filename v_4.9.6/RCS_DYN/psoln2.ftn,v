@@ -1,0 +1,95 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r psoln2
+*
+      subroutine psoln2 (frp,frgz,frt,frphis,frrf,ng,nk)
+      implicit none
+*
+      integer ng,nk
+      real frp(ng),frgz(ng,nk),frt(ng,nk),frphis(ng,2),frrf(nk)
+*
+*OBJECT
+*     calcul de la pression de surface a partir des frgz (dam)
+*     et du champ de montagne (ckm)
+*
+**
+#include "consdyn_8.cdk"
+c
+      integer i,j,icont,err
+      real*8 prgsr,it1,iz1,izds,ipstar,ittstar,izstar,igamma,itb,rf(nk)
+c---------------------------------------------------------------------
+c
+*PDIR SERIAL
+      prgsr = grav_8/rgasd_8
+*
+      do i=1,nk
+         rf(i)= frrf(nk-i+1)*100.
+      end do
+c
+c     * calcul selon ps=frp*exp(-(g/r)*(zs-z)/itb)
+c
+*
+      do 1 i=1,ng
+         iz1=frgz(i,1)
+         it1=frt(i,1)
+         izds=amax1(0.,frphis(i,1))
+c
+c        * izds de ckm en dm
+c
+         do 2 icont=2,nk
+            ipstar= rf(nk-icont+1)
+            izstar= frgz(i,icont)
+            ittstar=frt(i,icont)
+            igamma=-(ittstar-it1)/(izstar-iz1)
+c
+c           * choix du niveau selon valeur la plus pres
+c
+            if (izds.lt.(iz1+izstar)/2.) then
+               ipstar=rf(nk-icont+2)
+               ittstar=it1
+               izstar= iz1
+            endif
+c
+            itb=ittstar -igamma*(izds-izstar)/2.
+            frp(i)=ipstar*exp(-prgsr*(izds-izstar)/itb)
+c
+            if(frp(i) .ge. rf(nk-icont+1)) goto 1
+c
+            iz1= izstar
+            it1= ittstar
+c
+ 2       continue
+c
+         write(6,600)
+         stop
+c
+ 1    continue
+
+*PDIR END SERIAL
+
+      return
+c---------------------------------------------------------------------
+  600 format(1x,'DANS PSOLN - ZDS EXCEDE LE DERNIER NIVEAU NK')
+      end
+@

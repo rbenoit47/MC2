@@ -1,0 +1,104 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P   PRINTZ
+*
+      SUBROUTINE PRINTZ ( F ,  N1 , N2 , NOM)
+#include "impnone.cdk"
+      CHARACTER *(*) NOM
+      INTEGER N1, N2
+      REAL F(N1,N2)
+*
+*Author
+*          Robert Benoit RPN(Nov 89)
+*
+*Revision
+* 001      B. Bilodeau  (July 1991)- Adaptation to UNIX
+*
+*Object
+*          to printout a zonal diagnostic read in
+*
+*Arguments
+*
+*          - Input -
+* F        vector containing a zonal diagnostics (N1,N2)
+* N1       1st dimension of F
+* N2       2nd dimension of F
+* NOM      name of this diagnostic
+*
+**
+*
+      CHARACTER *80 FMT(2)
+      INTEGER INC
+      PARAMETER (INC=07)
+      LOGICAL INIT
+      INTEGER I,I1,K
+      SAVE INIT, FMT
+      DATA INIT/.FALSE./
+*
+      IF (.NOT.INIT) THEN
+         WRITE(FMT(1),'(A,I2,A)')  '(A,',INC,'I15)'
+*        PRINT *,' FMT(1)=',FMT(1)
+         WRITE(FMT(2),'(A,I2,A)')  '(I5,2X,1P,',INC,'G15.5)'
+*        PRINT *,' FMT(2)=',FMT(2)
+         INIT=.TRUE.
+      ENDIF
+*
+      PRINT '(A,A2,A,I3,A,I3,A)',
+     %      ' S/R PRINTZ...NOM=', NOM,' (',N1,' X ',N2,')'
+      PRINT *,' ------------------------------------------- '
+      DO 10 I1=1,N1,INC
+      PRINT *,' '
+      PRINT FMT(1) ,
+     %      ' BANDE=',(I,I=I1,MIN(N1,I1+INC-1))
+      PRINT '(A)',
+     %      '    K  '
+      PRINT '(A)',
+     %      '    =  '
+      DO 10 K=1,N2,1
+      PRINT FMT(2) ,
+     %      K,(F(I,K),I=I1,MIN(N1,I1+INC-1))
+*
+10    CONTINUE
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,564 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*===============================================================
+* BARNES FILTER FOR THE OROGRAPHY
+*---------------------------------------------------------------
+* To compile:
+* r.compile -src fltoro.f -o fltoro -librmn
+*
+* Commande effectuee:
+* f90 -Wl,-L/users/dor/armn/sch/userlibs/IRIX64  
+*      -Wl,-L/home/dormrb02/env/armnlib/lib/IRIX64 -n32 -Wf,-I. 
+*      -Wf,-I/home/dormrb02/env/armnlib/include -O1     
+*      -o fltoro  fltoro.o    -lrmn  
+*
+*===============================================================
+      program fltoro
+      call flt
+      end
+
+      subroutine flt
+      implicit none
+*
+      integer narg,nkb,nhrsb,nlis
+      parameter (narg = 6   )
+      parameter (nkb  = 500 )
+      parameter (nlis = 1024)
+      parameter (nhrsb= 1024)
+*
+      character *2 nomvar
+      character *8   cle(narg)
+      character *128 def(narg),val(narg)
+
+      integer nlc,ndel,nclip,iter,help,doconsis
+      integer key,npas,ni,nj,nnk,nbits,datyp,ip1,ip2,ip3,
+     $        swa,lng,dltf,ubc,extra1,extra2,extra3
+      integer ier,err,nk,nhrs,i,j,k,kk,hrs(nhrsb)
+      integer nrecs(10),inf,niv(nkb),liste(nlis),lislon
+      integer fstouv,fstinl,fnom,fclos,fstprm,fstfrm,fstlnk
+      integer iun01,iun51,fstecr,fstlir
+
+      character*1 typvar, grtyp
+      character*8 getiket
+      common /gridchr/  typvar,grtyp ,getiket
+*
+      integer date0,deet,ig1,ig2,ig3,ig4
+      common /gridint/  date0,deet,ig1,ig2,ig3,ig4
+*
+      real pi,pj,d60,dgrw
+      common /gridrel/  pi,pj,d60,dgrw
+
+      real*8 swh
+*
+      real*8 wh,buf1,buf2,buf3,buf4
+      pointer (pawh, wh (*)),(pabuf1, buf1(*)), (pabuf2, buf2(*)),
+     $                       (pabuf3, buf3(*)), (pabuf4, buf4(*))
+*
+      common /lisfile/ iun01,iun51
+      data cle /'s.','d.' ,'lc.','iter.','consis.','help.'/
+      data val /'in','out','4'  ,'0'    ,'0'      ,'0'/
+      data def /'in','out','4'  ,'10'   ,'1'      ,'1'/
+      data iun01,iun51 /1, 51/
+*
+*-------------------------------------------------------------------
+*
+c on associe les parametres donnes a l'appel avec les
+c cles appropriees
+*
+      call ccard(cle,def,val,narg,-1)
+      ier=fnom(iun01,val(1),'RND',0)
+      ier=fnom(iun51,val(2),'RND',0)
+cc      read (val(3),670) nomvar
+      nomvar='ME'
+      read (val(3),*) nlc
+      read (val(4),*) iter
+      read (val(5),*) doconsis
+      read (val(6),*) help
+      ndel = nlc*5
+c      ndel=min(ndel,ni)
+c      ndel=min(ndel,nj)
+cc      read (val(6),671) nclip
+      nclip=1
+      nlc   = max(0,nlc  )
+      iter  = max(0,iter )
+      nclip = max(0,nclip)
+c 670  format (a)
+c 671  format (i)
+*
+      if (help.ne.0) then
+         print *,'*****************************************'
+         print *,'         TOPOGRAPHIC FILTER'
+         print *,' '
+         print *,'              PARAMETERS'
+         print *,'-S:  input file  (with ME,MG,ZP)'
+         print *,'-D:  output file (with ME filtered,MG,ZP)'
+         print *,'-LC: grid points (frequency):' 
+         print *,'     topographic waves to be filtered'
+         print *,'     (smoothed). Suggested: 4.'
+         print *,'-ITER  : NUMBER OF ITERATIONS (PASS) OF THE FILTER'
+         print *,'-CONSIS: ONLY VERIFY THE CONSISTANCY OF ME MG ZP'
+         print *,'*****************************************'
+         stop
+      endif
+*
+c on ouvre les fichiers et on obtient l'information de base.
+*
+      nrecs(1) = fstouv (iun01, 'RND')
+      nrecs(2) = fstouv (iun51, 'RND')
+c      ier = fstlnk(iun01,2)
+*
+c information concernant la grille
+*
+      key = fstinl (iun01,ni,nj,nnk,-1,' ',-1,-1,-1,' ',
+     $              nomvar,liste,lislon,nlis)
+      if(lislon.lt.1)then
+             write(*,60) nomvar
+             stop
+      endif
+      inf = fstprm (liste(1),date0,deet,npas,ni,nj,nnk,nbits,datyp,
+     $              ip1,ip2,ip3,typvar,nomvar,getiket,grtyp, ig1,ig2,
+     $              ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3)
+      key = fstinl (iun01,ni,nj,nnk,-1,' ',-1,ip2,-1,' ',
+     $              nomvar,liste,lislon,nlis)
+
+      nk=0
+      do 1 i=1,lislon
+         inf = fstprm (liste(i),date0,deet,npas,ni,nj,nnk,nbits,datyp,
+     $              ip1,ip2,ip3,typvar,nomvar,getiket,grtyp, ig1,ig2,
+     $              ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3)
+         do 2 j=1,nk
+            if (ip1.eq.niv(j)) then
+               goto 1
+            endif
+ 2       continue
+         nk=nk+1
+         niv(nk) = ip1
+ 1    continue
+      call sort (niv,nk)
+cc      print '(/15x,i3,a/5x$)', nk,' LEVELS FOUND IN INPUT FILE'
+      do 5 k=1,nk,5
+         do 6 kk=k,min(k+4,nk)
+cc            print '(i3,i6,3x$)', kk,niv(kk)
+ 6       continue
+cc         print '(/5x$)'
+ 5    continue
+      key = fstinl (iun01,ni,nj,nnk,-1,' ',niv(1),-1,-1,' ',
+     $              nomvar,liste,lislon,nlis)
+      nhrs=0
+      do 10 i=1,lislon
+         inf = fstprm (liste(i),date0,deet,npas,ni,nj,nnk,nbits,datyp,
+     $            niv(1),ip2,ip3,typvar,nomvar,getiket,grtyp, ig1,ig2,
+     $            ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3)
+         do 12 j=1,nhrs
+            if (ip2.eq.hrs(j)) then
+               goto 10
+            endif
+ 12      continue
+         nhrs=nhrs+1
+         hrs(nhrs) = ip2
+ 10   continue
+      call sort (hrs,nhrs)
+cc      print '(/15x,i3,a/4x$)',nhrs,' TIME LEVELS FOUND IN INPUT FILE'
+      do 15 k=1,nhrs
+cc         print '(i4$)', hrs(k)
+ 15   continue
+cc      print*
+*
+      call cigaxg (grtyp,pi,pj,d60,dgrw,ig1,ig2,ig3,ig4)
+      write(*,61) ni,nj,nk,ig1,ig2,ig3,ig4,pi,pj,d60,dgrw,deet,
+     $            date0,getiket
+      ndel=min(ndel,ni)
+      ndel=min(ndel,nj)
+*
+      call hpalloc (pawh   ,ni*nj*2,err,1)
+      call hpalloc (pabuf1 ,ni*nj*2,err,1)
+      call hpalloc (pabuf2 ,ni*nj*2,err,1)
+      call hpalloc (pabuf3 ,ni*nj*2,err,1)
+      call hpalloc (pabuf4 ,ni*nj*2,err,1)
+c
+      print *,'*****************************************'
+      print *,'         TOPOGRAPHIC FILTER'
+      print *,' '
+c
+      if (doconsis.eq.0) then
+         call fltbawh (wh,swh,nlc,ndel)
+         call filtre (nomvar,buf1,buf2,buf3,buf4,wh,swh,ndel,nclip,
+     $                        iter,hrs,niv,iun01,iun51,ni,nj,nhrs,nk)
+      else
+         call consis (buf1,buf2,buf3,buf4,ni,nj,iun01,iun51)
+      endif
+*
+      call hpdeallc (pawh   ,err,1)
+      call hpdeallc (pabuf1 ,err,1)
+      call hpdeallc (pabuf2 ,err,1)
+      call hpdeallc (pabuf3 ,err,1)
+      call hpdeallc (pabuf4 ,err,1)
+
+      ier = fstfrm(1)
+      ier = fstfrm(51)
+      ier = fclos(1)
+      ier = fclos(51)
+*
+      write (6,65)
+*
+ 60   format (/1x,'VARIABLE ',a,' INEXISTANTE ===> ABORT')
+ 61   format (//1x,'LISTE DES PARAMETRES CONCERNANT LA GRILLE'//
+     6       1X,'NI  =',I10,'  NJ  =',I10,'  NK  =',I10/
+     8       1X,'IG1 =',I10,'  IG2 =',I10,'  IG3 =',I10,'  IG4 =',I10/
+     9       1X,'PI  =',F10.2,'  PJ  =',F10.2/
+     9       1X,'D60  =',F10.2,'  DGRW  =',F10.2/
+     9       1X,'DEET  =',I10/
+     3       1X,'DATE0  = ',I10/
+     2       1X,'ETIKET = ',A8//)
+ 65   format (/1x,'FIN D EXECUTION NORMAL')
+*
+*-------------------------------------------------------------------
+      return
+      end
+*
+      subroutine filtre (nvar,f1,f2,w1,w2,wh,swh,ndel,nclip,nit,
+     $                   hrs,niv,iun01,iun51,ni,nj,nhrs,nniv)
+      implicit none
+*
+      character*2 nvar
+      integer ndel,nclip,nit,iun01,iun51,ni,nj,nhrs,nniv
+      integer hrs(nhrs),niv(nniv)
+      real*8 f1(ni,nj),f2(ni,nj),w1(ni,nj),w2(ni,nj)
+      real*8 wh(2*ndel+1,2*ndel+1)
+      real*8 swh
+
+      character*1 typvar, grtyp
+      character*8 getiket
+      common /gridchr/  typvar,grtyp ,getiket
+*
+      integer date0,deet,ig1,ig2,ig3,ig4
+      common /gridint/  date0,deet,ig1,ig2,ig3,ig4
+*
+      real pi,pj,d60,dgrw
+      common /gridrel/  pi,pj,d60,dgrw
+
+      integer idtt,lvl,ip1,ip2,npas,err
+      integer irec1,n1,n2,n3,fstlir,fstecr,i,j
+      real wke
+
+      integer npack
+      real grav
+      parameter (npack = -16)
+      parameter (grav  = 9.8)
+      real tr1,tr2
+      pointer (patr1, tr1(ni,nj))
+      pointer (patr2, tr2(ni,nj))
+*
+*-------------------------------------------------------------------
+*
+      call hpalloc (patr1 ,ni*nj,err,1)
+      call hpalloc (patr2 ,ni*nj,err,1)
+      do 10 idtt=1,nhrs
+         ip2 = hrs(idtt)
+         npas= 0
+         if (deet.gt.0) npas= ip2 * 3600 / deet
+
+         do 20 lvl=1,nniv
+            ip1 = niv(lvl)
+cc            write(*,62) ip1,ip2
+            irec1=fstlir (tr1,iun01,n1,n2,n3,-1,' ',ip1,ip2,-1,
+     $                    " ",nvar)
+            irec1=fstlir (tr2,iun01,n1,n2,n3,-1,' ',ip1,ip2,-1,
+     $                    " ",'MG')
+            do j=1,nj
+            do i=1,ni
+               if ((tr1(i,j).le.1.0).and.(tr2(i,j).ge.0.5)) then
+                  tr1(i,j)=1.0
+               endif  
+            end do
+            end do
+
+            do j=1,nj
+            do i=1,ni
+               f1(i,j) = dble(tr1(i,j))
+            end do
+            end do
+            call fltbaho (f2,f1,wh,swh,w1,w2,ndel,nclip,nit,ni,nj)
+            do j=1,nj
+            do i=1,ni
+               tr1(i,j) = f2(i,j)
+            end do
+            end do
+            irec1 = fstecr (tr1,wke,npack,iun51,date0,deet,npas,
+     $                      ni,nj,1,ip1,ip2,0,typvar,nvar,getiket,
+     $                      grtyp,ig1,ig2,ig3,ig4,1,.true.)
+ 20      continue
+*
+ 10   continue
+      call hpdeallc (patr1   ,err,1)
+      call hpdeallc (patr2   ,err,1)
+*
+ 62   format(/1x,'ON TRAITE LE NIVEAU ',I5,' MB     AU PAS DE TEMPS '
+     $       ,I2/)
+*
+*-------------------------------------------------------------------
+      return
+      end
+*
+*??????????????????????????????????????????????????????????????????????
+*
+      subroutine fltbaho (d,s,wh,swh,wk1,wk2,ndel,nclip,nit,ni,nj)
+      implicit none
+*
+      integer ndel,nclip,nit,ni,nj,iun51
+      real*8 d(ni,nj),s(ni,nj),wh(2*ndel+1,2*ndel+1),
+     $       wk1(ni,nj),wk2(ni,nj)
+      real*8 swh
+
+      character*1 typvar, grtyp
+      character*8 getiket
+      common /gridchr/  typvar,grtyp ,getiket
+*
+      integer date0,deet,ig1,ig2,ig3,ig4
+      common /gridint/  date0,deet,ig1,ig2,ig3,ig4
+*
+      real pi,pj,d60,dgrw
+      common /gridrel/  pi,pj,d60,dgrw
+*
+***** filtre horizontal de barnes (deux dimensions) *****
+*
+** d      vecteur de destination de dimension ni x nj
+** s      vecteur source de dimension ni x nj
+** wh     vecteur de poids gaussiens de dimension ni x nj
+** swh    somme des poids gaussiens
+** wk1    vecteur de travail de dimension ni x nj
+** wk2    vecteur de travail de dimension ni x nj
+** ndel   rayon d influence en nb de delta x
+** nit    nombre d'iterations
+*
+      integer it,i,j,idebut,ifin,jdebut,jfin,k,l
+      real*8 smini,smaxi
+
+      write (6,101) 'PREMIERE PASSE','RAYON D INFLUENCE = ',ndel
+ 101  format (/1x,a,10x,a,i2)
+*
+      call bahoriz (d,s,wh,swh,ndel,nclip,ni,nj)
+*
+      do 20 it=1,nit
+         write (6,102) 'ITERATION NO: ',it,'(MAX ',nit,')'
+         do j=1,nj
+         do i=1,ni
+            wk1(i,j) = s(i,j) - d(i,j)
+         end do
+         end do
+         call bahoriz (wk2,wk1,wh,swh,ndel,nclip,ni,nj)
+         do j=1,nj
+         do i=1,ni
+            d(i,j) = d(i,j) + wk2(i,j)
+            if (nclip.gt.0) then
+               smini=  1.e25
+               smaxi= -1.e25
+               idebut  = max( 1,min(i-nclip,ni))
+               jdebut  = max( 1,min(j-nclip,nj))
+               ifin    = min(ni,max(i+nclip,1))
+               jfin    = min(nj,max(j+nclip,1))
+               do 15 l=jdebut,jfin
+                  do 15 k=idebut,ifin
+                     smini = dmin1(smini,s(k,l))
+                     smaxi = dmax1(smaxi,s(k,l))
+ 15            continue
+               d(i,j) = dmax1(smini,dmin1(smaxi,d(i,j)))
+            endif
+         end do
+         end do
+  20  continue
+*
+ 102  format (1x,a,i2,8x,a,i2,a)
+      end
+*
+*????????????????????????????????????????????????????????????????????????
+      subroutine bahoriz (d,s,wh,swh,ndel,nclip,ni,nj)
+      implicit none
+*
+      integer ni,nj,ndel,nclip
+      real*8 d(ni,nj),s(ni,nj),wh(2*ndel+1,2*ndel+1)
+      real*8 swh
+*
+***** filtre horizontal de barnes (deux dimensions) *****
+*
+** d      vecteur de destination de dimension ni x nj
+** s      vecteur source de dimension ni x nj
+** s      vecteur de poids gaussiens de dimension ni x nj
+** swh    somme des poids gaussiens
+** ndel   rayon d influence en nb de delta x
+*
+      integer i,j,k,l,idebut,ifin,jdebut,jfin
+      real*8 smini,smaxi
+*
+      do 10 j=1,nj
+      do 10 i=1,ni
+         d(i,j)  = 0.0
+*
+         idebut  = max( 1,min(i-ndel,ni))
+         jdebut  = max( 1,min(j-ndel,nj))
+         ifin    = min(ni,max(i+ndel,1))
+         jfin    = min(nj,max(j+ndel,1))
+         do 20 l=jdebut,jfin
+         do 20 k=idebut,ifin
+            d(i,j) = d(i,j) + (wh(k-i+ndel+1,l-j+ndel+1)*s(k,l))
+  20     continue
+*
+         d(i,j) = d(i,j) / swh
+*
+  10  continue
+*
+      return
+      end
+*
+*????????????????????????????????????????????????????????????????????
+*
+      subroutine fltbawh (wh,swh,nlc,ndel)
+      implicit none
+*
+      integer nlc,ndel
+      real*8 wh (2*ndel+1,2*ndel+1)
+      real*8 swh
+*
+***** Calcule les poids gaussiens pour le filtre horizontal de barnes *****
+*
+** wh     vecteur de poids gaussiens
+** swh    somme des poids gaussiens
+** nlc    nombre de delta x a filtrer
+** ndel   rayon d influence en nb de delta x
+*
+      integer i,j
+      real rr
+*
+      swh=0.
+      do 100 j=1,2*ndel+1
+         do 100 i=1,2*ndel+1
+            RR = (dble(j-ndel-1)**2+dble(i-ndel-1)**2)
+            wh(i,j) = EXP(-(RR/dble(nlc)**2))
+            swh = swh + wh(i,j)
+ 100  continue
+      write (6,101) 'FLTBAHO: L=',nlc,'R=',ndel,'MINWH=',wh(1,ndel+1)
+ 101  format (1x,a,i3,5x,a,i3,5x,a,e15.7)
+*
+      return
+      end
+*
+*????????????????????????????????????????????????????????????????????
+
+      subroutine consis (me,mg,zp,mt,ni,nj,iun01,iun51)
+*
+            IMPLICIT NONE
+*
+      integer ni,nj,nk,iun01,iun51
+      real me(ni,nj),zp(ni,nj),mg(ni,nj),mt(ni,nj)
+*
+*     *me: Topo.
+*     *zp:  Donnees de terrain a haute resolution
+*     *mg: Masque terre-mer
+*
+      integer ier,key,i,j,keyzp
+      integer date,deet
+      integer npas,nbits,datyp,ip1,ip2,ip3
+      integer ig1,ig2,ig3,ig4,swa,lng,dltf,ubc
+      integer extra1,extra2,extra3
+      integer fstinf,fstecr,fstprm,fstlir
+      real    dum
+*
+      character*2  nomvar
+      character*1  typvar,grtyp
+      character*8  etiket
+*      
+C     *ouverture des fichiers standards
+C
+      key = fstinf(iun01,ni,nj,nk,-1,' ',-1,-1,-1,
+     %             ' ','ME')
+      ier = fstprm(key,date,deet,npas,ni,nj,nk,nbits,datyp,ip1,
+     %         ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,
+     %         swa,lng,dltf,ubc,extra1,extra2,extra3)
+
+      key = fstlir(me,iun01,ni,nj,nk,-1,' ',-1,-1,-1,
+     %             typvar,'ME')
+      if (key.lt.0.0) then
+         print *,'*********** WARNING **************'
+         print *,'INCLUDE THE FIELD ME IN YOUR FILE.'
+         print *,'***********************************'
+         stop
+      endif   
+      key = fstlir(mg,iun01,ni,nj,nk,-1,' ',-1,-1,-1,
+     %             typvar,'MG')
+      if (key.lt.0.0) then
+         print *,'*********** WARNING **************'
+         print *,'INCLUDE THE FIELD MG IN YOUR FILE.'
+         print *,'***********************************'
+         stop
+      endif
+      key = fstlir(zp,iun01,ni,nj,nk,-1,' ',-1,-1,-1,
+     %             typvar,'ZP')
+      keyzp=1
+      if (key.lt.0.0) then
+         print *,'*********** WARNING **************'
+         print *,'ZP NOT FOUND: NO CONSISTANCY DONE FOR ZP'
+c         print *,'INCLUDE THE FIELD ZP IN YOUR FILE.'
+         print *,'***********************************'
+         keyzp=0
+      endif
+C
+*    S'assurer consistance entre la masque et topo
+      do 121 i=1,ni
+           do 121 j=1,nj
+cc            if ((me(i,j).le.1.0).and.(mg(i,j).ge.0.5)) then
+cc                 me(i,j)=1.0
+cc            endif
+
+              if (me(i,j).le.0.0) then 
+                 mg(i,j)=0.0
+                 zp(i,j)=ALOG(0.001)
+              endif
+
+              if (mg(i,j).le.0.5) then 
+                 mg(i,j)=0.0
+                 zp(i,j)=ALOG(0.001)
+              endif
+
+              mt(i,j)=9.8765*me(i,j)
+ 121  continue        
+
+
+      ier=fstecr (me, dum, -16, iun51, date,deet,npas, ni, nj,
+     %          1, ip1,ip2,ip3,typvar,
+     %          'ME',etiket,grtyp, ig1,ig2,ig3,ig4, 1, .true.)
+c      ier=fstecr (mt, dum, -16, iun51, date,deet,npas, ni, nj,
+c     %          1, ip1,ip2,ip3,typvar,
+c     %          'MT',etiket,grtyp, ig1,ig2,ig3,ig4, 1, .true.)
+      ier=fstecr (mg, dum, -16, iun51, date,deet,npas, ni, nj,
+     %          1, ip1,ip2,ip3,typvar,
+     %          'MG',etiket,grtyp, ig1,ig2,ig3,ig4, 1, .true.)
+      if (keyzp.eq.1) then
+         ier=fstecr (zp, dum, -16, iun51, date,deet,npas, ni, nj,
+     %          1, ip1,ip2,ip3,typvar,
+     %          'ZP',etiket,grtyp, ig1,ig2,ig3,ig4, 1, .true.)
+      endif
+C
+      return
+      end
+@

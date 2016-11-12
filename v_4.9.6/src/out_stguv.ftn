@@ -1,0 +1,35 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine out_stguv (u,v,lminx,lmaxx,lminy,lmaxy,lnk)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk
+      real u(lminx:lmaxx,lminy:lmaxy,lnk),v(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+#include "lcldim.cdk"
+*
+      integer i,j,k,i0,in,j0,jn
+*
+*----------------------------------------------------------------------
+*   
+      i0 = 1    - hx*west
+      j0 = 1    - hy*south
+      in = ldni + hx*east
+      jn = ldnj + hy*north
+*  
+      do k=1,lnk
+         do j=j0,jn
+         do i=i0,in-1*east
+            u(i,j,k) = 0.5 * ( u(i+1,j,k) + u(i,j,k) )
+         end do
+         end do
+         do j=j0,jn-1*north
+         do i=i0,in
+            v(i,j,k) = 0.5 * ( v(i,j+1,k) + v(i,j,k) )
+         end do
+         end do
+      end do
+*
+*----------------------------------------------------------------------
+*
+      return
+      end

@@ -1,0 +1,148 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine fltbawh (wh,swh,nlc)
+      implicit none
+*
+      integer nlc
+      real wh (10*nlc+1,10*nlc+1)
+      real swh
+*
+** Calcule les poids gaussiens pour le filtre horizontal de barnes
+*
+** wh     vecteur de poids gaussiens
+** swh    somme des poids gaussiens
+** nlc    nombre de delta x a filtrer
+*
+      integer i,j,ndel
+      real rr
+*
+      ndel = 5 * nlc
+      swh  = 0.
+      do 100 j=1,2*ndel+1
+         do 100 i=1,2*ndel+1
+            RR = (float(j-ndel-1)**2+float(i-ndel-1)**2)
+            wh(i,j) = EXP(-(RR/float(nlc)**2))
+            swh = swh + wh(i,j)
+ 100  continue
+      write (6,101) 'FLTBAHO: L=',nlc,'R=',ndel,'MINWH=',wh(1,ndel+1)
+ 101  format (/1x,a,i3,5x,a,i3,5x,a,e15.7)
+*
+      return
+      end
+*
+*?????????????????????????????????????????????????????????????????????
+*
+      subroutine fltbaho (d,s,wh,swh,nlc,nit,ideb,jdeb,ifin,jfin,ni,nj)
+      implicit none
+*
+      integer nlc,nit,ideb,jdeb,ifin,jfin,ni,nj
+      real d(ni,nj),s(ni,nj),wh(10*nlc+1,10*nlc+1)
+      real swh
+*
+***** filtre horizontal de barnes (deux dimensions) *****
+*
+** d         vecteur de destination
+** s         vecteur source
+** wh        vecteur de poids gaussiens
+** swh       somme des poids gaussiens
+** nlc       nombre de delta x a filtrer
+** nit       nombre d'iterations
+** ideb,jdeb point (i,j) inferieur gauche du sous-domaine a filtrer 
+** ifin,jfin point (i,j) superieur droite du sous-domaine a filtrer 
+*
+      integer it,i,j,nis,njs,nij,cnt,err
+      integer id,jd,if,jf,ndel
+      real tr1,tr2,w1,w2
+      pointer (patr1, tr1(*)), (patr2, tr2(*)), 
+     $        (paw1,  w1 (ni,*)),(paw2,  w2 (ni,*))
+
+      id = min(ni,max(ideb,1))
+      jd = min(nj,max(jdeb,1))
+      if = min(ni,max(ifin,1))
+      jf = min(nj,max(jfin,1))
+      if = max(id,if)
+      jf = max(jd,jf)
+      nis = if - id + 1
+      njs = jf - jd + 1
+      nij = nis*njs
+      call hpalloc (patr1, nij, err,1)
+      call hpalloc (patr2, nij, err,1)
+      call hpalloc (paw1 , nij, err,1)
+      call hpalloc (paw2 , nij, err,1)
+      ndel = nlc*5
+      if (wh(ndel+1,ndel+1).ne.1.0) 
+     $     call fltbawh (wh,swh,nlc)
+      write (6,101) 'PREMIERE PASSE','RAYON D INFLUENCE = ',ndel
+ 101  format (1x,a,10x,a,i2)
+*
+      cnt = 0
+      do j=jd,jf
+      do i=id,if
+         cnt      = cnt + 1
+         tr1(cnt) = s(i,j)
+      end do
+      end do
+      call bahoriz (tr2,tr1,wh,swh,ndel,nis,njs)
+*
+      do 20 it=1,nit
+         write (6,102) 'ITERATION NO: ',it,'(MAX ',nit,')'
+         call gdadgd  (w1,tr1,tr2,1.0,-1.0,nis,njs,0)
+         call bahoriz (w2,w1,wh,swh,ndel,nis,njs)
+         call gdadgd  (tr2,tr2,w2,1.0,1.0,nis,njs,0)
+  20  continue
+*
+      do j=1,nj
+      do i=1,ni
+         d(i,j) = s(i,j)
+      end do
+      end do
+*
+      cnt = 0
+      do j=jd,jf
+      do i=id,if
+         cnt    = cnt + 1
+         d(i,j) = tr2(cnt)
+      end do
+      end do
+      print*
+*
+ 102  format (1x,a,i2,8x,a,i2,a)
+      end
+*
+*?????????????????????????????????????????????????????????????????????
+      subroutine bahoriz (d,s,wh,swh,ndel,ni,nj)
+      implicit none
+*
+      integer ni,nj,ndel
+      real d(ni,nj),s(ni,nj),wh(2*ndel+1,2*ndel+1)
+      real swh
+*
+***** filtre horizontal de barnes (deux dimensions) *****
+*
+** d      vecteur de destination
+** s      vecteur source
+** s      vecteur de poids gaussiens
+** swh    somme des poids gaussiens
+** ndel   rayon d influence en nb de delta x
+*
+      integer i,j,k,l,idebut,ifin,jdebut,jfin
+*
+      do 10 j=1,nj
+      do 10 i=1,ni
+         d(i,j)  = 0.0
+         idebut  = max(1,min(i-ndel,ni))
+         ifin    = min(ni,max(i+ndel,1))
+         jdebut  = max(1,min(j-ndel,nj))
+         jfin    = min(nj,max(j+ndel,1))
+*
+         do 20 l=jdebut,jfin
+         do 20 k=idebut,ifin
+            d(i,j) = d(i,j) + (wh(k-i+ndel+1,l-j+ndel+1)*s(k,l))
+  20     continue
+*
+         d(i,j) = d(i,j) / swh
+*
+  10  continue
+*
+      return
+      end
+*

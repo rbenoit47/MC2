@@ -1,0 +1,140 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r getindx2
+*
+      subroutine getindx2 (varname,bus,deb,nm,initd)
+      implicit none
+*
+      character*(*) varname
+      character*1 bus
+      integer deb,nm,initd
+*
+*AUTHOR   Michel Desgagne       Nov   1995
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (getindx2)
+*     Obtain starting index "deb", length "nm" and init requirement
+*     "init" for variable "varname" from bus "bus".
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*   varname     I    C     S      Name of the variable
+*   bus         I    C     S      Bus (D,P,V,G)
+*   deb         O    I     S      Starting index on bus
+*   nm          O    I     S      Length of variable varname
+*   init        O    I     S      Initialysation requirement (1=yes)
+*
+*IMPLICITES
+*
+#include "lesbus.cdk"
+*
+*MODULES
+*
+**
+      integer i,init
+*-------------------------------------------------------------------
+      if (bus.eq.'E') then
+         do 5 i=1,enttop
+            if (varname.eq.entnm(i)) then
+               deb = entpar(i,1)
+               nm  = entpar(i,2)
+               init= entpar(i,3)
+               goto 601
+            endif
+ 5       continue 
+         if (initd.lt.0) goto 601
+         write (6,910) varname,'BUSENT'
+      endif
+*
+      if (bus.eq.'D') then
+         do 10 i=1,dyntop
+            if (varname.eq.dynnm(i)) then
+               deb = dynpar(i,1)
+               nm  = dynpar(i,2)
+               init= dynpar(i,3)
+               goto 601
+            endif
+ 10      continue 
+         if (initd.lt.0) goto 601
+         write (6,910) varname,'BUSDYN'
+      endif
+*
+      if (bus.eq.'P') then
+         do 20 i=1,pertop
+            if (varname.eq.pernm(i)) then
+               deb = perpar(i,1)
+               nm  = perpar(i,2)
+               init= perpar(i,3)
+               goto 601
+            endif
+ 20      continue 
+         if (initd.lt.0) goto 601
+         write (6,910) varname,'BUSPER'
+      endif
+*
+      if (bus.eq.'V') then
+         do 30 i=1,voltop
+            if (varname.eq.volnm(i)) then
+               deb = volpar(i,1)
+               nm  = volpar(i,2)
+               init= volpar(i,3)
+               goto 601
+            endif
+ 30      continue 
+         if (initd.lt.0) goto 601
+         write (6,910) varname,'BUSVOL'
+      endif
+*
+      if (bus.eq.'G') then
+         do 40 i=1,geotop
+            if (varname.eq.geonm(i,1)) then
+               deb = geopar(i,1)
+               nm  = geopar(i,2)
+               init= geopar(i,3)
+               goto 601
+            endif
+ 40      continue 
+         write (6,910) varname,'BUSGEO'
+      endif
+
+      deb = -1
+      nm  = 0
+      stop
+            
+ 601  continue
+      if (initd.ge.0) initd = init
+
+ 910  format (/1x,'===> ABORT IN GETINDX: COULD NOT FIND'/
+     $         1x,"     VARIABLE '",a8,"' ON '",a6,"'."/)
+*
+*-------------------------------------------------------------------
+      return
+      end
+@

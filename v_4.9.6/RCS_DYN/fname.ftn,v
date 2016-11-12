@@ -1,0 +1,43 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine fname (numproc,filname)
+      implicit none
+*
+      integer numproc
+      character*(*) filname
+*
+      integer n,nr,ic
+*
+      n=numproc
+      ic=len(filname)
+
+ 100  nr=mod(n,10)
+      n=n/10
+      filname(ic:ic)=char(48+nr)
+      ic = ic - 1
+      if (n.ne.0) goto 100
+*
+      return
+      end
+@

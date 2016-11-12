@@ -1,0 +1,20 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine fname (numproc,filname)
+      implicit none
+*
+      integer numproc
+      character*(*) filname
+*
+      integer n,nr,ic
+*
+      n=numproc
+      ic=len(filname)
+
+ 100  nr=mod(n,10)
+      n=n/10
+      filname(ic:ic)=char(48+nr)
+      ic = ic - 1
+      if (n.ne.0) goto 100
+*
+      return
+      end

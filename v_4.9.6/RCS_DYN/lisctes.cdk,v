@@ -1,0 +1,37 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*     nbre - number of constants in the file
+      integer    nbre
+      parameter (nbre = 31)
+      character*10 lisctes (nbre)
+*
+*     name of those constants
+*
+      data lisctes/ 'CPD', 'CPV', 'RGASD', 'RGASV', 'TRPL',
+     $              'TCDK', 'RAUW', 'EPS1', 'EPS2', 'DELTA',
+     $              'CAPPA' , 'TGL', 'CONSOL', 'GRAV', 'RAYT',
+     $              'STEFAN', 'PI', 'OMEGA', 'KNAMS', 'STLO', 
+     $              'KARMAN', 'RIC', 'CHLC', 'CHLF', 'T1S', 
+     $              'T2S', 'AW', 'BW', 'AI', 'BI', 'SLP'/
+@

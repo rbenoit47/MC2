@@ -1,0 +1,263 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.04.18.26.52;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_wrphyo
+*
+      subroutine out_wrphyo (outbus,wrpospc,wrponm,wrpopar,ngth,stepno)
+      implicit none
+*
+      character*8 wrponm(*)
+      integer wrpopar(3,*),wrpospc,ngth,stepno
+      real outbus(*)
+*
+*AUTHOR     Michel Desgagne                Dec   2002
+*
+*REVISION
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    n          I    I    S    number of output variables on outbus
+*    npar       I    I    A    number of attributes per variable
+*    stepno     I    I    S    step number
+*    iun        I    I    S    fortran unit (input  file)
+*    oun        I    I    S    fortran unit (output file)
+*
+*IMPLICIT
+*
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "physnml.cdk"
+#include "path.cdk"
+#include "grd.cdk"
+#include "topo.cdk"
+#include "rec.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+*
+**
+      integer  fnom,fstouv,fstecr,prog_filename,fstfrm,fstinl,longueur
+      external fnom,fstouv,fstecr,prog_filename,fstfrm,fstinl,longueur
+*
+      character*3 ros,lt
+      character*8 varname,pcpnm(4),dianm(4),mixnm(3)
+      character*128 progfile
+      character*512 progfile_fp
+      logical isopen,boot
+      integer nlis
+      parameter (nlis = 1024)
+      integer liste (nlis)
+      integer nis,njs,clostep,fortout,prognum,pnprog,nklvl(3),err,
+     $        nkk,nfld3d,id,im,ktop(dim3d),kbot(dim3d),n1,n2,n3,lislon,
+     $        offset,i,j,k,kind,ng,ip3,glphys,onelvl(3),nrec
+      real, dimension (:,:), allocatable :: tr1,t1
+      real prt(ldni*ldnj,gnk), lprt(ldni*ldnj,gnk), ht(ldni*ldnj,gnk), 
+     $     intlev(nkout), lv, ztp(gnk), ztmp
+
+      real*8 ONE, OV_day, OV_hour, OV_min, grdt_8
+      parameter ( ONE = 1.0d0, OV_day = ONE/86400.0d0,
+     $            OV_hour = ONE/3600.0d0, OV_min = ONE/60.0d0 )
+
+      data pcpnm /'PR','SN','RT','SR'/
+      data dianm /'UU','VV','TT','HU'/
+      data mixnm /'IF','QI','QW'/
+      data nklvl,onelvl /6*1/
+      data ros,fortout,clostep /'RND',0,-1/
+      data isopen,boot /.false.,.true./
+      save isopen,boot,clostep,progfile,nis,njs,lt
+*----------------------------------------------------------------------
+*
+      ng = ldni*ldnj
+      if (boot) then
+         nis = g_ifp - g_idp + 1
+         njs = g_jfp - g_jdp + 1
+         if (levtyp.eq.'G') lt = 'pm'
+         if (levtyp.eq.'P') lt = 'pp'
+         if (levtyp.eq.'H') lt = 'ph'
+         i = (stepno-1) / nstepsor_p
+         clostep = i * nstepsor_p
+      endif
+*
+      if (myproc.eq.0) then
+         if (stepno.gt.0) then
+            clostep = min(endstepno,clostep+nstepsor_p)
+         else
+            clostep = 0
+         endif
+         prognum = clostep
+         grdt_8  = dble(clostep)*dble(grdt)
+         if (out_unit_S.eq.'D') prognum = nint(grdt_8 * OV_day )
+         if (out_unit_S.eq.'H') prognum = nint(grdt_8 * OV_hour)
+         if (out_unit_S.eq.'M') prognum = nint(grdt_8 * OV_min )
+         if (out_unit_S.eq.'S') prognum = nint(grdt_8)
+         err = prog_filename (progfile,lt,out_dat2,out_h0,-1,-1,
+     $                        myrow,mycol,prognum,6,out_unit_S)
+         progfile_fp = dfwmil(1:longueur(dfwmil))//'/output/'//
+     $                 progfile(1:longueur(progfile))
+         err = fnom  (fortout,progfile_fp,'STD+'//ros,0)
+         err = fstouv(fortout,ros)
+         write (6,101) fortout,progfile(1:longueur(progfile))
+         nrec= fstinl (fortout,n1,n2,n3,' ',' ',-1,-1,-1,' ','>>',
+     $                                         liste,lislon,nlis)
+         if (lislon.lt.1) then
+            err = fstecr (xpx(g_idp+hx),xpq, -32,fortout,0,0,0,nis,1,1,
+     $            Grd_ig1p,Grd_ig2p,Grd_ig3p,'X', '>>','POS_X',gtgrtyp,
+     $            igs(1), igs(2), igs(3), igs(4), 5, .true.)
+            err = fstecr (ypx(g_jdp+hy),ypq, -32,fortout,0,0,0,1,njs,1,
+     $            Grd_ig1p,Grd_ig2p,Grd_ig3p,'X', '^^','POS_Y',gtgrtyp,
+     $            igs(1), igs(2), igs(3), igs(4), 5, .true.)
+         endif
+      endif
+*
+      pnprog = int (dble(stepno) * grdt / 3600. + 1.e-12)
+*     
+      call ecrisp_fst ( hh0,minx,maxx,miny,maxy,0.,'ME  ',1.0,pnprog,
+     $                              stepno,-1,1,onelvl,'PHY',fortout )
+*   
+      nfld3d=0
+      do id=1,ngth
+         if (wrpopar(2,id).gt.1) nfld3d = nfld3d +1
+      end do
+*
+      if (nfld3d.gt.0) then
+*     
+         if (levtyp.ne.'G') then
+            call fullprw ( prt, ht, ng, gnk, levtyp )
+            call out_lev (intlev,nkk,pres_o,prt,height_o,ng,gnk,nkout)
+            if (papositp.eq.0) then
+               call hpalloc (papositp, dim2d*     nkk*6  , err,1)
+               call hpalloc (pahwwp  , dim2d* (gnk+3)*2  , err,1)
+            endif
+            allocate (t1(ng,nkk))
+            if (levtyp.eq.'P') then
+               do k=1,nkk
+               do i=1,ng
+                  t1(i,k) = alog(intlev(k)*100.)
+               end do
+               end do
+               do k=1,gnk
+               do i=1,ng
+                  lprt(i,k) = alog(prt(i,k))
+               end do
+               end do
+               call inv_posiz (posit_op,hww_op,lprt,t1,ktop,kbot,
+     $                         ng,nkk,gnk)
+               do k=1,nkk/2
+                  ztmp = intlev(k)
+                  intlev(k) = intlev(nkk-k+1)
+                  intlev(nkk-k+1) = ztmp
+               end do
+            elseif (levtyp.eq.'H') then
+               do k=1,nkk
+               do i=1,ng
+                  t1(i,k) = intlev(k)
+               end do
+               end do
+               call posiz3 (posit_op,hww_op,ht,t1,ktop,kbot,ng,nkk,gnk)
+            endif
+         else
+            nkk = gnk
+            do k = 2, gnk
+               ztp(k) = ztr(k-1)
+            end do
+            ztp(1) = zt(1)
+         endif
+*
+      endif
+*
+      do id=1,ngth
+      do im=1,wrpopar(3,id)
+         offset  = wrpopar(1,id) + (im-1)*ng*wrpopar(2,id)
+         varname = wrponm(id)
+         lv   =  0.
+         kind = -1
+         if ((wrpopar(3,id).gt.1) .and. 
+     $     (.not.((wrponm(id).eq.'RAIN').or.(wrponm(id).eq.'SFCDIA'))))
+     $   then
+            lv   = real(im)
+            kind = 3
+         endif
+         if (wrpopar(2,id).lt.2) then  ! 2D fields
+            if (wrponm(id).eq.'RAIN'  ) varname = pcpnm(im)
+            if (wrponm(id).eq.'SFCDIA') varname = dianm(im)
+            call ecrisp_fst ( outbus(offset),1,ldni,1,ldnj,lv,varname,
+     $                  1.0,pnprog,stepno,kind,1,onelvl,'PHY',fortout )
+         else
+            ip3 = 0
+            if (wrpopar(3,id).gt.1) ip3 = im
+            if (wrponm(id).eq.'ICEDIA') then
+               varname = mixnm(im)
+               ip3 = 0
+            endif
+            glphys = -1
+            do i=1,nvardyn
+               if (udolist(i).eq.varname) glphys=i
+            end do
+            if (glphys.gt.0) then
+               nklvl(1) = table_out(1,glphys)
+               nklvl(2) = table_out(2,glphys)
+               nklvl(3) = table_out(3,glphys)
+            else
+               nklvl(1) = 1
+               nklvl(2) = nkk
+               nklvl(3) = 1
+            endif
+            if (levtyp.ne.'G') then
+               call inv_vertint (t1,outbus(offset),posit_op,hww_op,
+     $                                                  ng,nkk,gnk)
+               call ecrisp_fst ( t1,1,ldni,1,ldnj,intlev,varname,1.0,
+     $                pnprog,stepno,out_kind,nkk,nklvl,'PHY',fortout)
+            else
+               call ecrisp_fst(outbus(offset),1,ldni,1,ldnj,ztp,varname,
+     $               1.0,pnprog,stepno,out_kind,nkk,nklvl,'PHY',fortout)
+            endif
+         endif
+      end do
+      end do
+*
+      boot=.false.
+      if (nfld3d.gt.0) then
+         if (levtyp.ne.'G') deallocate (t1)
+         if (levtyp.eq.'P') then
+            call hpdeallc (papositp,err,1)
+            call hpdeallc (pahwwp  ,err,1)
+            papositp = 0
+            pahwwp   = 0
+         endif
+      endif
+*
+      if (myproc.eq.0) then
+         err = fstfrm(fortout)
+         call fclos(fortout)
+         write (6,102) fortout,progfile(1:longueur(progfile))
+         fortout = 0
+      endif
+*
+ 101  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS OPENED')
+ 102  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS CLOSED')
+*----------------------------------------------------------------------
+      return
+      end
+@

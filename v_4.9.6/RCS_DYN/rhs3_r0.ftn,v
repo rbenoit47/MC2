@@ -1,0 +1,287 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r rhs3_r0
+*
+      subroutine rhs3_r0 ( w1 )
+      implicit none
+*
+      real*8 w1(*)
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*******************************************************************
+*                                                                 *
+*     CALCULATES                                                  *
+*                right-hand-side CORIOLIS+KE+NON-LINEAR           *
+*                explicit terms:                                  *
+*                Ru, Rv, Rsw, Rtp                                 *
+*       FROM                                                      *
+*                centered time-level t variables:                 *
+*                u0, v0, sw0, tp0, qp0, hm0, cl0                  *
+*      STORES                                                     *
+*                results in                                       *
+*                ur, vr, swr, tpr                                 *
+*                                                                 *
+*     PERFORMS   essentially the following calculations:          *
+*                                                                 *
+*                                                                 *
+*  tv0 = tv0(tp0,hm0,cl0)                                         *
+*                                                                 *
+*          __XY ____Y       _XY           ___XZ ~                 *
+*   ur = + v0  *fcor - KE*d(S  )/dX - c13*tv0  *d(qp0)/dX         *
+*                                                                 *
+*                                                                 *
+*          __XY ____X       _XY           ___YZ ~                 *
+*   vr = - u0  *fcor - KE*d(S  )/dY - c13*tv0  *d(qp0)/dY         *
+*                                                                 *
+*                         ~                               ___Z    *
+*  swr =   - c13*tv0 * [  d(qp0)/dZ - (c04*nssq-c05*gots)*qp0 ]   *
+*                                                                 *
+*                                             ___Z                *
+*  tpr =  - tv0*sw0*(c04*nssq-c05*gots) - c11*tp0 *div(u0,v0,sw0) *
+*                                                                 *
+*                                        ~     ~     ~            *
+*       SEE   rhs3_pm for description of d/dX, d/dY, d/dZ and div *
+*                                                                 *
+*             cxxpar for definitions of parameters cXX            *
+*                                                                 *
+*******************************************************************
+*
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "wrnmem.cdk"
+#include "physcom.cdk"
+#include "nbcpu.cdk"
+*
+      integer i, j, k, n, kkk, km1, id, jd, iff, jf
+      real*8 div,tv0,g1d,g2d,t1
+      pointer (padiv, div(minx:maxx,miny:maxy,*)),
+     $        (patv0, tv0(minx:maxx,miny:maxy,*)),
+     $        (pag1d, g1d(minx:maxx,miny:maxy,*)),
+     $        (pag2d, g2d(minx:maxx,miny:maxy,*)),
+     $        (pat1,  t1 (minx:maxx,miny:maxy,*))
+      real*8  p25, pt5, one, two, coe1, coe2,
+     $        d1, vbarxy, ubarxy, rtbarxz, rtbaryz, kinetic
+      parameter (p25=0.25d0, pt5=0.5d0, one=1.0d0, two=2.0d0)
+*
+*----------------------------------------------------------------------
+*
+      padiv  = loc(w1(        1))
+      patv0  = loc(w1(  dim3d+1))
+      pag1d  = loc(w1(2*dim3d+1))
+      pag2d  = loc(w1(3*dim3d+1))
+      pat1   = loc(w1(4*dim3d+1))
+*
+!$omp do
+      do k = 1, gnk
+*
+         id  = (1-hx)*west
+         jd  = (1-hy)*south
+         iff = ldni+(hx-1)*east
+         jf  = ldnj+(hy-1)*north
+*
+         do j = jd,jf
+         do i = id,iff
+            t1(i,j,k) = 0.0
+         end do
+         end do
+*
+         if (k.gt.1.and.gnload.eq.1) then
+            do n = bghyd, edhyd
+               do j = jd,jf
+               do i = id,iff
+                  t1(i,j,k) =t1(i,j,k) + cl0(i,j,k,n)
+               end do
+               end do
+            end do
+         endif
+         do j = jd,jf
+         do i = id,iff
+            d1         = tp0(i,j,k) + grav_8
+            tv0(i,j,k) = tp0(i,j,k) + d1 *
+     $                 ( hm0(i,j,k)*(rgasv_8/rgasd_8-one)-t1(i,j,k))
+         end do
+         end do
+*
+         id  = 1-hx*west
+         jd  = 1-hy*south
+         iff = ldni+(hx-1)*east
+         jf  = ldnj+(hy-1)*north
+*
+         coe1 = 0.5
+         if(k.eq.1.or.k.eq.gnk) coe1 = 1.
+         coe2 = 0.5
+         if(k.eq.1.or.k.eq.gnk) coe2 = 0.
+         km1  = max( k-1, 1 )
+*
+         do j = jd, jf
+         do i = id+west, iff
+            g1d(i,j,k) = gg1(i,j,k) * coe1 *
+     $                    ( qp0(i,j,k  ) + qp0(i-1,j,k  )
+     $                    - qp0(i,j,k-1) - qp0(i-1,j,k-1) )
+         end do
+         end do
+         do j = jd+south, jf
+         do i = id, iff
+            g2d(i,j,k) = gg2(i,j,k) * coe1 *
+     $                    ( qp0(i,j,k  ) + qp0(i,j-1,k  )
+     $                    - qp0(i,j,k-1) - qp0(i,j-1,k-1) )
+         end do
+         end do
+         do j = jd,jf
+         do i = id,iff
+            t1(i,j,k) = sbxy(i,j) * coe2 *
+     $                ( gg1(i+1,j,k) * ( u0(i+1,j,k) - u0(i+1,j,km1) )
+     $                + gg1(i  ,j,k) * ( u0(i  ,j,k) - u0(i  ,j,km1) )
+     $                + gg2(i,j+1,k) * ( v0(i,j+1,k) - v0(i,j+1,km1) )
+     $                + gg2(i,j  ,k) * ( v0(i,j  ,k) - v0(i,j  ,km1) ) )
+         end do
+         end do
+*
+      end do
+!$omp enddo
+*
+!$omp do
+      do k = 1, gnk-1
+         km1  = max( k-1, 1 )
+         do j = jd,jf
+         do i = id,iff
+            div(i,j,k)= sbxy(i,j) * (( u0(i+1,j,k) - u0(i,j,k))*odx(1) +
+     $                               ( v0(i,j+1,k) - v0(i,j,k))*ody(j) )
+     $               + gg0r(i,j,k) * (sw0(i,j,k+1) -sw0(i,j,k) +
+     $                               ( t1(i,j,k+1) + t1(i,j,k) ) * pt5 )
+         end do
+         end do
+      end do
+!$omp enddo
+*
+!$omp do
+      do k = 1, gnk
+         km1  = max( k-1, 1 )
+*
+         if (k.lt.gnk) then
+*
+         do j = jd, jf
+         do i = id+west, iff
+            vbarxy    = p25 * ( v0(i-1,j+1,k)+ v0(i-1,j,k  ) +
+     $                          v0(i  ,j+1,k)+ v0(i  ,j,k  ) )
+            rtbarxz   = p25 * (tv0(i  ,j,k+1)+tv0(i-1,j,k+1) +
+     $                         tv0(i  ,j,k  )+tv0(i-1,j,k  ) )  * c13
+            kinetic   = ( u0(i,j,k)*u0(i,j,k) + vbarxy*vbarxy ) * pt5
+            ur(i,j,k) =
+     $                +  vbarxy * ( fcor(i,j+1) + fcor(i,j) ) * pt5
+     $                - kinetic * ( sbxy(i,j) - sbxy(i-1,j) ) * odxu(1)
+     $                - rtbarxz * ( (qp0(i,j,k)-qp0(i-1,j,k)) * odxu(1)
+     $                + g0ur(i,j,k) * ( g1d(i,j,k+1)+g1d(i,j,k)) * pt5 )
+         end do
+         end do
+*
+         do j = jd+south, jf
+         do i = id, iff
+            ubarxy    = p25 * ( u0(i+1,j-1,k)+ u0(i,j-1,k  ) +
+     $                          u0(i+1,j  ,k)+ u0(i,j  ,k  ) )
+            rtbaryz   = p25 * (tv0(i  ,j,k+1)+tv0(i,j-1,k+1) +
+     $                         tv0(i  ,j,k  )+tv0(i,j-1,k  ) )  * c13
+            kinetic   = ( v0(i,j,k)*v0(i,j,k) + ubarxy*ubarxy ) * pt5
+            vr(i,j,k) =
+     $                -  ubarxy * ( fcor(i+1,j) + fcor(i,j) ) * pt5
+     $                - kinetic * ( sbxy(i,j) - sbxy(i,j-1) ) * odyv(j)
+     $                - rtbaryz * ( (qp0(i,j,k)-qp0(i,j-1,k)) * odyv(j)
+     $                + g0vr(i,j,k) * ( g2d(i,j,k+1)+g2d(i,j,k)) * pt5 )
+         end do
+         end do
+*
+         do j = jd,jf
+         do i = id,iff
+            swr(i,j,k) = - c13 * tv0(i,j,k) * (
+     $                   (qp0(i,j,k)-qp0(i,j,k-1))*gg0wr(i,j,k)
+     $                 - (qp0(i,j,k)+qp0(i,j,k-1))*pt5
+     $                              *(c04*nssq(i,j,k)-c05*gots(i,j,k)))
+     $                 + c14 * ( tv0(i,j,k) - tp0(i,j,k  ) )
+            tpr(i,j,k) = -( div(i,j,k) + div(i,j,km1) ) * pt5 *
+     $                      tp0(i,j,k) * c11
+     $                 - tp0(i,j,k) * sw0(i,j,k)
+     $                              *(c04*nssq(i,j,k)-c05*gots(i,j,k))
+         end do
+         end do
+*
+         else
+*
+         do j = jd, jf
+         do i = id,iff
+            swr(i,j,k) = - c13 * tv0(i,j,k) * (
+     $                   (qp0(i,j,k)-qp0(i,j,k-1))*gg0wr(i,j,k)
+     $                 - (qp0(i,j,k)+qp0(i,j,k-1))*pt5
+     $                              *(c04*nssq(i,j,k)-c05*gots(i,j,k)))
+     $                 + c14 * ( tv0(i,j,k) - tp0(i,j,k  ) )
+            tpr(i,j,k) = - div(i,j,k-1) * tp0(i,j,k) * c11
+     $                 - tp0(i,j,k) * sw0(i,j,k)
+     $                              *(c04*nssq(i,j,k)-c05*gots(i,j,k))
+         end do
+         end do
+
+         endif
+*
+         if (k.eq.1) then
+            do j = jd, jf
+            do i = id+west, iff
+               ur(i,j,1)     = ur(i,j,1)     - pt5
+     $                         * g0ur(i,j,1  ) * g1d(i,j,1  )
+            end do
+            end do
+            do j = jd+south, jf
+            do i = id, iff
+               vr(i,j,1)     = vr(i,j,1)     - pt5
+     $                         * g0vr(i,j,1  ) * g2d(i,j,1  )
+            end do
+            end do
+         endif
+         if (k.eq.gnk-1) then
+            do j = jd, jf
+            do i = id+west, iff
+               ur(i,j,gnk-1) = ur(i,j,gnk-1) - pt5
+     $                             * g0ur(i,j,gnk) * g1d(i,j,gnk)
+            end do
+            end do
+            do j = jd+south, jf
+            do i = id, iff
+               vr(i,j,gnk-1) = vr(i,j,gnk-1) - pt5
+     $                             * g0vr(i,j,gnk) * g2d(i,j,gnk)
+            end do
+            end do
+         endif
+*
+      end do
+!$omp enddo
+*----------------------------------------------------------------------
+*
+      return
+      end
+@

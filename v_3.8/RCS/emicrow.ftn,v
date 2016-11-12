@@ -1,0 +1,303 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***s/p emicrow -- explicit microphysics for warm cloud
+*
+#include "phy_macros_f.h"
+      subroutine emicrow ( T,Q,QC,QR,PS,TM,QM,QCM,QRM,PSM ,
+     $                     SATUCO,S,SR,ZSTE,ZSQE,ZSQCE,ZSQRE,
+     $                     DT,NI,N,NK,J,KOUNT )
+#include "impnone.cdk"
+*
+      logical SATUCO
+      integer NI,N,NK,J,KOUNT
+      real T(NI,NK),Q(NI,NK),QC(NI,NK),QR(NI,NK)
+      real TM(NI,NK),QM(NI,NK),QCM(NI,NK),QRM(NI,NK)
+      real PS(NI),PSM(NI),SR(NI),S(NI,NK)
+      real ZSTE(NI,NK),ZSQE(NI,NK),ZSQCE(NI,NK),ZSQRE(NI,NK)
+      real DT
+*
+*Author
+*          Kong,Yau (McGill University)         Feb 1995
+*
+*Revision
+*
+*Object
+*
+*Arguments
+*
+*          - Input -
+* T        virtual temperature
+* Q        specific humidity
+* QC       cloud mixing ratio
+* QR       rain  mixing ratio
+* PS       surface pressure
+* TM       virtual temperature at (t-dt)
+* QM       specific humidity   at (t-dt)
+* QCM      cloud mixing ratio  at (t-dt)
+* QRM      rain  mixing ratio  at (t-dt)
+* PSM      surface pressure    at (t-dt)
+* SATUCO   .TRUE. to have water/ice phase for saturation
+*          .FALSE. to have water phase only for saturation
+* S        sigma values
+*
+*          - Output -
+* SR       precipitation rate (liquid only, in mm/s)
+* ZSTE     tendency on virtual temperature
+* ZSQE     tendency on specific humidity
+* ZSQCE    tendency on cloud mixing ratio
+* ZSQRE    tendency on rain  mixing ratio
+*
+*          - Input -
+* DT       timestep
+* NI       1st horizontal dimension
+* N        NI or NIxNJ (first dimension of T, Q etc)
+* NK       vertical dimension
+* J        index of the row
+* KOUNT    number of timestep
+*
+*Notes
+*  	The determination of 'nsplit' also depends on the vertical
+*	levelling (Gal-Chen). If higher vertical resolution would be
+*	used, the small time step should also decrease, and in turn
+*	'nsplit' increase [see the documentation]-- This is already
+*	done automatically in "physlb5.ftn" since May 1996
+*
+**
+      integer i,k,ll,NTMPVEC
+      real AC,k1,k2,k3,ck1,ck2,ck3,ck4,ck5,ck7
+      real X,D,DEL,ER,ES,LCP,DT2,EPSQC,EPSQR,EPS
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( A1  , REAL , (nk   ))
+      AUTOMATIC ( B1  , REAL , (nk   ))
+      AUTOMATIC ( DE  , REAL , (ni,nk))
+      AUTOMATIC ( VT  , REAL , (ni,nk))
+      AUTOMATIC ( DP  , REAL , (ni,nk))
+      AUTOMATIC ( QS  , REAL , (ni,nk))
+      AUTOMATIC ( QSM1, REAL , (ni,nk))
+*
+************************************************************************
+*
+#include "consphy.cdk"
+#include "dintern.cdk"
+#include "sedipara.cdk"
+#include "fintern.cdk"
+*
+      data EPSQC,EPSQR,EPS/1e-12,1e-6,1e-32/
+      data k1,k2,k3/0.001,0.0005,2.54/
+*
+      LCP=CHLC/CPD
+      dt2=DT
+      ck1=dt2*k1
+      ck2=k2
+      ck3=dt2*k3
+      ck4=14.08
+      ck5=4098.170*LCP
+      ck7=1.0/(dt2*GRAV)
+*
+*
+***   copie des champs T, Q, QC et QR
+      do k=1,nk
+         do i=1,ni
+            ZSTE(i,k) = T(i,k) 
+            ZSQE(i,k) = Q(i,k)
+            ZSQCE(i,k)= QC(i,k)
+            ZSQRE(i,k)= QR(i,k)
+         end do
+      end do
+*
+c   prepare PS, T, and Q field
+      do 105 i=1,ni
+         PSM(i)= 0.5*(PSM(i)+PS(i))
+105   continue
+*
+      do 150 k=1,nk
+*
+         do 115 i=1,ni
+            TM(i,k)= 0.5*(TM(i,k)+T(i,k))
+            QM(i,k)= 0.5*(QM(i,k)+Q(i,k))
+            QCM(i,k)=0.5*(QCM(i,k)+QC(i,k))
+            QRM(i,k)=0.5*(QRM(i,k)+QR(i,k))
+ 115     continue
+         do 120 i=1,ni
+            DE(i,k)=S(i,k)*PSM(i)/(RGASD*TM(i,k))
+ 120     continue
+         do 130 i=1,ni
+            VT(i,k)=ck4/DE(i,k)**0.375
+ 130     continue
+*
+ 150  continue
+*
+      do 210 k=1,nk
+      do 210 i=1,ni
+         if(QR(i,k).lt.EPSQC) then
+            Q(i,k)= Q(i,k)-QR(i,k)
+            QR(i,k)= 0.0
+         endif
+         if(QRM(i,k).lt.EPSQC) then
+            QM(i,k)= QM(i,k)-QRM(i,k)
+            QRM(i,k)= 0.0
+         endif
+ 210  continue
+*
+c   calculate DP for QR's sedimentation term
+*
+      do 160 k=2,nk-1
+      do 160 i=1,ni
+         DP(i,k)=PS(i)*(S(i,k+1)-S(i,k-1))/2.0
+ 160  continue
+      do 170 i=1,ni
+      DP(i,1)=PS(i)*(S(i,2)-S(i,1))
+      DP(i,nk)=PS(i)*(S(i,nk)-S(i,nk-1))
+ 170  continue
+*
+c   autoconversion & coalescence
+*
+      do 200 k=2,nk
+      do 200 i=1,ni
+         if(QCM(i,k).le.EPSQC.and.QRM(i,k).lt.EPSQR) go to 190
+         if(QRM(i,k).lt.EPSQR) then
+            AC= ck1*dim(QCM(i,k), ck2)
+         else
+            AC= ck1*dim(QCM(i,k), ck2)+ck3*QCM(i,k)*(DE(i,k)*
+     $          QRM(i,k))**0.875/sqrt(DE(i,k))
+         endif
+         if(AC.gt.QC(i,k)) then
+            QR(i,k)= QR(i,k)+QC(i,k)
+            QC(i,k)= 0.0
+         else
+            QC(i,k)= QC(i,k)- AC
+            QR(i,k)= QR(i,k)+ AC
+         endif
+ 190  continue
+ 200  continue
+*
+c   rain-drop sedimentation
+*
+      do 260 i=1,ni
+         SR(i)=0.0
+      do 220 k=1,nk
+         A1(k)= cr6*DE(i,k)*VT(i,k)
+220   continue
+      do 250 ll=1,nsplit*nspliti
+         do 230 k=1,nk
+            B1(k)=A1(k)*QR(i,k)**1.125
+ 230     continue
+         do 240 k=2,nk
+            QR(i,k)=dim(QR(i,k)+(B1(k-1)-B1(k))/DP(i,k), EPS)
+ 240     continue
+         SR(i)=SR(i)+B1(nk)
+ 250  continue
+      SR(i)=ck7*SR(i)
+ 260  continue
+*
+c   microphysical adjustment for condensation/evaporation
+*
+      do 400 k=1,nk
+      do 400 i=1,ni
+         QS(i,k)= FOQSA(T(i,k), PS(i)*S(i,k))
+         QSM1(i,k)= FOQSA(TM(i,k), PSM(i)*S(i,k))
+ 400  continue
+*
+      do 500 k=1,nk
+      do 500 i=1,ni
+         X= Q(i,k)- QS(i,k)
+         if(X.le.0.0.and.QC(i,k).le.0.0.and.QR(i,k).le.0.0) go to 480
+         X= X/(1.0+ ck5*QS(i,k)/(T(i,k)-35.86)**2)
+         if(X.lt.(-QC(i,k))) go to 420
+         T(i,k)= T(i,k)+ LCP*X
+         Q(i,k)= Q(i,k)- X
+         QC(i,k)= QC(i,k)+ X
+         go to 480
+ 420     if(QR(i,k).gt.EPSQC) go to 440
+ 430     D= 0.0
+         go to 470
+ 440     if(QM(i,k).ge.QSM1(i,k)) go to 430
+*
+c   ES = P*QS/(0.622*100)  with unit of hPa (mb)
+*
+         ES= QSM1(i,k)*PSM(i)*S(i,k)/62.2
+         ER= dt2*(1.0-QM(i,k)/QSM1(i,k))*(1.0+11.69*(DE(i,k)*QRM(i,k))**
+     $        0.1875)*(DE(i,k)*QRM(i,k))**0.5/(2.02e4+1.55e5/ES)/DE(i,k)
+         if(QR(i,k).gt.ER) go to 450
+         DEL= -QR(i,k)
+         go to 460
+ 450     DEL= -ER
+ 460     D= amax1(X+QC(i,k), DEL)
+ 470     X= D - QC(i,k)
+         QR(i,k)= QR(i,k)+ D
+         QC(i,k)= 0.0
+         T(i,k)= T(i,k) + LCP*X
+         Q(i,k)= Q(i,k) - X
+ 480     continue
+ 500  continue
+*
+c   finish the microphysical adjustment
+*
+      do 650 k=1,nk
+      do 650 i=1,ni
+         Q(i,k)= amax1(Q(i,k), 0.0)
+650   continue
+*
+***   calcul des tendances pour les champs T, Q, QC et QR
+***   retour aux champs de depart  
+      do k=1,nk
+         do i=1,ni
+            ZSTE(i,k) = (T(i,k) - ZSTE(i,k))/DT
+            ZSQE(i,k) = (Q(i,k) - ZSQE(i,k))/DT
+            ZSQCE(i,k)= (QC(i,k)-ZSQCE(i,k))/DT
+            ZSQRE(i,k)= (QR(i,k)-ZSQRE(i,k))/DT
+            T(i,k) = T(i,k) -  ZSTE(i,k)*DT
+            Q(i,k) = Q(i,k) -  ZSQE(i,k)*DT
+            QC(i,k)= QC(i,k)- ZSQCE(i,k)*DT
+            QR(i,k)= QR(i,k)- ZSQRE(i,k)*DT
+         end do
+      end do
+*
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

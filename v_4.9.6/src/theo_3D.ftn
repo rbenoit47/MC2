@@ -1,0 +1,45 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r theo_3D
+*
+*REVISION
+*
+* v4_96 - Yu W.      - Introduce Eole
+*
+      subroutine theo_3D ( geobus, ngeop )
+      implicit none
+*
+#include "yomdyn.cdk"
+*
+      integer ngeop
+      real geobus(ngeop)
+*
+*---------------------------------------------------------------------
+*
+      if (theocase.eq.'BUBBLE') then      
+         call bulle_3d
+         return
+      endif
+*
+      if (theocase.eq.'MTN_PINTY1'
+     $.or.theocase.eq.'MTN_PINTY2'
+     $.or.theocase.eq.'MTN_SHAER') then
+         call mtn_3d
+         return
+      endif
+*
+      if (theocase.eq.'BROOK') then
+         call brook_3d
+         return
+      endif
+*
+      if (theocase.eq.'EOLE') then
+         call eole_3d ( geobus, ngeop )
+         return
+      endif
+*
+*---------------------------------------------------------------------
+      return
+      end
+
+
+

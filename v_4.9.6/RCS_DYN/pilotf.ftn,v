@@ -1,0 +1,84 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r pilotf
+*
+      integer function pilotf (datev,nomvar,etk,typvar,ip1,ip2,ip3)
+      implicit none
+*
+      character* (*) nomvar,etk,typvar
+      integer datev,ip1,ip2,ip3
+*
+*AUTHOR  M. Desgagne    November 2001
+*
+*IMPLICIT
+#include "filename.cdk"
+*
+      integer longueur,fnom,fstouv,fstinf,fstfrm,fclos
+      external longueur,fnom,fstouv,fstinf,fstfrm,fclos
+      character*16 date
+      character*512 fn
+      integer i,ier,ni1,nj1,nk1
+*
+*---------------------------------------------------------------------
+*
+      pilotf = -1
+      if (un_pil.gt.0) then
+         ier = fstfrm (un_pil)
+         ier = fclos  (un_pil)
+      endif
+*         
+      un_pil = 0
+*
+      do i = max(1,ipilf), npilf
+         fn= "process/pilot/"//pilot_f(i)(1:longueur(pilot_f(i)))
+         ier = fnom   (un_pil,fn,'RND+OLD+R/O',0)
+         ier = fstouv (un_pil,'RND')
+         pilotf = fstinf ( un_pil,ni1,nj1,nk1,datev,etk,ip1,ip2,ip3,
+     $                     typvar,nomvar )
+         if ( pilotf.ge.0 ) then
+            ipilf = i
+            goto 879
+         endif
+         ier = fstfrm (un_pil)
+         ier = fclos  (un_pil)
+      end do
+*
+ 879  call datf2p (date,datev)
+      print*
+*
+      if (pilotf.ge.0) then
+         print*, "(PILOTF): FOUND (",nomvar,') valid at ',date, ' in ',
+     $        pilot_f(i)(1:longueur(pilot_f(i)))
+      else
+         un_pil = -1
+         print*, "(PILOTF): COUD NOT FIND: (",nomvar,') valid at ',date,
+     $        ' in process/pilot/'
+      endif
+      print*
+*
+*---------------------------------------------------------------------
+*
+      return
+      end
+@

@@ -1,0 +1,118 @@
+#!/bin/ksh
+#
+arguments=$*
+. r.entry.dot
+eval `cclargs_lite $0 \
+  -exp     ""         ""     "[Experiment name]"         \
+  -prevjob ""         ""     "[Previous experiment name]"\
+  -restart "0"        "0"    "[Restart mode]"            \
+  -_npex   "0"        "0"    "[# of cpus along x ]"      \
+  -_npey   "0"        "0"    "[# of cpus along y ]"      \
+  -_cpus   "0"        "0"    "[Total # of cpus]"         \
+  -_status "abort"    ""     "[return status]"           \
+  ++ $arguments`
+#
+_status=ABORT
+#
+# Fetch maximum number of cpus for the job
+#
+nml=${REPCFG}/${MODEL}_settings.nml
+_npex=`grep -i npex $nml | sed "s-\(.*\)\(npex *= *[0-9]*\)\(.*\)-\2-p"`
+_npex=${_npex:-1}
+_npey=`grep -i npey $nml | sed "s-\(.*\)\(npey *= *[0-9]*\)\(.*\)-\2-p"`
+_npey=${_npey:-1}
+npmic=`grep -i npeOpenMP $nml | sed "s-\(.*\)\(npeOpenMP *= *[0-9]*\)\(.*\)-\2-p"`
+npmic=${npmic:-1}
+npmac=`grep -i npeMacro $nml | sed "s-\(.*\)\(npeMacro *= *[0-9]*\)\(.*\)-\2-p"`
+npmac=${npmac:-1}
+#
+_npex=${_npex##*=}
+_npey=${_npey##*=}
+npmic=${npmic##*=}
+npmac=${npmac##*=}
+if [ $npmic -ge $npmac ] ; then
+  let _cpus=_npex*_npey*npmic
+else
+  let _cpus=_npex*_npey*npmac
+fi
+#
+if [ "${MACH}" = "yonaka" ] ; then
+  if [ $_cpus -gt 8 ] ; then
+    echo "\n The maximum number of PEs is 8 on ${MACH}\n"
+    exit
+  fi
+fi
+if [ "${MACH}" = "kaze" ] ; then
+  if [ $_cpus -gt 14 ] ; then
+    echo "\n The maximum number of PEs is 14 on ${MACH}\n"
+    exit
+  fi
+fi
+echo "\n ----- Current content of ${EXECDIR} on ${MACH} -----"
+rsh ${MACH} -n "cd ${EXECDIR} ; rm -f *.sh *.cfg *.nml *.out ozoclim* irtab5_* constantes cmclog* ; ls -l"
+echo " -----------------------------------------------------"
+if [ "${prevjob}" -o ${restart} -gt 0 ]; then
+  boot="" 
+else
+  boot=${TMPDIR}/boot
+  echo " " > ${boot}
+fi
+#
+echo "\nShipping *.sh to ${MACH}:${EXECDIR}"
+#
+nrcp *.sh constantes ozoclim* irtab5_* $MACH:$EXECDIR 2> /dev/null
+#
+flagcfg1=1
+if [ $? -eq 0 ] ; then
+  if [ -s ${REPCFG}/${MODEL}_settings.nml ] ; then
+    nrcp ${REPCFG}/${MODEL}_settings.nml ${MACH}:${EXECDIR}
+    flagcfg1=$?
+  else
+    echo "\n File ${REPCFG}/${MODEL}_settings.nml is mandatory -- ABORT --\n"
+  fi
+  nrcp ${REPCFG}/outcfg.out ${REPCFG}/outcfg.out ${boot} ${MACH}:${EXECDIR} 2> /dev/null
+fi
+#
+flagcfg2=0
+rcpyata=""
+if [ "${MACH}" = "azur" ] ; then
+   rcpyata=-nor
+fi
+if [ -s ${config_file_temp}.cfg ] ; then
+  r.set_config ${rcpyata} -exper ${exp} -file ${config_file_temp}
+  flagcfg2=$?
+fi
+#
+flagcfg3=0
+if [ -n "$V4DOBS" ] ; then
+  flagcfg3=1
+  echo "\nShipping $V4DOBS to $MACH:$EXECDIR/v4d_obsfile_std"
+  nrcp $V4DOBS $MACH:$EXECDIR/v4d_obsfile_std
+  flagcfg3=$?
+fi
+#
+rsh ${MACH} -n "cd ${EXECDIR} ; chmod 755 *.sh *.Abs 2> /dev/null ; chmod 644 *.cfg *.nml *.out 2> /dev/null"
+flagmach1=$?
+if [ "${boot}" ] ; then /bin/rm -f ${boot} ; fi
+#
+if [ ${XCHGDIR} ] ; then
+  rsh ${MACH} -n "cd ${EXECDIR} ; /bin/rm -f xchgdir ; ln -s ${XCHGDIR} xchgdir"
+fi
+#
+echo "\n ----- Updated content of ${EXECDIR} on ${MACH} -----"
+rsh ${MACH} -n "cd  ${EXECDIR} ; ls -l"
+echo " -----------------------------------------------------"
+#
+if [ $(( ${flagcfg1} + ${flagcfg2} + ${flagcfg3} + ${flagmach1} )) -gt 0 ]; then
+  echo "Shipping in directory ${EXECDIR} on ${MACH} did not succeed\n"
+else
+  echo "Shipping in directory ${EXECDIR} on ${MACH} DONE\n"
+  _status=OK
+  if [ "${prevjob}" ]; then
+    echo "Restoring files from ${prevjob} on ${MACH}\n"
+    echo "mirdir -ds ${PREXECDIR}/process ${EXECDIR}/process" | rsh ${MACH} /usr/local/env/-ksh
+    rsh ${MACH} -n "rm -f ${PREXECDIR}/BUSY_WITH_RELAUNCH"
+  fi
+fi
+#
+. r.return.dot

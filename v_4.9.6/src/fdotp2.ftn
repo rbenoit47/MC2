@@ -1,0 +1,79 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+#include "precision.cdk"
+      real*8 function fdotp2 (nloc, x, incx, y, incy, wrk8, ncpu)
+      implicit none
+      integer nloc, incx, incy, ncpu
+      FLOAT x(nloc),y(nloc)
+      real*8 wrk8(ncpu)
+c_________________________________________________________________c
+c                                                                 c
+c    Computes a distributed dot product of two vectors            c
+c                                                                 c
+c____________________________ INPUT ______________________________c
+c                                                                 c
+c   x,y - input vectors                                           c
+c   nloc  - length of these vectors                               c
+c   incx, incy - increments (usefull only on none SX4 plateforms  c
+c   wrk8 - working space                                          c
+c   ncpu - number of CPUs for OpenMP tasking                      c
+c                                                                 c
+c____________________________ OUTPUT _____________________________c
+c                                                                 c
+c   returns the dot product                                       c
+c                                                                 c
+#include "partopo.cdk"
+c
+      include 'mpif.h'
+c
+      integer k,ierr
+      real*8 tsum,dtemp
+      common /fdotp/ tsum,dtemp
+#ifndef NEC
+      FLOAT DOT 
+      external DOT
+#endif
+
+#ifdef NEC
+      call mdotp (nloc, x, y, wrk8, ncpu)
+      dtemp = 0.0d0  
+      do k = 1,ncpu
+        dtemp = dtemp + wrk8(k)
+      end do
+#else
+      dtemp = DOT (nloc, x, incx, y, incy)
+#endif
+      if (numproc.gt.1) then
+         call MPI_Allreduce(dtemp, tsum, 1, MPI_double_precision,
+     $                             MPI_sum, MPI_comm_world, ierr)
+         dtemp = tsum
+      endif
+      fdotp2 = dtemp
+*
+      return
+      end
+*
+      subroutine mdotp (nloc, x, y, wrk, ncpu)
+      implicit none
+*
+      integer nloc,ncpu
+      FLOAT x(nloc), y(nloc)
+      real*8 wrk(ncpu)
+*
+      integer i,k,nl,nr,kd,kf
+*
+      nl = nloc / ncpu
+      nr = mod(nloc,ncpu)
+*
+      do i=1,ncpu
+         wrk(i) = 0.0d0
+         kd = (i-1)*nl + 1
+         kf = kd+nl-1
+         if (i.eq.ncpu) kf = kf + nr
+         do k=kd,kf
+            wrk(i) = wrk(i) + x(k)*y(k)
+         end do
+      end do
+*
+      return
+      end
+*

@@ -1,0 +1,210 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wrphyo2 --
+*
+      subroutine wrphyo2 (outbus,gthid,ngth,prt,lvls,fni,fnj,doni,donj,
+     $                                          ni,nj,lnk,stepno,unphy)
+      implicit none
+*
+      integer ngth,fni,fnj,doni,donj,ni,nj,lnk,stepno,unphy
+      integer gthid(ngth)
+      real outbus(*), prt(fni*fnj,lnk), lvls(lnk)
+*
+*AUTHOR     Michel Desgagne                Nov   1995
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (wrphyo2)
+*    Extract from outbus the physics output variables to write
+*    on disk for the current timestep.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    outbus     I    R    A    bus containing physics output variables
+*    gthid      I    I    A    index of variables on outbus to write on
+*                              disk for the current timestep
+*    ngth       I    I    S    dimension of gthid
+*    prt        I    R    A    hydrostatic pressure on thermo. lvls
+*    lvls       I    R    A    thermodynamic levels
+*    fni        I    I    S    Running length
+*    fnj        I    I    S    Number of slice of length "runlgt"
+*    doni       I    I    S    Computational dimension along X
+*    donj       I    I    S    Computational dimension along Y
+*    ni         I    I    S    horizontal dimension along X
+*    nj         I    I    S    horizontal dimension along Y
+*    lnk        I    I    S    vertical dimension
+*    nk         I    I    S    vertical dimension
+*    stepno     I    I    S    step number
+*    unphy      I    I    S    fortran unit number for physics output
+*
+*IMPLICIT
+*
+#include "lesbus.cdk"
+#include "lcldim.cdk"
+#include "sor.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+      integer dim,g_ido,g_ifo,g_jdo,g_jfo,ztmp,maxnvar
+      parameter (maxnvar = 1000)
+      character*8 wrponm(maxnvar),pcpnm(4),dianm(4),mixnm(3)
+      integer wrpopar,wrpospc,wrpgpar,wrpgspc
+      integer i,j,k,id,ierr,flag3d,im,offw1,offwg,offbo,nnk
+      integer npar
+      parameter (npar = 3)
+      real w1,w2,w3,wg,t1,t1g,lvls_out
+      pointer (papar, wrpopar(npar,ngth)), (paparg, wrpgpar(npar,ngth))
+      pointer (paw1  ,w1(*)), (paw2  ,w2(*)), (paw3  ,w3(*)),
+     $        (pawg  ,wg(*)), (pat1  ,t1(ni,nj,*)), (pat1g  ,t1g(*)), 
+     $        (palvl ,lvls_out(*))
+      data pcpnm /'PR','SN','RT','SR'/
+      data dianm /'UU','VV','TT','HU'/
+      data mixnm /'IF','QI','QW'/
+      data ztmp /1/
+*----------------------------------------------------------------------
+*
+      if (ngth.gt.maxnvar) then
+         if (myproc.eq.0) write (6,101) ngth,maxnvar
+         stop
+      endif
+*
+      flag3d  = 0
+      wrpospc = 0
+      wrpgspc = 0
+      g_ido   = min(gni,max(1,g_id))
+      g_ifo   = min(gni,max(1,g_if))
+      g_jdo   = min(gnj,max(1,g_jd))
+      g_jfo   = min(gnj,max(1,g_jf))
+      dim     = (g_ifo-g_ido+1)*(g_jfo-g_jdo+1)
+*
+      call hpalloc (papar   ,ngth*npar, ierr,1)
+      call hpalloc (paparg  ,ngth*npar, ierr,1)
+      call hpalloc (paw2    ,ni*nj    , ierr,1)
+      call hpalloc (pat1    ,ni*nj*lnk, ierr,1)
+*
+      do id=1,ngth
+         wrponm (id)   = phyonm(gthid(id),2)
+         wrpopar(1,id) = wrpospc + 1
+         wrpgpar(1,id) = wrpgspc + 1
+         wrpopar(2,id) = phyopar(gthid(id),3)
+         wrpopar(3,id) = phyopar(gthid(id),4)
+         wrpgpar(2,id) = min(phyopar(gthid(id),3),nk_out)
+         wrpgpar(3,id) = wrpopar(3,id)
+         wrpospc       = wrpopar(1,id) +
+     $        ni*nj*phyopar(gthid(id),3)*phyopar(gthid(id),4) - 1
+         wrpgspc       = wrpgpar(1,id) +
+     $        dim*wrpgpar(2,id)*wrpgpar(3,id) - 1
+      end do
+*
+      call hpalloc (paw1    ,wrpospc,ierr,1)
+*
+      do i=1,wrpospc
+         w1(i)=0.
+      end do
+*
+      do 12 id=1,ngth
+         nnk = phyopar(gthid(id),3)
+         do im=1,phyopar(gthid(id),4)
+            offw1=wrpopar(1,id)       + (im-1)*ni  * nj  * nnk
+            offbo=phyopar(gthid(id),1)+ (im-1)*fni * fnj * nnk
+            do k =1,nnk
+            do j =1,donj
+            do i =1,doni
+               w1    (offw1 + (nnk-k)*ni *nj  + (j-1)*ni   +i-1) =
+     $         outbus(offbo +   (k-1)*fni*fnj + (j-1)*doni +i-1)
+            end do
+            end do
+            end do
+         end do
+*
+         if (flag3d.gt.0) goto 12
+         if (nnk.gt.1) then
+            flag3d=1
+            do k=1,lnk
+            do j=1,donj
+            do i=1,doni
+               t1(i,j,lnk-k+1) = prt((j-1)*doni+i,k)
+            end do
+            end do
+            end do
+         endif
+ 12   continue
+*
+      if (myproc.eq.0) call hpalloc (pawg    ,wrpgspc,ierr,1)
+      do id=1,ngth
+      nnk = phyopar(gthid(id),3)
+      do im=1,phyopar(gthid(id),4)
+         offw1=wrpopar(1,id)  +(im-1)* ni  * nj  * nnk
+         offwg=wrpgpar(1,id)  +(im-1)* dim       * wrpgpar(2,id)
+         if (nnk.eq.1) then
+         call glbcolc2 (wg(offwg),g_ido,g_ifo,g_jdo,g_jfo,w1(offw1),
+     $                                          1,ni,1,nj,1,ztmp,1)
+         else
+         call glbcolc2 (wg(offwg),g_ido,g_ifo,g_jdo,g_jfo,w1(offw1),
+     $                                  1,ni,1,nj,nnk,z_out,nk_out)
+         endif
+      end do
+      end do
+*
+      if (flag3d.gt.0) then
+         if (myproc.eq.0) call hpalloc (pat1g, dim*nk_out, ierr, 1)
+         call glbcolc2 (t1g,g_ido,g_ifo,g_jdo,g_jfo,t1,1,ni,1,nj,lnk,
+     $                                                 z_out,nk_out)
+      endif
+*
+      if (myproc.eq.0) call hpalloc (paw3, dim*2, ierr,1)
+      call gettopo (w3,g_ido,g_ifo,g_jdo,g_jfo)
+*
+      if (myproc.eq.0) then
+         call hpalloc (palvl   ,lnk,ierr,1)
+         do k=1,nk_out
+            lvls_out(k) = lvls(z_out(k))
+         end do
+         call wrpbus2 (wg,t1g,w3,lvls_out,wrponm,wrpgpar,ngth,npar,
+     $                     wrpgspc,(g_ifo-g_ido+1),(g_jfo-g_jdo+1),
+     $                                 nk_out,flag3d,stepno,unphy)
+         call hpdeallc (pawg   ,ierr,1)
+         if (flag3d.gt.0) call hpdeallc (pat1g   ,ierr,1)
+         call hpdeallc (palvl  ,ierr,1)
+         call hpdeallc (paw3  ,ierr,1)
+      endif
+*
+      call hpdeallc (paw1   ,ierr,1)
+      call hpdeallc (paw2   ,ierr,1)
+      call hpdeallc (pat1   ,ierr,1)
+      call hpdeallc (papar  ,ierr,1)
+      call hpdeallc (paparg ,ierr,1)
+*
+ 101  format (/1x,' NGTH=',i4,' > MAXNVAR=',i4,' in wrphyo2 - ABORT'/)
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine gettopo (topo,g_ido,g_ifo,g_jdo,g_jfo)
+      implicit none
+*
+      integer g_ido,g_ifo,g_jdo,g_jfo
+      real topo (*)
+*
+#include "dynmem.cdk"
+#include "topo.cdk"
+*
+      integer ztmp(2)
+      data ztmp /1,2/
+*
+*----------------------------------------------------------------------
+*
+      call glbcolc2 (topo,g_ido,g_ifo,g_jdo,g_jfo,hh0,
+     $                   minx,maxx,miny,maxy,2,ztmp,2)
+*
+*----------------------------------------------------------------------
+*
+      return
+      end
+

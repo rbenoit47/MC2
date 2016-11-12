@@ -1,0 +1,250 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  TKEALG
+*
+#include "phy_macros_f.h"
+      SUBROUTINE TKEALG(ESTAR,EN,ZN,ZE,DVDZ2,RI,TAU,N,NK)
+*
+#include "impnone.cdk"
+*
+      INTEGER N,NK
+      REAL ESTAR(N,NK),EN(N,NK),ZN(N,NK)
+      REAL ZE(N,NK),DVDZ2(N,NK),RI(N,NK)
+      REAL TAU
+*
+*Author
+*          J. Mailhot (August 1999)
+*Revision
+* 001      A.-M. Leduc (Oct 2001) Automatic arrays
+* 002      B. Bilodeau (Mar 2003) Include machcon.cdk
+* 003      A. Plante   (May 2003) IBM conversion
+*             - calls to vsqrt routine (from massvp4 library)
+*             - calls to vstan routine (from massvp4 library)
+*             - calls to vslog routine (from massvp4 library)
+*
+*Object
+*          Solve the algebraic part of the TKE equation
+*
+*Arguments
+*
+*          - Output -
+* ESTAR    turbulent kinetic energy (at time *)
+*
+*          - Input -
+* EN       turbulent kinetic energy (at time n)
+* ZN       mixing length of the turbulence
+*
+*          - Input/Output -
+* ZE       dissipation length of the turbulence (on input)
+*          viscous dissipation term (on output - for time series ED)
+* DVDZ2    mechanical (shear) component (on input)
+*          mechanical production term (on output - for time series EM)
+* RI       buoyancy flux term - in flux form - (on input)
+*          thermal production term (on output - for time series EB)
+*
+*          - Input -
+* TAU      timestep
+* N        horizontal dimension
+* NK       vertical dimension
+*
+*
+*IMPLICITS
+#include "machcon.cdk"
+*
+      INTEGER J,K
+      INTEGER ITOTAL
+*
+*
+      REAL CK,CE,ETRMIN
+      SAVE CK,CE,ETRMIN
+*
+*
+**
+*
+**********************************************************
+*     AUTOMATIC ARRAYS
+**********************************************************
+*
+      AUTOMATIC ( B       , REAL    , (N,NK)  )
+      AUTOMATIC ( C       , REAL    , (N,NK)  )
+      AUTOMATIC ( D       , REAL    , (N,NK)  )
+      AUTOMATIC ( ETA     , REAL    , (N,NK)  )
+      AUTOMATIC ( WORK    , REAL    , (N,NK)  )
+      AUTOMATIC ( WORK_8  , REAL*8  , (N,NK)  )
+      AUTOMATIC ( WORK2_8 , REAL*8  , (N,NK)  )
+*
+**********************************************************
+*
+*
+*
+*
+*       1.     Preliminaries
+*       --------------------
+*
+      DATA CK,CE,ETRMIN / 0.516 , 0.14, 1.0E-4 /
+*
+*
+*
+*
+      DO K=1,NK-1
+      DO J=1,N
+*                                              mechanical and thermal part (either + or -)
+         B(J,K)=CK*ZN(J,K)*(DVDZ2(J,K)-RI(J,K))
+*                                              dissipation part (always +)
+         C(J,K)=CE/ZE(J,K)
+         D(J,K)=(ABS(B(J,K)/C(J,K)))
+*
+      END DO
+      END DO
+*
+!     IBM CONV : Plus de chiffre dans stat en real*8
+      WORK_8=D
+      CALL VSQRT(WORK_8,WORK_8,N*(NK-1))
+      D=WORK_8
+      WORK2_8=EN
+      CALL VSQRT(WORK_8,WORK2_8,N*(NK-1))
+      ETA=WORK_8
+*
+!     IBM CONV : Seulement 3 chiffres dans stat en real
+!      CALL VSSQRT(D,D,N*(NK-1))
+!      CALL VSSQRT(ETA,EN,N*(NK-1))      
+*
+*
+*       2.     Solve the algebraic TKE equation
+*       ---------------------------------------
+*
+*	
+      DO K=1,NK-1
+      DO J=1,N
+          ESTAR(J,K)=(MIN(TANLIM,MAX(ATAN(ETA(J,K)/D(J,K))
+     *                   -0.5*D(J,K)*C(J,K)*TAU , 0.0 ) ) )
+      END DO
+      END DO
+      CALL VSTAN(ESTAR,ESTAR,N*(NK-1))
+
+      DO K=1,NK-1
+      DO J=1,N
+*
+        IF( B(J,K).EQ.0.0 ) THEN
+          ESTAR(J,K) = ETA(J,K)/
+     *              (1.+0.5*ETA(J,K)*C(J,K)*TAU)
+        ELSEIF( B(J,K).GT.0.0 ) THEN
+c         Note : il n'est pas avantageux de changer ce exp pour IBM
+c                du moins sur la slab testee.
+          ESTAR(J,K)=D(J,K)*( -1.0+2.0/(1.0+EXP(-D(J,K)*C(J,K)*TAU)
+     *                  *(-1.0+2.0/
+     *                   (1.0+ETA(J,K)/D(J,K)))) )
+        ELSE
+          ESTAR(J,K)=D(J,K)*ESTAR(J,K)
+        ENDIF
+*
+        ESTAR(J,K)=MAX( ETRMIN , ESTAR(J,K)**2 )
+*
+      END DO
+      END DO
+*
+*
+*       3.     For output purposes (time series)
+*       ----------------------------------------
+*
+*
+      DO K=1,NK-1
+      DO J=1,N
+*
+         D(J,K)=B(J,K)/C(J,K)
+         B(J,K)=0.0
+	 WORK(J,K)=ABS( (ESTAR(J,K)-D(J,K)) / (EN(J,K)-D(J,K)) )
+      END DO
+      END DO
+*
+      CALL VSLOG(WORK,WORK,N*(NK-1))
+*
+      DO K=1,NK-1
+      DO J=1,N
+         IF( EN(J,K).NE.D(J,K).AND.ESTAR(J,K).NE.D(J,K) ) THEN
+            B(J,K)=WORK(J,K)
+         ENDIF
+         ETA(J,K)=CK*ZN(J,K)*B(J,K)/(C(J,K)*TAU)
+*                                              DVDZ2 contains EM
+         DVDZ2(J,K)=-ETA(J,K)*DVDZ2(J,K)
+*                                              RI contains EB
+         RI(J,K)=ETA(J,K)*RI(J,K)
+*                                              ZE contains ED
+         ZE(J,K)=(ESTAR(J,K)-EN(J,K))/TAU-(DVDZ2(J,K)+RI(J,K))
+*
+      END DO
+      END DO
+*
+      DO J=1,N
+         EN(J,NK)=0.0
+         ESTAR(J,NK)=0.0
+         DVDZ2(J,NK)=0.0
+         RI(J,NK)=0.0
+         ZE(J,NK)=0.0
+      END DO
+*
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d19 4
+d71 3
+d94 1
+a94 2
+         D(J,K)=SQRT(ABS(B(J,K)/C(J,K)))
+         ETA(J,K)=SQRT(EN(J,K))
+d99 11
+d111 1
+d115 9
+a123 1
+*
+d131 2
+d137 1
+a137 2
+          ESTAR(J,K)=D(J,K)*TAN(MIN(TANLIM,MAX(ATAN(ETA(J,K)/D(J,K))
+     *                   -0.5*D(J,K)*C(J,K)*TAU , 0.0 ) ) )
+d155 8
+d164 1
+a164 1
+           B(J,K)=ALOG( ABS( (ESTAR(J,K)-D(J,K)) / (EN(J,K)-D(J,K)) ) )
+@

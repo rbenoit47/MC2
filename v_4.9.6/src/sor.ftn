@@ -1,0 +1,304 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+#include "precision.cdk"
+*
+      subroutine sor( r, h, s, czz, c2, d, om, nx, ny, nz,
+     $                lminx, lmaxx, lminy, lmaxy, lnk)
+*
+      implicit none
+*
+      integer nx, ny, nz, lminx, lmaxx, lminy, lmaxy, lnk
+      FLOAT   h(nx,ny,nz)
+      real    r(lminx:lmaxx,lminy:lmaxy,lnk)
+      real    d(nx,ny,nz)
+      real    s(lminx:lmaxx,lminy:lmaxy), czz(lnk,4)
+#include "lcldim.cdk"
+      real    c2, om, om1
+      integer i, j, k, it
+
+*     SOR preconditioner: Ax = b matrix splitting A = M-N 
+*     A = D - L - U, M = (1/om)*(D-om*L)
+*     Forward sweep:  Dx = om * [ Lx + Ux + b ] + (1-om)*Dx
+*     Red - Black order for vectorisation
+*PDIR SERIAL
+      om  = 1.8
+      om1 = 1.0 - om
+
+      do k = 1, nk
+        do j = 0, ldnj+1
+          do i = 0, ldni+1
+            r(i,j,k) = 0.0
+          enddo
+        enddo
+      enddo
+
+      do it = 1, 10
+
+*     Bottom k = 1
+
+      if (south+west.eq.2) then
+      r(1,1,1) = d(1,1,1) * (
+     $           h(1,1,1) - s(1,1) * (
+     $           r(2,1,1) + r(1,2,1) ) -
+     $           czz(1,1) * r(1,1,2) ) +
+     $           om1 * r(1,1,1)
+      endif
+
+      if (south.gt.0) then
+        do i = 1+west, ldni-2*east
+          r(i,1,1) = d(i,1,1) * (
+     $             h(i,1,1) - s(i,1) * (
+     $             r(i-1,1,1) + r(i,2,1) + r(i+1,1,1) ) -
+     $             czz(1,1) * r(i,1,2) ) +
+     $             om1 * r(i,1,1)
+        enddo
+      endif
+
+      if (south+east.eq.2) then
+        r(ldni-1,1,1) = d(ldni-1,1,1) * (
+     $              h(ldni-1,1,1) - s(ldni-1,1) * (
+     $              r(ldni-2,1,1) + r(ldni-1,2,1) ) -
+     $              czz(1,1) * r(ldni-1,1,2) ) +
+     $              om1 * r(ldni-1,1,1)
+      endif
+
+      if (west.gt.0) then
+        do j = 1+south, ldnj-2*north
+          r(1,j,1) = d(1,j,1) * (
+     $             h(1,j,1) - s(1,j) * (
+     $             r(1,j-1,1) + r(1,j+1,1) + r(2,j,1) ) -
+     $             czz(1,1) * r(1,j,2) ) +
+     $             om1 * r(1,j,1)
+        enddo
+      endif
+
+      do j = 1+south, ldnj-2*north
+        do i = 1+west, ldni-2*east
+          r(i,j,1) = d(i,j,1) * (
+     $               h(i,j,1) - s(i,j) * (
+     $               r(i-1,j,1) + r(i,j-1,1) + r(i+1,j,1) +
+     $               r(i,j+1,1) ) - czz(1,1) * r(i,j,2) ) +
+     $               om1 * r(i,j,1)
+        enddo
+      enddo
+
+      if (east.gt.0) then
+        do j = 1+south, ldnj-2*north
+          r(ldni-1,j,1) = d(ldni-1,j,1) * (
+     $               h(ldni-1,j,1) - s(ldni-1,j) * (
+     $               r(ldni-1,j-1,1)+r(ldni-2,j,1)+r(ldni-1,j+1,1) ) -
+     $               czz(1,1) * r(ldni-1,j,2) ) +
+     $                om1 * r(ldni-1,j,1)
+        enddo
+      endif
+
+      if (north+west.eq.2) then
+        r(1,ldnj-1,1) = d(1,ldnj-1,1) * (
+     $              h(1,ldnj-1,1) - s(1,ldnj-1) * (
+     $              r(1,ldnj-2,1) + r(2,ldnj-1,1) ) -
+     $              czz(1,1) * r(1,ldnj-1,2) ) +
+     $              om1 * r(1,ldnj-1,1)
+      endif
+
+      if (north.eq.1) then
+        do i = 1+west, ldni-2*east
+          r(i,ldnj-1,1) = d(i,ldnj-1,1) * (
+     $               h(i,ldnj-1,1) - s(i,ldnj-1) * (
+     $               r(i-1,ldnj-1,1)+r(i,ldnj-2,1)+r(i+1,ldnj-1,1) ) -
+     $               czz(1,1) * r(i,ldnj-1,2) ) +
+     $               om1 * r(i,ldnj-1,1)
+        enddo
+      endif
+
+      if (north+east.eq.2) then
+        r(ldni-1,ldnj-1,1) = d(ldni-1,ldnj-1,1) * (
+     $                 h(ldni-1,ldnj-1,1) - s(ldni-1,ldnj-1) * (
+     $                 r(ldni-2,ldnj-1,1) + r(ldni-1,ldnj-2,1) ) -
+     $                 czz(1,1) * r(ldni-1,ldnj-1,2) ) +
+     $                 om1 * r(ldni-1,ldnj-1,1)
+      endif
+
+*     for k = 2 to nk-1
+
+      do k = 2, nk-1
+
+        if (south+west.eq.2) then
+          r(1,1,k) = d(1,1,k) * (
+     $             h(1,1,k) - s(1,1) * (
+     $             r(2,1,k) + r(1,2,k) ) -
+     $             czz(k,1) * r(1,1,k+1) -
+     $             czz(k,4) * r(1,1,k-1) ) +
+     $             om1 * r(1,1,k)
+        endif
+
+        if (south.gt.0) then
+          do i = 1+west, ldni-2*east
+           r(i,1,k) = d(i,1,k) * (
+     $               h(i,1,k) - s(i,1) * (
+     $               r(i-1,1,k) + r(i,2,k) + r(i+1,1,k) ) -
+     $               czz(k,1) * r(i,1,k+1) -
+     $               czz(k,4) * r(i,1,k-1) ) +
+     $               om1 * r(i,1,k)
+          enddo
+        endif
+
+        if (south+east.eq.2) then
+          r(ldni-1,1,k) = d(ldni-1,1,k) * (
+     $                h(ldni-1,1,k) - s(ldni-1,1) * (
+     $                r(ldni-2,1,k) + r(ldni-1,2,k) ) -
+     $                czz(k,1) * r(ldni-1,1,k+1) -
+     $                czz(k,4) * r(ldni-1,1,k-1) ) +
+     $                om1 * r(ldni-1,1,k)
+        endif
+
+        if (west.gt.0) then
+          do j = 1+south, ldnj-2*north
+            r(1,j,k) = d(1,j,k) * (
+     $               h(1,j,k) - s(1,j) * (
+     $               r(1,j-1,k) + r(1,j+1,k) + r(2,j,k) ) -
+     $               czz(k,1) * r(1,j,k+1) -
+     $               czz(k,4) * r(1,j,k-1) ) +
+     $               om1 * r(1,j,k)
+          enddo
+        endif
+
+        do j = 1+south, ldnj-2*north
+          do i = 1+west, ldni-2*east
+            r(i,j,k) = d(i,j,k) * (
+     $                 h(i,j,k) - s(i,j) * (
+     $                 r(i-1,j,k) + r(i,j-1,k) + r(i+1,j,k) +
+     $                 r(i,j+1,k) ) - czz(k,1) * r(i,j,k+1) -
+     $                 czz(k,4) * r(i,j,k-1) ) +
+     $                 om1 * r(i,j,k)
+          enddo
+        enddo
+
+        if (east.gt.0) then
+          do j = 1+south, ldnj-2*north
+            r(ldni-1,j,k) = d(ldni-1,j,k) * (
+     $                 h(ldni-1,j,k) - s(ldni-1,j) * (
+     $                 r(ldni-1,j-1,k)+r(ldni-2,j,k)+r(ldni-1,j+1,k))-
+     $                 czz(k,1) * r(ldni-1,j,k+1) -
+     $                 czz(k,4) * r(ldni-1,j,k-1) ) +
+     $                 om1 * r(ldni-1,j,k)
+          enddo
+        endif
+
+        if (north+west.eq.2) then
+          r(1,ldnj-1,k) = d(1,ldnj-1,k) * (
+     $                h(1,ldnj-1,k) - s(1,ldnj-1) * (
+     $                r(1,ldnj-2,k) + r(2,ldnj-1,k) ) -
+     $                czz(k,1) * r(1,ldnj-1,k+1) -
+     $                czz(k,4) * r(1,ldnj-1,k-1) ) +
+     $                om1 * r(1,ldnj-1,k)
+        endif
+
+        if (north.eq.1) then
+          do i = 1+west, ldni-2*east
+            r(i,ldnj-1,k) = d(i,ldnj-1,k) * (
+     $                 h(i,ldnj-1,k) - s(i,ldnj-1) * (
+     $                 r(i-1,ldnj-1,k)+r(i,ldnj-2,k)+r(i+1,ldnj-1,k))-
+     $                 czz(k,1) * r(i,ldnj-1,k+1) -
+     $                 czz(k,4) * r(i,ldnj-1,k-1) ) +
+     $                 om1 * r(i,ldnj-1,k)
+          enddo
+        endif
+
+        if (north+east.eq.2) then
+          r(ldni-1,ldnj-1,k) = d(ldni-1,ldnj-1,k) * (
+     $                   h(ldni-1,ldnj-1,k) - s(ldni-1,ldnj-1) * (
+     $                   r(ldni-2,ldnj-1,k) + r(ldni-1,ldnj-2,k) ) -
+     $                   czz(k,1) * r(ldni-1,ldnj-1,k+1) -
+     $                   czz(k,4) * r(ldni-1,ldnj-1,k-1) ) +
+     $                   om1 * r(ldni-1,ldnj-1,k)
+       endif
+
+      enddo
+
+*     Top k = nk
+
+      if (south+west.eq.2) then
+        r(1,1,nk) = d(1,1,nk) * (
+     $            h(1,1,nk) - s(1,1) * (
+     $            r(2,1,nk) + r(1,2,nk) ) -
+     $            czz(nk,4) * r(1,1,nk-1) ) +
+     $            om1 * r(1,1,nk)
+      endif
+
+      if (south.gt.0) then
+        do i = 1+west, ldni-2*east
+          r(i,1,nk) = d(i,1,nk) * (
+     $              h(i,1,nk) - s(i,1) * (
+     $              r(i-1,1,nk) + r(i,2,nk) + r(i+1,1,nk) ) -
+     $              czz(nk,4) * r(i,1,nk-1) ) +
+     $              om1 * r(i,1,nk)
+        enddo
+      endif
+
+      if (south+east.eq.2) then
+        r(ldni-1,1,nk) = d(ldni-1,1,nk) * (
+     $               h(ldni-1,1,nk) - s(ldni-1,1) * (
+     $               r(ldni-2,1,nk) + r(ldni-1,2,nk) ) -
+     $               czz(nk,4) * r(ldni-1,1,nk-1) ) +
+     $               om1 * r(ldni-1,1,nk)
+      endif
+
+      if (west.gt.0) then
+        do j = 1+south, ldnj-2*north
+          r(1,j,nk) = d(1,j,nk) * (
+     $              h(1,j,nk) - s(1,j) * (
+     $              r(1,j-1,nk) + r(1,j+1,nk) + r(2,j,nk) ) -
+     $              czz(nk,4) * r(1,j,nk-1) ) +
+     $              om1 * r(1,j,nk)
+        enddo
+      endif
+
+      do j = 1+south, ldnj-2*north
+        do i = 1+west, ldni-2*east
+          r(i,j,nk) = d(i,j,nk) * (
+     $                h(i,j,nk) - s(i,j) * (
+     $                r(i-1,j,nk) + r(i,j-1,nk) + r(i+1,j,nk) +
+     $                r(i,j+1,nk) ) - czz(nk,4) * r(i,j,nk-1) ) +
+     $                om1 * r(i,j,nk)
+        enddo
+      enddo
+
+      if (east.gt.0) then
+        do j = 1+south, ldnj-2*north
+          r(ldni-1,j,nk) = d(ldni-1,j,nk) * (
+     $                h(ldni-1,j,nk) - s(ldni-1,j) * (
+     $                r(ldni-1,j-1,nk)+r(ldni-2,j,nk)+r(ldni-1,j+1,nk))-
+     $                czz(nk,4) * r(ldni-1,j,nk-1) ) +
+     $                om1 * r(ldni-1,j,nk)
+        enddo
+      endif
+
+      if (north+west.eq.2) then
+        r(1,ldnj-1,nk) = d(1,ldnj-1,nk) * (
+     $               h(1,ldnj-1,nk) - s(1,ldnj-1) * (
+     $               r(1,ldnj-2,nk) + r(2,ldnj-1,nk) ) -
+     $               czz(nk,4) * r(1,ldnj-1,nk-1) ) +
+     $               om1 * r(1,ldnj-1,nk)
+      endif
+
+      if (north.eq.1) then
+        do i = 1+west, ldni-2*east
+          r(i,ldnj-1,nk) = d(i,ldnj-1,nk) * (
+     $                h(i,ldnj-1,nk) - s(i,ldnj-1) * (
+     $                r(i-1,ldnj-1,nk)+r(i,ldnj-2,nk)+r(i+1,ldnj-1,nk))-
+     $                czz(nk,4) * r(i,ldnj-1,nk-1) ) +
+     $                om1 * r(i,ldnj-1,nk)
+        enddo
+      endif
+
+      if (north+east.eq.2) then
+        r(ldni-1,ldnj-1,nk) = d(ldni-1,ldnj-1,nk) * (
+     $                  h(ldni-1,ldnj-1,nk) - s(ldni-1,ldnj-1) * (
+     $                  r(ldni-2,ldnj-1,nk) + r(ldni-1,ldnj-2,nk) ) -
+     $                  czz(nk,4) * r(ldni-1,ldnj-1,nk-1) ) +
+     $                  om1 * r(ldni-1,ldnj-1,nk)
+      endif
+
+      enddo
+*PDIR END SERIAL
+      return
+      end

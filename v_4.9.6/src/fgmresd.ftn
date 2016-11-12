@@ -1,0 +1,351 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+#include "precision.cdk"
+      subroutine fgmres (n,im,rhs,sol,i,vv,w,wk2,wrk8,nnk,
+     *                             eps,maxits,iout,icode,its)
+      implicit none 
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+      integer n, im, maxits, iout, icode, nnk, its
+      FLOAT   rhs(*), sol(*), vv(n,im+1),w(n,im), wk2(n), eps
+      real*8 wrk8(nnk)
+c-----------------------------------------------------------------------
+c
+c flexible GMRES routine which allows a variable preconditioner. 
+c Implemented with a reverse communication protocol for flexibility -
+c explicit (exact) residual norms for restarts  
+c
+c written by Y. Saad, modified by A. Malevsky, version February 1, 1995
+c
+c-----------------------------------------------------------------------
+c
+c Reverse Communication Implementation. 
+c
+c------------------------------------------------- 
+c USAGE: (see also comments for icode below). CGMRES
+c should be put in a loop and the loop should be active for as
+c long as icode is not equal to 0. On return fgmres will
+c    1) either be requesting the new preconditioned vector applied
+c       to wk1 in case icode.eq.1 (result should be put in wk2) 
+c    2) or be requesting the product of A applied to the vector wk1
+c       in case icode.eq.2 (result should be put in wk2) 
+c    3) or be terminated in case icode .eq. 0. 
+c on entry always set icode = 0. So icode should be set back to zero
+c upon convergence.
+c-----------------------------------------------------------------------
+c Here is a typical way of running fgmres: 
+c
+c      icode = 0
+c 1    continue
+c      call fgmres (n,im,rhs,sol,i,vv,w,wk1,wk2,eps,maxits,iout,icode)
+c
+c      if (icode .eq. 1) then
+c         call  precon(n, wk1, wk2)    <--- user's variable preconditioning
+c         goto 1
+c      else if (icode .ge. 2) then
+c         call  matvec (n,wk1, wk2)    <--- user's matrix vector product. 
+c         goto 1
+c      else 
+c         ----- done ---- 
+c         .........
+c
+c----------------------------------- INPUT -----------------------------
+c
+c n     == integer. the dimension of the problem
+c
+c im    == size of Krylov subspace:  should not exceed 50 in this
+c          version (can be reset in code. looking at comment below)
+c
+c rhs   == vector of length n containing the right hand side
+c
+c sol   == initial guess on input, approximate solution on output
+c
+c vv    == work space of size n x (im+1)
+c
+c w     == work space of length n x im 
+c
+c wk1,
+c wk2,  == two work vectors of length n each used for the reverse
+c          communication protocole. When on return (icode .ne. 1)
+c          the user should call fgmres again with wk2 = precon * wk1
+c          and icode untouched. When icode.eq.1 then it means that
+c          convergence has taken place.
+c          
+c eps   == tolerance for stopping criterion. process is stopped
+c          as soon as ( ||.|| is the euclidean norm):
+c          || current residual||/||initial residual|| <= eps
+c
+c maxits== maximum number of iterations allowed
+c
+c iout  == output unit number number for printing intermediate results
+c          if (iout .le. 0) no statistics are printed.
+c 
+c icode = integer. indicator for the reverse communication protocole.
+c         ON ENTRY : icode should be set to icode = 0.
+c         ON RETURN: 
+c       * icode .eq. 1 value means that fgmres has not finished
+c         and that it is requesting a preconditioned vector before
+c         continuing. The user must compute M**(-1) wk1, where M is
+c         the preconditioing  matrix (may vary at each call) and wk1 is
+c         the vector as provided by fgmres upun return, and put the 
+c         result in wk2. Then fgmres must be called again without
+c         changing any other argument. 
+c       * icode .eq. 2 value means that fgmres has not finished
+c         and that it is requesting a matrix vector product before
+c         continuing. The user must compute  A * wk1, where A is the
+c         coefficient  matrix and wk1 is the vector provided by 
+c         upon return. The result of the operation is to be put in
+c         the vector wk2. Then fgmres must be called again without
+c         changing any other argument. 
+c       * icode .eq. 0 means that fgmres has finished and sol contains 
+c         the approximate solution.
+c         comment: typically fgmres must be implemented in a loop
+c         with fgmres being called as long icode is returned with 
+c         a value .ne. 0. 
+c------------------------------ CALLS ----------------------------------
+c
+c     local variables 
+
+      FLOAT hh(51,50), c(50), s(50), rs(51), t, ro
+      real*8 fdotp,fdotp2
+      integer i,j,k,i1,k1,n1,ii,jj
+      real epsmac,eps1,r0,gam
+      common /gmresf/ hh,c,s,rs,ro
+      common /gmresr/ epsmac,eps1,r0,gam
+      common /gmresi/ i1,k1,ii,jj
+*     data epsmac/1.d-16/
+      data epsmac/1.d-6/
+*
+*---------------------------------------------------------------------
+*
+      goto (100,200,300) icode + 1
+*
+ 100  if (myproc .eq. 0) then
+         print*, 'FGMRES solver has converge but ',
+     $           'solution was not considered by callee -- ABORT --'
+         call mc2stop(-1)
+      endif
+*
+*     outer loop starts here..
+*
+*--------------compute initial residual vector --------------
+*
+ 200  call v1mv2 (vv,rhs,wk2,n)
+*
+ 20   t  = fdotp2 (n, vv, 1, vv, 1, wrk8, nnk) 
+      ro = SQRT  (t)
+*
+      if (ro .eq. 0.0e0) goto 999 
+      t = 1.0e0/ ro 
+*
+      call vecmcte (vv,t,n)
+*
+      if (its .eq. 0) eps1=eps*ro
+      if (its .eq. 0) r0 = ro
+      if (iout .gt. 0 .and. myproc .eq. 0) write(iout, 199) its, ro/r0
+*
+*     initialize 1-st term  of rhs of hessenberg system..
+*
+      rs(1) = ro
+      i = 0
+*
+ 4    i   = i   + 1
+      its = its + 1
+      i1  = i   + 1
+*
+      icode = 2
+      goto 9991
+*
+*     first call to ope corresponds to intialization goto back to 11.
+*     modified gram - schmidt...
+*
+ 300  do j=1, i
+         t = fdotp2 (n, vv(1,j), 1, vv(1,i1), 1, wrk8, nnk)
+         hh(j,i) = t
+         call myxpy2 (n, -t, vv(1,j), vv(1,i1))
+      end do
+*
+      t = SQRT ( fdotp2 (n, vv(1,i1), 1, vv(1,i1), 1, wrk8, nnk) )
+      hh(i1,i) = t
+      if (t .eq. 0.0e0) goto 58
+      t = 1.0e0 / t
+      call vecmcte (vv(1,i1),t,n)
+*
+*     done with modified gram schimdt and arnoldi step. 
+*     now update factorization of hh
+*
+ 58   if (i .eq. 1) goto 121
+*
+*     perfrom previous transformations on i-th column of h
+      do k=2,i
+         k1 = k-1
+         t = hh(k1,i)
+         hh(k1,i) =  c(k1)*t + s(k1)*hh(k,i)
+         hh(k ,i) = -s(k1)*t + c(k1)*hh(k,i)
+      end do
+*
+ 121  gam = SQRT(hh(i,i)**2 + hh(i1,i)**2)
+      if (gam .eq. 0.0e0) gam = epsmac
+*
+*     determine next plane rotation
+*
+      c(i) = hh( i,i)/gam
+      s(i) = hh(i1,i)/gam
+      rs(i1) = -s(i)*rs(i)
+      rs(i ) =  c(i)*rs(i)
+*
+*     determine residual norm and test for convergence
+*
+      hh(i,i) = c(i)*hh(i,i) + s(i)*hh(i1,i)
+      ro = abs(rs(i1))
+*
+      if (iout .gt. 0 .and. myproc .eq. 0) write(iout, 199) its, ro/r0
+      if (i .lt. im .and. (ro .gt. eps1))  goto 4
+*
+*     now compute solution. first solve upper triangular system.
+      rs(i) = rs(i)/hh(i,i)
+      do ii=2,i
+         k  = i-ii+1
+         k1 = k+1
+         t  = rs(k)
+         do j=k1,i
+            t = t-hh(k,j)*rs(j)
+         end do
+         rs(k) = t/hh(k,k)
+      end do
+*     done with back substitution..
+*     now form linear combination to get solution
+*
+      do j=1, i
+         t = rs(j)
+         call myxpy2 (n, t, w(1,j), sol)
+      end do
+*
+*     test for return 
+*
+      if (ro .le. eps1 .or. its .ge. maxits) goto 999
+*
+*     else compute residual vector and continue..
+*
+      do j=1,i
+         jj = i1-j+1
+         rs(jj-1) = -s(jj-1)*rs(jj)
+         rs(jj  ) =  c(jj-1)*rs(jj)
+      end do
+      do j=1,i1
+         t = rs(j)
+         if (j .eq. 1) t = t-1.0e0
+         call myxpy2 (n, t, vv(1,j), vv)
+      end do
+*
+*     restart outer loop.
+*
+      goto 20
+*
+ 999  icode = 0
+*
+ 199  format('   -- fmgres its =', i4, ' res. norm =', d20.6)
+*
+*---------------------------------------------------------------------
+*
+ 9991 return 
+      end
+*
+#include "precision.cdk"
+      subroutine mycopy (n, x, y)
+      implicit none 
+      integer n,j
+      FLOAT x(n),y(n)
+*
+#ifdef NEC
+      do j = 1,n
+        y(j) = x(j)
+      end do
+#else
+      call COPY (n, x, 1, y, 1) 
+#endif
+*
+      return
+      end
+#include "precision.cdk"
+      subroutine mycopy2 (n, x, y)
+      implicit none 
+#include "nbcpu.cdk"
+      integer n,j
+      FLOAT x(n),y(n)
+*
+#ifdef NEC
+*PDIR PARDO FOR=ncpudyn
+      do j = 1,n
+        y(j) = x(j)
+      end do
+#else
+      call COPY (n, x, 1, y, 1) 
+#endif
+*
+      return
+      end
+*
+#include "precision.cdk"
+      subroutine myxpy (n, c, x, y)
+      implicit none 
+      integer n,j
+      FLOAT x(n),y(n),c
+*
+#ifdef NEC
+      do j = 1,n
+        y(j) = y(j) + c*x(j)
+      end do
+#else
+      call AXPY (n, c, x, 1, y, 1) 
+#endif
+*
+      return
+      end
+#include "precision.cdk"
+      subroutine myxpy2 (n, c, x, y)
+      implicit none 
+#include "nbcpu.cdk"
+      integer n,j
+      FLOAT x(n),y(n),c
+*
+#ifdef NEC
+*PDIR PARDO FOR=ncpudyn
+      do j = 1,n
+        y(j) = y(j) + c*x(j)
+      end do
+#else
+      call AXPY (n, c, x, 1, y, 1) 
+#endif
+*
+      return
+      end
+*
+#include "precision.cdk"
+      subroutine v1mv2 (d,s1,s2,n)
+      implicit none 
+#include "nbcpu.cdk"
+      integer n,j
+      FLOAT d(*),s1(*),s2(*)
+ 
+*PDIR PARDO FOR=ncpudyn
+      do j=1,n
+         d(j) = s1(j) - s2(j) 
+      end do
+*
+      return
+      end
+#include "precision.cdk"
+      subroutine vecmcte (d,cte,n)
+      implicit none 
+#include "nbcpu.cdk"
+      integer n,j
+      FLOAT d(*),cte
+ 
+*PDIR PARDO FOR=ncpudyn
+      do j=1,n
+         d(j) = d(j) * cte
+      end do
+*
+      return
+      end
+

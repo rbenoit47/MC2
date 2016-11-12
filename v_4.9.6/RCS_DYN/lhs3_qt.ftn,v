@@ -1,0 +1,93 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r lhs3_qt
+      subroutine lhs3_qt
+      implicit none
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+#include "nbcpu.cdk"
+#include "dynmem.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "topo.cdk"
+#include "dtmdtp.cdk"
+*
+      integer i,j,k
+      real*8 pt5, q3, swp1, swpgnk, nu0
+      parameter (pt5 = 0.5d0)
+*
+*---------------------------------------------------------------
+*
+      do k = 1, gnk
+*
+         if (k.eq.1) then
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               qpp(i,j,k) = qpp(i,j,k) / ( - c00 * orts(i,j,k) )
+               q3         = sbxy(i,j) * pt5 *
+     $              ( gg1(i+1,j,k)*up(i+1,j,k) + gg1(i,j,k)*up(i,j,k)
+     $              + gg2(i,j+1,k)*vp(i,j+1,k) + gg2(i,j,k)*vp(i,j,k) )
+               swp(i,j,k) = dhdt(i,j,k) - q3
+               qpp(i,j,0) = ( - tpp(i,j,k) +
+     $                      (gg0wr(i,j,k)-c02*nssq(i,j,k))*qpp(i,j,k) )
+     $                    / (gg0wr(i,j,k)+c02*nssq(i,j,k))
+               tpp(i,j,k) = tpp(i,j,k)
+     $                   + c05*pt5*gots(i,j,k)*(qpp(i,j,k)+qpp(i,j,k-1))
+            end do
+            end do
+*
+         else if ((k.eq.gnk).and.(.not.flextop)) then
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               swp(i,j,k) = 0.
+               qpp(i,j,k) = ( + tpp(i,j,k) +
+     $                     (gg0wr(i,j,k)+c02*nssq(i,j,k))*qpp(i,j,k-1))
+     $                    / (gg0wr(i,j,k)-c02*nssq(i,j,k))
+               tpp(i,j,k) = tpp(i,j,k)
+     $                   + c05*pt5*gots(i,j,k)*(qpp(i,j,k)+qpp(i,j,k-1))
+            end do
+            end do
+*
+         else
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               qpp(i,j,k) = qpp(i,j,k) / ( - c00 * orts(i,j,k) )
+               tpp(i,j,k) = tpp(i,j,k)
+     $                   + c05*pt5*gots(i,j,k)*(qpp(i,j,k)+qpp(i,j,k-1))
+            end do
+            end do
+*
+         endif
+*
+      end do
+*
+*---------------------------------------------------------------
+      return
+      end
+@

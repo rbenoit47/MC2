@@ -1,0 +1,111 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P DIFUVD4N
+*
+      SUBROUTINE DIFUVD4N (D, F, S, N, NK)
+*
+#include "impnone.cdk"
+*
+      INTEGER N,NK
+      REAL D(N,NK), F(N,NK), S(N,NK)
+*
+*Author
+*          S. Belair (February 1996)
+*
+*Object
+*          Calculate a simple vertical derivative of a function
+*          F.  The function F is defined on the sigma levels and
+*          the resulting derivative is obtained on the
+*          staggered levels (sigma').
+*
+*Revisions
+* 001
+*
+*Arguments
+*
+*          - Output -
+* D        vertical derivative
+*
+*          - Input -
+* F        function to derive vertically
+* S        sigma levels for U
+* N        number of columns to process
+* NK       vertical dimension
+*
+**
+*
+      INTEGER I, K
+      REAL HD
+*
+*
+*
+*
+*                                  The derivatives
+*
+*
+*                                  For K=1 to NK-1
+*
+*
+*
+      DO K=1,NK-1
+        DO I=1,N
+          HD = S(I,K+1)-S(I,K)
+          D(I,K) = ( F(I,K+1)-F(I,K) ) / HD
+        END DO
+      END DO
+*
+*                                  For K=NK
+*                                  NOTE:  This lowest level derivative
+*                                         is not important for the case
+*                                         of the atmospheric turbulent
+*                                         fluxes since the boundary
+*                                         condition is
+*                                         flux = alpha + beta*var
+*
+      DO I=1,N
+           D(I,NK) = D(I,NK-1)
+      END DO
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

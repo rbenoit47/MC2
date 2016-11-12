@@ -1,0 +1,66 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wrpref
+*
+      subroutine wrpref (pref,lnk)
+      implicit none 
+*
+      integer lnk
+      real pref(lnk)
+#include "lcldim.cdk"
+#include "halo.cdk"
+#include "partopo.cdk"
+      integer i,j,iproc
+*
+*----------------------------------------------------------------------
+*  
+      if (halo.le.0) then
+*
+         do j=0,npey-1
+         do i=0,npex-1
+            iproc = j*npex + i
+            call bmf_write ( gc_ld2(5,iproc), 'PREF',1,1,1,
+     $                       1,1,1,lnk,1,lnk,0,0,0,0,41,0,lnk,pref)
+         end do
+         end do
+*
+      else
+*
+         iproc = 0
+         call bmf_write ( gc_ld2(5,iproc)  , 'PREF',1,1,1,
+     $                    1,1,1,lnk,1,lnk,0,0,0,0,41,0,lnk,pref)
+         call bmf_write ( gc_ld2(5,iproc)+1, 'PREF',1,1,1,
+     $                    1,1,1,lnk,1,lnk,0,0,0,0,41,0,lnk,pref)
+         call bmf_write ( gc_ld2(5,iproc)+2, 'PREF',1,1,1,
+     $                    1,1,1,lnk,1,lnk,0,0,0,0,41,0,lnk,pref)
+         call bmf_write ( gc_ld2(5,iproc)+3, 'PREF',1,1,1,
+     $                    1,1,1,lnk,1,lnk,0,0,0,0,41,0,lnk,pref)
+*
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+      
+@

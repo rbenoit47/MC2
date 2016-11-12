@@ -1,0 +1,23 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+c#ifdef DOUBLE
+#define FLOAT real*8
+#define AXPY daxpy
+#define COPY dcopy
+#define NRM2 dnrm2
+#define DOT  ddot
+#define SQRT  dsqrt
+c#else
+c#define FLOAT real
+c#define AXPY saxpy
+c#define COPY scopy
+c#define NRM2 snrm2
+c#define DOT  sdot
+c#define SQRT  sqrt
+c#endif
+
+c#ifdef PARALLEL
+c#define DOTP distdot
+c#else
+c#define DOTP DOT
+c#endif
+

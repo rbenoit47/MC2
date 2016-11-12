@@ -1,0 +1,116 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@      subroutine charnok
+      write(6,'(A)') "SUBROUTINE CHARNOK IS OBSOLETE"
+      call qqexit(1)
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d1 5
+a5 67
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  CHARNOK
+*
+      SUBROUTINE CHARNOK(Z0,USTAR2,MG,N)
+*
+#include "impnone.cdk"
+      INTEGER N
+      REAL Z0(N),USTAR2(N),MG(N)
+*
+*Author
+*          J. Mailhot -- RPN -- (May 27,1985)
+*
+*Revision
+* 001      J. Mailhot -- RPN -- (August 20, 1986)maximum on Z0
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+* 003      Y. Delage  -  Redefinition of Z0 (May89)
+* 004      G. Pellerin-  Redefinition of charnok constant(Nov 94)
+* 005      L. Lefaivre-  Z0MIN passed as argument (Feb 96)
+*
+*Object
+*          to calculate Z0(roughness length) over the oceans
+*          (not covered by ice) by using the Charnock formula
+*
+*Arguments
+*
+*          - Input/Output -
+* Z0       roughness length
+*
+*          - Input -
+* USTAR2   U squared
+* MG       land-sea mask
+* N        horizontal dimension
+*
+*Notes
+*          Z0 = CCHAR*USTAR**2/GRAV (in metres) with minimum value
+*          Z0MIN and a maximum value Z0MAX and CCHAR is the Charnock
+*          constant
+*
+*
+*IMPLICITES
+#include "consphy.cdk"
+*
+#include "clefcon.cdk"
+*
+*
+**
+*
+      REAL CCHAR
+      REAL Z0MAX
+      SAVE CCHAR,Z0MAX
+      INTEGER J
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+*
+      DATA CCHAR / 1.8E-2 /
+      DATA Z0MAX / 5.E-3 /
+*
+*
+      DO 1 J=1,N
+*
+      Z0(J)=CVMGZ(MAX(MIN(CCHAR*USTAR2(J)/GRAV,Z0MAX),Z0MIN),
+     *               Z0(J),MG(J))
+    1 CONTINUE
+*
+      RETURN
+      END
+@

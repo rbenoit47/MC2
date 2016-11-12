@@ -1,0 +1,147 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ecrisp_fst
+      subroutine ecrisp_fst ( fa,lminx,lmaxx,lminy,lmaxy,rf,nomvar,
+     $                      con,ip2,stepno,kind,nkfa,kdfi,grid,unf )
+      implicit none
+*
+      character* (*) nomvar
+      character*3 grid
+      integer lminx,lmaxx,lminy,lmaxy,ip2,kind,nkfa,kdfi(3),unf,stepno
+      real fa(lminx:lmaxx,lminy:lmaxy,*),rf(*),con
+*
+**
+#include "rec.cdk"
+#include "sor.cdk"
+#include "grd.cdk"
+#include "partopo.cdk"
+*
+      integer fstecr
+      external fstecr
+*
+      character*8 dumc
+      integer i,j,n,ier,pnip1,pnip2,pnip3,dimx,dimy,zout(nkfa),
+     $        i0,in,j0,jn,ig1,ig2,ig3,ig4,cnt
+      real, dimension (:,:,:), allocatable :: wk1
+      real, dimension (:,:  ), allocatable :: wk2
+*
+*----------------------------------------------------------------------
+*
+*     Writing field 'nomvar' to a FST file
+*
+      pnip1 = 0
+      pnip2 = ip2
+      pnip3 = 0
+      if (gnip3.lt.0) pnip3 = stepno
+*
+      if (grid.eq.'DYN') then
+         i0 = g_id
+         in = g_if
+         j0 = g_jd
+         jn = g_jf
+         ig1 = Grd_ig1
+         ig2 = Grd_ig2
+         ig3 = Grd_ig3
+         ig4 = Grd_ig4
+      else if (grid.eq.'PHY') then
+         i0 = g_idp
+         in = g_ifp
+         j0 = g_jdp
+         jn = g_jfp
+         ig1 = Grd_ig1p
+         ig2 = Grd_ig2p
+         ig3 = Grd_ig3p
+         ig4 = Grd_ig4p
+      else if (grid.eq.'CSC') then
+         i0 = Grdc_gid
+         in = Grdc_gif
+         j0 = Grdc_gjd
+         jn = Grdc_gjf
+         ig1 = Grd_ig1c
+         ig2 = Grd_ig2c
+         ig3 = Grd_ig3c
+         ig4 = Grd_ig4c
+      else
+         call mc2stop(-1)
+      endif
+*
+      dimx = in - i0 + 1
+      dimy = jn - j0 + 1
+      do i=1,nkfa
+         zout(i) = i
+      end do
+      if (myproc.eq.0) allocate (wk1(dimx,dimy,nkfa))
+*
+      if (flipit) then
+
+         if (myproc.eq.0) allocate (wk2(dimx,nkfa))
+         call glbcolc2 ( wk1,i0,in,j0,jn,fa,lminx,lmaxx,lminy,lmaxy,
+     $                                               nkfa,zout,nkfa )
+         if (myproc.eq.0) then
+            print*, nomvar,(kdfi(i),i=1,3)
+            do j=1,dimy
+               cnt = 0
+               do n=kdfi(1),kdfi(2),kdfi(3)  
+                  cnt = cnt+1
+                  do i=1,dimx
+                     wk2(i,cnt) = con*wk1(i,j,n)
+                  end do
+               end do
+               ier= fstecr ( wk2,wk2,-nbit,unf,out_dat0,gnlst,stepno,
+     $                    dimx,cnt,1,0,pnip2,pnip3,gttpvar,nomvar,
+     $                    gtetikt,'X',0,0,0,0,datyp,.false.)
+            end do
+            deallocate (wk2)
+         endif
+*
+      else
+*
+         call glbcolc2 ( wk1,i0,in,j0,jn,fa,lminx,lmaxx,lminy,lmaxy,
+     $                                               nkfa,zout,nkfa )
+*
+         if (myproc.eq.0) then
+            print*, nomvar,(kdfi(i),i=1,3)
+            do n=kdfi(1),kdfi(2),kdfi(3)    
+               if (kind.ge.0) 
+     $              call convip (pnip1,rf(n),kind,+1,dumc,.false.)
+               do j=1,dimy
+               do i=1,dimx
+                  wk1(i,j,n) = con*wk1(i,j,n)
+               end do
+               end do
+               ier = fstecr( wk1(1,1,n),wk1,-nbit,unf,out_dat0,gnlst,
+     $              stepno,dimx,dimy,1,pnip1,pnip2,pnip3,gttpvar,
+     $              nomvar,gtetikt,'Z',ig1,ig2,ig3,ig4,datyp,.false. )
+            end do
+         endif
+*     
+      endif
+*
+      if (myproc.eq.0) deallocate (wk1)
+*----------------------------------------------------------------------
+      return
+      end
+
+
+@

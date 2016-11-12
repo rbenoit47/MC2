@@ -1,0 +1,50 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine latlon2 (deglat,deglon,xp,yp,ni,nj)
+      implicit none
+*
+      integer ni,nj
+      real deglat(ni,nj),deglon(ni,nj)
+      real xp(ni),yp(nj)
+*
+#include "grd.cdk"
+#include "consdyn_8.cdk"
+*
+      integer i,j,gid,ezgdef_fmem,gdll,gdrls,g1,g2,g3,g4,err
+      real*8 d2r,c1
+      parameter (c1 = 180.d0)
+      real xps,yps
+*
+*---------------------------------------------------------------------
+*
+      d2r = pi_8/c1
+*
+      if (Grd_proj_S.eq.'P') then
+         do j=1,nj
+            yps = yp(1)*1000./Grd_dx + float(j-1)
+            do i=1,ni
+               xps = xp(1)*1000./Grd_dx + float(i-1)
+               call llfxy(deglat(i,j),deglon(i,j),xps,yps,
+     $                              Grd_dx,Grd_dgrw,0)
+               deglat(i,j)= deglat(i,j) * d2r
+               deglon(i,j)= deglon(i,j) * d2r
+            end do
+         end do
+      endif
+*
+      if ((Grd_proj_S.eq.'M').or.(Grd_proj_S.eq.'L')) then
+         call cxgaig ('E',g1,g2,g3,g4,Grd_xlat1,Grd_xlon1,
+     $                                Grd_xlat2,Grd_xlon2)
+         gid = ezgdef_fmem (ni,nj,'Z','E',g1,g2,g3,g4,xp,yp) 
+         err = gdll  (gid,deglat,deglon)
+         err = gdrls (gid)
+         do j=1,nj
+         do i=1,ni
+            deglat(i,j) = deglat(i,j) * d2r
+            deglon(i,j) = deglon(i,j) * d2r
+         end do
+         end do
+      endif
+*
+*---------------------------------------------------------------------
+      return
+      end

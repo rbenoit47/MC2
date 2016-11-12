@@ -1,0 +1,109 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P VGATHR  -  PERFORM MULTIPLE GATHERS
+*
+      SUBROUTINE VGATHR(VP,NVP,V,NV,NK,LISTE)
+#include "impnone.cdk"
+      INTEGER NVP,NV,NK
+      INTEGER LISTE(NVP)
+      REAL VP(NVP,NK), V(NV,NK)
+*
+*Author
+*          M. Lepine  (October 1987)
+*
+*Object
+*          to perform multiple gathers
+*
+*Arguments
+*
+*          - Output -
+* VP       partial field
+*
+*          - Input -
+* NVP      1st dimension of partial field
+* V        field
+* NV       1st dimension of field
+* NK       2nd dimension of partial and complete fields
+* LISTE    address index for field
+*
+**
+      INTEGER I,K
+*
+      DO 20 K = 1,NK
+        DO 10 I = 1,NVP
+          VP(I,K) = V(LISTE(I),K)
+  10    CONTINUE
+  20  CONTINUE
+      RETURN
+***S/P VSCATR  -  PERFORM MULTIPLE SCATTERS
+      ENTRY VSCATR(VP,NVP,V,NV,NK,LISTE)
+*
+*Author
+*          M. Lepine  (October 1987)
+*
+*Object
+*     ENTRY VSCATR of VGATHR
+*          to perform multiple gathers
+*
+*Arguments
+*
+*          - Output -
+* VP       partial field
+*
+*          - Input -
+* NVP      1st dimension of partial field
+* V        field
+* NV       1st dimension of field
+* NK       2nd dimension of partial and complete fields
+* LISTE    address index for field
+*
+**
+*
+      DO 40 K = 1,NK
+        DO 30 I = 1,NVP
+          V(LISTE(I),K) = VP(I,K)
+  30    CONTINUE
+  40  CONTINUE
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,29 @@
+#/bin/ksh
+#
+arguments=$*
+. r.entry.dot
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+     -reps    "output"           ""  "[source directory]" \
+     -wdelam  "delamineur2000"   ""  "[which delamineur]" \
+     -_status "ABORT"       "ABORT"  "[return status]"  \
+  ++ $arguments`
+#
+laliste=`ls $reps`
+cnt=0
+for i in $laliste ; do
+  echo " $wdelam $reps/$i ... in place"
+  $wdelam  $reps/$i $reps/${i}_dela
+  err=$?
+  if [ $err -eq 0 ] ; then
+    /bin/mv $reps/${i}_dela $reps/$i
+  else
+    /bin/rm -f $reps/${i}_dela
+    cnt=1
+  fi
+done
+if [ $cnt -eq 0 ] ; then
+  _status=OK
+fi
+. r.return.dot

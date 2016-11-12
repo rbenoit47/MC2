@@ -1,0 +1,39 @@
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***fonction sfopop - resout l'eqn de Poisson pour la pression
+*
+      function sfopop(t0, tf, p0)
+*
+#include "impnone.cdk"
+*
+      real sfopop, t0, p0  !RB2016  tf,
+*
+*author
+*      N. Brunet (sept 2000)
+*
+*object
+*      solve Poisson equation for pressure
+*
+*arguments
+*
+*      t0 - temperature (K) at a given pressure p0
+*      p0 - pressure (pa)
+*      tf - temperature (K) at the target level
+*
+*      result is in pa
+*
+*IMPLICITES
+#include "consphy.cdk"
+*MODULES
+      EXTERNAL INCTPHY
+*
+**
+*--------------------------------------------------------------------
+#include "dintern.cdk"
+#include "fintern.cdk"
+*--------------------------------------------------------------------
+#include "initcph.cdk"
+*
+      sfopop = fopoip(t0, tf, p0)
+*
+      return
+      end

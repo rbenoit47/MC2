@@ -1,0 +1,40 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+* Pseudo-logical switches common deck.
+* Values for all switches are (0 for no) or (1 for yes).
+* The information is carried out to MC2 through tape31.
+*
+*      gnmaphy = user define physics package
+*      gnnohyd = non-hydrostatic mode
+*      gnload  = hydrometeor mass loading switch (0 -- no; 1 -- yes)
+*      gnmtn   = orography
+*      gnpsw   = pilotage de WW
+*      gngalsig= 0: pilotage en pression
+*                1: pilotage en gal-chen
+*                2: pilotage en sigma
+*     gnpself  = 1: produit les sorties pour l'auto-pilotage
+*     gnstatdp = 1: compute run time statistics in double precision
+*              = 0: compute run time statistics in single precision
+*     glconta  = T: includes a tracer to measure domain contamination
+*              = F: no such tracer
+*     glcpld   = T: coupled with an outside model (EXTframe)
+*                  = F: uncoupled (mc2 run as usual)
+*     gncpld   = communicates with EXTernal model every gncpld timesteps
+*
+      character*24 theocase,enddydc
+      integer gnmaphy,gnnohyd,gnmtn,gngalsig,
+     $        gnstatdp,gnload,gnbousq,gnhomog,endydi
+      logical glconta,glcpld,modrstrt,go4it,tmg,nofcms,no_coriol,no_msf,
+     $        nosolv,wall,theoc,launchsor,slab,flextop,semi_lag,
+     $        sfc_only,endydl
+      common /yomdync/ theocase,enddydc
+      common /yomdyni/ gnmaphy,gnnohyd,gnload,gnmtn,gngalsig,
+     $                 gnstatdp,gnbousq,gnhomog,endydi
+      common /yomdynl/ glconta,glcpld,modrstrt,go4it,sfc_only,
+     $                 tmg,nofcms,no_coriol,no_msf,nosolv,wall,theoc,
+     $                 launchsor,slab,flextop,semi_lag,endydl
+
+
+
+
+

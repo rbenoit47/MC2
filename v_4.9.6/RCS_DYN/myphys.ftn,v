@@ -1,0 +1,777 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.02.12.33.31;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r myphys -- Connection to the CMC-RPN physics package
+*
+      subroutine myphys (geobus,geosize,boot,trname,maxntr)
+      implicit none
+*
+      logical boot
+      integer geosize,maxntr
+      character*8 trname(maxntr)
+      real geobus(geosize)
+*
+*AUTHOR   Robert Benoit / Michel Desgagne     Apr   1993
+*
+*REVISONS
+*         B. Bilodeau (Jan. 99) 
+*              "Entry" bus
+*
+*IMPLICIT
+*
+#include "levels.cdk"
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "nestpnt.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "mc2lck.cdk"
+#include "nbcpu.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "lesbus.cdk"
+#include "lun.cdk"
+#include "busind.cdk"
+#include "lisctes.cdk"
+#include "consdyn_8.cdk"
+#include "tracers.cdk"
+#include "dynmem.cdk"
+#include "phymem.cdk"
+#include "partopo.cdk"
+#include "maxdim.cdk"
+#include "serinml.cdk"
+#include "diagnml.cdk"
+#include "topo.cdk"
+*
+**
+      character*8 etiket
+      logical wcte, prout, inctphy2, dohead, headdone, wr
+      integer i, j, k, n, iss, iks, ierr, statphy, lunout, fnom,
+     $        isund, iexpcp, iaden, iexpi, iexpg, ierror,
+     $        ijstat(nstatmx,2), nksurf, nksurf_inv, dim1
+      real sgc,t0ref,gamref,aref,xi,zsol,visco(gnk),hzt(gnk),
+     $     dzmin,parsol(6),xx,phybuf,wk1,wk2,wk3
+      pointer (paphyb, phybuf(*)),
+     $        (pawk1, wk1(minx:maxx,miny:maxy,gnk)),
+     $        (pawk2, wk2(minx:maxx,miny:maxy,gnk)),
+     $        (pawk3, wk3(minx:maxx,miny:maxy,gnk))
+      real*8 iur,ivr,con,c1,onet,twot
+*
+      external radiaf,inctphy2,set_dcst
+*
+      data wcte /.false./
+      data t0ref, gamref  /273., 6.e-3/
+      data isund,iexpcp,iexpi,iexpg,iaden /5*0/
+      data etiket/'FMC2    '/
+      save isund,iexpcp,iexpi,iexpg,iaden
+      save t0ref,gamref,etiket
+      save ijstat, headdone
+*
+*   * Surface parameters; respectively:
+*  CST     = 2.30E+06   , CSN     = 1.00E+06   , CSG     = 2.00E+06   ,
+*  KST     = 0.50E-06   , KSN     = 0.60E-06   , KSG     = 1.10E-06   ,
+*  CST      basic value of heat capacity of soil   (see comdeck options)
+*  CSN      basic value of heat capacity of snow     "     "       "
+*  CSG      basic value of heat capacity of ice      "     "       "
+*  KST      basic value of heat diffusivity of soil  "     "       "
+*  KSN      basic value of heat diffusivity of snow  "     "       "
+*  KSG      basic value of heat diffusivity of ice   "     "       "
+c      data parsol/2.3E+06,1.0E+06,2.0E+06,0.5E-06,0.6E-06,1.1E-06/
+      data parsol/2.3E+06,8.0E+05,2.0E+06,0.5E-06,0.1E-06,1.1E-06/
+*
+*   * Statement function
+      sgc(xi,zsol)=((t0ref-gamref*(zsol+xi*(1.-zsol/htop)))/
+     $              (t0ref-gamref*zsol))**aref
+*
+*--------------------------------------------------------------------
+* 
+      aref = grav_8/(rgasd_8*gamref)
+*
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*                           BOOT - BEGIN
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*
+      if (boot) then
+*
+*   * Initialisation of some variables
+*
+         deet      = grdt
+         doni      = ldni
+         donj      = ldnj
+         max1d     = max(lani,lanj,gnk)*2.
+         call datp2f (gnidate,gcrunstrt)
+         idatim(14)= gnidate
+         call datmgp(idatim)
+*
+*   * Establishing configuration
+*
+         runlgt = -1
+         go4it  = .false.
+         if (myproc.eq.0) then
+            call phyctrl (.true.,statphy)
+            if (statphy.ge.0) go4it = .true.
+         endif
+         call bcphyp 
+         if (.not.go4it) then
+            if (myproc.eq.0) write (6,920)
+            stop
+         endif
+         if (modrstrt) read (un_rstrt) runlgt
+*
+*   * Folding on "runlgt" columns
+*
+         if (runlgt.le.0) then
+            runlgt = ldni
+#if defined (NEC)
+            if ((ldni.lt.200).or.(ldni.gt.255)) runlgt = 255
+#endif
+         endif
+         fni = runlgt
+         fnj = doni*donj/fni
+         if (fni*fnj.lt.doni*donj) fnj = fnj + 1
+         fnk = gnk
+*
+         headdone=.false.
+         if (modrstrt) headdone=.true.
+*
+*     Initializing physics configuration.
+         call phyoptc('radia'   , radia    ,1,  'set')
+         call phyoptc('fluvert' , fluvert  ,1,  'set')
+         call phyoptc('schmsol' , schmsol  ,1,  'set')
+         call phyoptc('LONGMEL' , mixing   ,1,  'SET')
+         call phyoptc('convec'  , convec   ,1,  'set')
+         call phyoptc('stcond'  , stcond   ,1,  'set')
+         call phyoptc('stcond'  , stcond   ,1,  'get')
+         call phyoptc('gwdrag'  , gwdrag   ,1,  'set')
+         call phyoptc('shlcvt'  , shlcvt   ,2,  'set')
+         call phyoptc('radfiles', radftp   ,1,  'set')
+*
+         call phyopti('date'    , idatim   ,14, 'set')
+         call phyopti('kntrad'  , kntrad   ,1,  'set')
+         call phyopti('moyhr'   , moyhr    ,1,  'set')
+         call phyopti('nsloflux', nsloflux ,1,  'set')
+*
+         call phyoptl('advectke', advectke ,1,  'set')
+         call phyoptl('diffuw'  , diffuw   ,1,  'set')
+         call phyoptl('dbgmem'  , dbgmem   ,1,  'set')
+         call phyoptl('evap'    , evap     ,1,  'set')
+         call phyoptl('wet'     , wet      ,1,  'set')
+         call phyoptl('satuco'  , satuco   ,1,  'set')
+         call phyoptl('chauf'   , chauf    ,1,  'set')
+         call phyoptl('drag'    , drag     ,1,  'set')
+         call phyoptl('inilwc'  , inilwc   ,1,  'set')
+         call phyoptl('snowmelt', snowmelt ,1,  'set')
+         call phyoptl('stomate' , stomate  ,1,  'set')
+         call phyoptl('typsol'  , typsol   ,1,  'set')
+         call phyoptl('bkgalb'  , bkgalb   ,1,  'set')
+         call phyoptl('snoalb_anl',snoalb,  1,  'SET')
+         call phyoptl('drylaps' , drylaps  ,1,  'set')
+         call phyoptl('cortm'   , cortm    ,1,  'set')
+         call phyoptl('corts'   , .false.  ,1,  'set')
+         call phyoptl('montagn' ,gnmtn.eq.1,1,  'set')
+         call phyoptl('agregat' ,agregat   ,1,  'set')
+         call phyoptl('stratos' ,strato    ,1,  'set')
+*
+         call phyoptr('delt'    , grdt     ,1,  'set')
+         call phyoptr('facdifv' , 1.       ,1,  'set')
+         call phyoptr('factdt'  , 2.       ,1,  'set')
+         call phyoptr('hc'      , hcad     ,1,  'set')
+         call phyoptr('hf'      , hfad     ,1,  'set')
+         call phyoptr('hm'      , hmad     ,1,  'set')
+         call phyoptr('parsol'  , parsol   ,6,  'set')
+         call phyoptr('as'      , as       ,1,  'set')
+         call phyoptr('beta'    , beta     ,1,  'set')
+*
+         call phyoptc('KFCPCP'  , kfcpcp   ,1,  'set')
+         call phyoptl('KFCMOM'  , kfcmom_L ,1,  'set')
+         call phyoptr('KKL'     , kkl      ,1,  'set')
+         call phyoptr('KFCTRIG' , kfctrig  ,1,  'set')
+         call phyoptr('KFCRAD'  , kfcrad   ,1,  'set')
+         call phyoptr('KFCDEPTH', kfcdepth ,1,  'set')
+         call phyoptr('KFCDLEV' , kfcdlev  ,1,  'set')
+         call phyoptr('KFCDET'  , kfcdet   ,1,  'set')
+         call phyoptr('KFCTIMEC', kfctimec ,1,  'set')
+         call phyoptr('KFCTIMEA', kfctimea ,1,  'set')
+*
+         if (stcond.eq.'EXC') then
+*
+*     The mixed-phase microphysics scheme combines the lower model
+*     layers (excluding the lowest) to compute a sedimentation 
+*     timestep that is not too short in order to save on computing 
+*     time. In order to do that, the dynamics must compute NKSURF
+*     (the index of the level just below dzsedi) and DZMIN (the
+*     minimal thickness in the domain, taking into account the 
+*     combined levels).
+*
+            if (dzsedi.lt.0.) call phyoptr('DZSEDI',dzsedi,1,'GET' )
+            do k=1,gnk
+               if (zt(k).gt.dzsedi) goto 50
+            end do
+ 50         nksurf_inv =  max(2,k-1)   
+            dzmin= min(zt(nksurf_inv+2)-zt(nksurf_inv+1),
+     $                 zt(nksurf_inv+1)-zt(2))
+            if ( nksurf_inv .eq. 2 ) dzmin= zt(3) - zt(2) 
+            nksurf = gnk - max(2,k-1) + 1   
+            call phycom ('dzmin' ,dzmin ,1,'set')
+            call phycom ('nksurf',nksurf,1,'set')
+            if (myproc.eq.0) write (6,301) stcond,dzsedi,dzmin,nksurf
+         else
+            dzmin = zt(3)-zt(2)
+            call phyoptr('dzsedi' ,dzmin,1,'set')
+            if (myproc.eq.0) write (6,302) stcond,dzmin
+         endif
+*
+         prout  = .false.
+         lunout = -1
+         if (myproc.eq.0) then
+            lunout = 6
+            prout  = .true.
+         endif
+*
+         if (.not.inctphy2(set_dcst,14,lunout)) then
+            if (myproc.eq.0) write (6,8001)
+            stop
+         endif
+*
+         call phydebu4 (fni,fnk,enttop,dyntop,pertop,voltop,prout,
+     $                                                     radiaf)
+*
+         if ((enttop.le.maxbus).and.(dyntop.le.maxbus).and.
+     $       (pertop.le.maxbus).and.(voltop.le.maxbus)) then
+         call getbus1 (entnm,enton,entdc,entpar,entspc,maxbus,'E',prout)
+         call getbus1 (dynnm,dynon,dyndc,dynpar,dynspc,maxbus,'D',prout)
+         call getbus1 (pernm,peron,perdc,perpar,perspc,maxbus,'P',prout)
+         call getbus1 (volnm,volon,voldc,volpar,volspc,maxbus,'V',prout)
+         call inikey (fni,fnj,fnk,sizobus,prout)
+         else
+            print*
+            print*, "==> STOP IN MYPHYS: MAXBUS TOO SMALL IN BUSESD.CDK"
+            print*, "==> REQUIRED: ",max(max(dyntop,pertop),voltop)
+            print*
+            stop
+         endif
+*
+         sizebus = entspc
+         sizdbus = dynspc
+         sizpbus = perspc
+         sizvbus = volspc
+*
+*    * Tracers requirement: qc always required for now
+*
+*** The following 4 tracers must remain in an uninterupted
+*** sequence for proper handling of the water loading in the dynamics
+*
+         ipqc   = 0
+         ipqr   = 0
+         ipqi   = 0
+         ipqg   = 0
+         ipen   = 0
+         ntrphy = 0
+         if (qcplus.gt.0) then
+            ntrphy  = ntrphy + 1
+            ipqc    = ntrphy
+            ntr     = ntr    + 1
+            isund   = ntr
+            trname(ntr) = 'QN'
+         endif
+         if ((qrplus.gt.0).and.(stcond(1:4).eq.'EXCR')) then
+            ntrphy  = ntrphy + 1
+            ipqr    = ntrphy
+            ntr     = ntr    + 1
+            iexpcp  = ntr
+            trname(ntr) = 'QP'
+         endif
+         if ((qiplus.gt.0).and.(stcond(1:5).eq.'EXCRI')) then
+            ntrphy  = ntrphy + 1
+            ipqi    = ntrphy
+            ntr     = ntr    + 1
+            iexpi   = ntr
+            trname(ntr) = 'QI'
+         endif
+         if ((qgplus.gt.0).and.(stcond(1:6).eq.'EXCRIG')) then
+            ntrphy  = ntrphy + 1
+            ipqg    = ntrphy
+            ntr     = ntr    + 1
+            iexpg   = ntr
+            trname(ntr) = 'QG'
+         endif
+         edhyd = ntrphy
+         if (ntrphy.gt.0) bghyd = 1
+*
+         if (enplus.gt.0) then
+            ntrphy  = ntrphy + 1
+            ipen    = ntrphy
+            ntr     = ntr    + 1
+            iaden   = ntr
+            trname(ntr) = 'EN'
+         endif
+*
+         if (nstat.gt.0) then
+            call seriini (un_ser, ldni, fni, fnj, fnk)
+            if (myproc.eq.0) then
+               open (un_ser,file='../time_series.bin',
+     $               access='SEQUENTIAL',form='UNFORMATTED',iostat=ierr)
+ 600           read(un_ser,end=700)
+               goto 600
+ 700           backspace(un_ser)
+             endif
+          endif
+*
+         if (incore) then
+            call hpalloc (palebus, sizpbus*fnj, ierr, 1)
+         else
+            ierr = fnom (un_gbusper,'phys_busper','RND',0)
+         endif
+*
+* Memory requirement
+*
+         df3d = fni*fnj*fnk
+         df2d = fni*fnj
+         cmemsiz = (nf3d+3*ntrphy)*df3d + nf2d*df2d + n3d*dim3d
+         if (diffuw) cmemsiz = cmemsiz + df3d
+         call hpalloc (pawh     ,max1d  ,ierr,1)
+         call hpalloc (pasigdez ,fnk    ,ierr,1)
+         call hpalloc (pamsf    ,dim2d  ,ierr,1)
+         call hpalloc (paomsf   ,dim2d  ,ierr,1)
+*
+         call wghzt  (wh, zt, gnk-1)
+         momwh = (zt(1)-zm(1)) / (zm(2)-zm(1))
+         sigdez(fnk)   = sgc(0.,0.)
+         sigdez(fnk-1) = sgc(zt(2)/2.,0.)
+         do k=1,fnk-2
+            sigdez(k)  = sgc(zt(fnk-k),0.)
+         end do
+*
+         boot = .false.
+         return
+*
+      endif
+*290
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+*                           BOOT - END
+* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      if (myproc.eq.0) write (6,101)
+*
+      call rpn_comm_xch_halo ( um,minx,maxx,miny,maxy,ldni,ldnj,2*gnk,
+     $                                 hx,hy,period_x,period_y,ldni,0 )
+      call rpn_comm_xch_halo ( up,minx,maxx,miny,maxy,ldni,ldnj,2*gnk,
+     $                                 hx,hy,period_x,period_y,ldni,0 )
+*
+      dt = deet
+      if (gnstepno.eq.1) dt= deet / 2.0
+      con= 0.5
+*
+      dim1 = lani*lanj*gnk 
+      call hpalloc (paphyb   ,cmemsiz ,ierr,1)
+      call hpalloc (pawk1    ,dim1    ,ierr,1)
+      call hpalloc (pawk2    ,dim1    ,ierr,1)
+      call hpalloc (pawk3    ,dim1    ,ierr,1)
+*
+      call setpntp (phybuf, cmemsiz, df2d, df3d)
+
+*   * Bring um,vm, up,vp to mass point on thermodynamic levels and
+*   * transform to real wind components
+*
+!$omp parallel private (iks,iss,xx)
+!$omp do
+      do k=1,gnk-1
+         if (k.eq.1) then
+         iks = (fnk-1)*fni*fnj
+         do j=1,ldnj
+         do i=1,ldni
+            xx = msf(i,j)
+            utdp1(i,j,1)= xx*(momwh *con*(up(i+1,j,2)+up(i,j,2)) +
+     $                    (1.-momwh)*con*(up(i+1,j,1)+up(i,j,1)))
+              aum(i,j,1)= xx*(momwh *con*(um(i+1,j,2)+um(i,j,2)) +
+     $                    (1.-momwh)*con*(um(i+1,j,1)+um(i,j,1)))
+            vtdp1(i,j,1)= xx*(momwh *con*(vp(i,j+1,2)+vp(i,j,2)) +
+     $                    (1.-momwh)*con*(vp(i,j+1,1)+vp(i,j,1)))
+              avm(i,j,1)= xx*(momwh *con*(vm(i,j+1,2)+vm(i,j,2)) +
+     $                    (1.-momwh)*con*(vm(i,j+1,1)+vm(i,j,1)))
+            iss = (j-1)*ldni+i
+            sfcpsm(iss)   = exp(qstr(i,j,0)+qpm(i,j,0)*orts(i,j,0))
+            prt (iks+iss) = exp(qstr(i,j,0)+qpp(i,j,0)*orts(i,j,0))
+         end do
+         end do
+         else
+         do j=1,ldnj
+         do i=1,ldni
+            xx = msf(i,j)
+            utdp1(i,j,k)= (wh(k-1) *con*(up(i+1,j,k-1)+up(i,j,k-1))
+     $              + (1.0-wh(k-1))*con*(up(i+1,j,k  )+up(i,j,k  ))) *xx
+            aum(i,j,k)= (wh(k-1) *con*(um(i+1,j,k-1)+um(i,j,k-1))
+     $              + (1.0-wh(k-1))*con*(um(i+1,j,k  )+um(i,j,k  ))) *xx
+            vtdp1(i,j,k)= (wh(k-1) *con*(vp(i,j+1,k-1)+vp(i,j,k-1))
+     $              + (1.0-wh(k-1))*con*(vp(i,j+1,k  )+vp(i,j,k  ))) *xx
+            avm(i,j,k)= (wh(k-1) *con*(vm(i,j+1,k-1)+vm(i,j,k-1))
+     $              + (1.0-wh(k-1))*con*(vm(i,j+1,k  )+vm(i,j,k  ))) *xx
+         end do
+         end do
+         endif
+         do j=1,ldnj
+         do i=1,ldni
+            wk1(i,j,k) = (tpm(i,j,k)+grav_8)/gots(i,j,k)
+            wk2(i,j,k) = (tpp(i,j,k)+grav_8)/gots(i,j,k)
+            wk3(i,j,k) = wk2(i,j,k)*(1+hmp(i,j,k)*(rgasv_8/rgasd_8-1.))
+         end do
+         end do
+      end do
+!$omp end do
+!$omp end parallel
+*
+      if (east.gt.0) then
+         do k=1,gnk-1
+            do j=1,ldnj
+               utdp1(ldni,j,k) = utdp1(ldni-1,j,k)
+               aum  (ldni,j,k) = aum  (ldni-1,j,k)
+               vtdp1(ldni,j,k) = vtdp1(ldni-1,j,k)
+               avm  (ldni,j,k) = avm  (ldni-1,j,k)
+            end do
+         end do
+      endif
+      if (north.gt.0) then
+         do k=1,gnk-1
+            do i=1,ldni
+               utdp1(i,ldnj,k) = utdp1(i,ldnj-1,k)
+                 aum(i,ldnj,k) = aum  (i,ldnj-1,k)
+               vtdp1(i,ldnj,k) = vtdp1(i,ldnj-1,k)
+                 avm(i,ldnj,k) = avm  (i,ldnj-1,k)
+            end do
+         end do
+      endif
+*
+*   * flip vectors
+*
+      call invtdy (fu0 ,fni,fnj,fnk,  utdp1,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (fum ,fni,fnj,fnk,  aum  ,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (fv0 ,fni,fnj,fnk,  vtdp1,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (fvm ,fni,fnj,fnk,  avm  ,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (fsw0,fni,fnj,fnk,  swp  ,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (ft0 ,fni,fnj,fnk,  wk2  ,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (ftm ,fni,fnj,fnk,  wk1  ,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (fes0,fni,fnj,fnk,  hmp  ,minx,maxx,miny,maxy,gnk-1)
+      call invtdy (fesm,fni,fnj,fnk,  hmm  ,minx,maxx,miny,maxy,gnk-1)
+*
+      if (ipqc.gt.0) then
+         call invtdy_c (fcl0((ipqc-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clp(1-hx,1-hy,1,isund) ,minx,maxx,miny,maxy,gnk-1)
+         call invtdy_c (fclm((ipqc-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clm(1-hx,1-hy,1,isund) ,minx,maxx,miny,maxy,gnk-1)
+      endif
+      if (ipqr.gt.0) then
+         call invtdy_c (fcl0((ipqr-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clp(1-hx,1-hy,1,iexpcp),minx,maxx,miny,maxy,gnk-1)
+         call invtdy_c (fclm((ipqr-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clm(1-hx,1-hy,1,iexpcp),minx,maxx,miny,maxy,gnk-1)
+      endif
+      if (ipqi.gt.0) then
+         call invtdy_c (fcl0((ipqi-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clp(1-hx,1-hy,1,iexpi) ,minx,maxx,miny,maxy,gnk-1)
+         call invtdy_c (fclm((ipqi-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clm(1-hx,1-hy,1,iexpi) ,minx,maxx,miny,maxy,gnk-1)
+      endif
+      if (ipqg.gt.0) then
+         call invtdy_c (fcl0((ipqg-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clp(1-hx,1-hy,1,iexpg) ,minx,maxx,miny,maxy,gnk-1)
+         call invtdy_c (fclm((ipqg-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $               clm(1-hx,1-hy,1,iexpg) ,minx,maxx,miny,maxy,gnk-1)
+      endif
+      if (ipen.gt.0) then
+         call invtdy_c (fcl0((ipen-1)*fni*fnj*fnk+1),fni,fnj,fnk,
+     $                clp(1-hx,1-hy,1,iaden),minx,maxx,miny,maxy,gnk-1)
+      endif
+*
+*    * Computing hydrostatic pressure on thermodymic levels
+*
+      call hydprt1 ( prt,dez,sfcpsm,hzt,fni*fnj,fnk,
+     $               wk3,sbxy,odx,ody,area,zun,ztn,hh0,
+     $               minx,maxx,miny,maxy,gnk-1 )
+*
+**********************************************************************
+*
+      if (gnstepno.eq.1) then
+         call serset ('KOUNT',0,1,ierror)
+         call phytsk (0,geobus,geosize,fni,fnj,fnk)
+         call out_phy (phyobus,phyobusc,prt,hzt,fni,fnj,doni,donj,
+     $                                           ldni,ldnj,fnk,0)
+         call ldgeop (etiket)
+      endif
+*
+         call serset ('KOUNT',gnstepno,1,ierror)
+         call phytsk (gnstepno,geobus,geosize,fni,fnj,fnk)
+         call out_phy (phyobus,phyobusc,prt,hzt,fni,fnj,doni,donj,
+     $                                    ldni,ldnj,fnk,gnstepno)
+*
+**********************************************************************
+*
+c      do k=1,gnk-1
+c         visco(k) = min (0.25, ktdflt * kh(k))
+c      end do
+c      if (visco(1).gt.0) then
+c         call invtpt2(aum,minx,maxx,miny,maxy,gnk-1,ttcond ,fni,fnj,fnk)
+c         call invtpt2(avm,minx,maxx,miny,maxy,gnk-1,thucond,fni,fnj,fnk)
+c         call rpn_comm_xch_halo (aum,minx,maxx,miny,maxy,ldni,ldnj,
+c     $                           2*gnk,hx,hy,period_x,period_y,ldni,0)
+c         call smth2d  (aum,wk1,minx,maxx,miny,maxy,gnk-1,visco,1,1)
+c         call smth2d  (avm,wk1,minx,maxx,miny,maxy,gnk-1,visco,1,1)
+c         do k=1,gnk-1
+c            visco(k) = -1.0 * visco(k)
+c         end do
+c         call rpn_comm_xch_halo (aum,minx,maxx,miny,maxy,ldni,ldnj,
+c     $                           2*gnk,hx,hy,period_x,period_y,ldni,0)
+c         call smth2d  (aum,wk1,minx,maxx,miny,maxy,gnk-1,visco,1,1)
+c         call smth2d  (avm,wk1,minx,maxx,miny,maxy,gnk-1,visco,1,1)
+c         call invtdy(ttcond ,fni,fnj,fnk,aum,minx,maxx,miny,maxy,gnk-1)
+c         call invtdy(thucond,fni,fnj,fnk,avm,minx,maxx,miny,maxy,gnk-1)
+c      endif
+*
+*   * Transform Increments-omega to Increments-sw
+*
+      c1 = 2.0*dt
+      if (diffuw) then
+         do i=1,fni*fnj*fnk
+            fsw0(i) =               twdifv(i)              * c1
+            fsw0(i) = -fsw0(i)*(rgasd_8*ft0(i)*(1.+0.608*fes0(i)))/
+     $                (prt(i)*grav_8)
+         end do
+      endif
+*   
+*   * Computing the physics increments for all prognostics fields.
+*   * Those tendencies will then be staggered to the appropriate
+*   * point before being added to the dynamic matrices()3dp
+*
+      do i=1,fni*fnj*fnk
+         fu0(i)  = (tugwd(i)   + tudifv(i))             * c1
+         fv0(i)  = (tvgwd(i)   + tvdifv(i))             * c1
+         ft0(i)  = (ttrad(i)   + ttdifv(i) + ttcond(i)) * c1
+         fes0(i) = (thudifv(i) + thucond(i))            * c1
+      end do
+      do i=1,fni*fnj*fnk*ntrphy
+         fcl0(i) = cltend(i) * c1
+      end do
+*
+*360
+*   * Invert increment vectors fiu0,fiv0,fsw0,fit0,fies0,ficl0
+*   * into aum,avm,swtdp2,t0,hutdp2,cl0
+*
+      call invtpt2 (aum,minx,maxx,miny,maxy,gnk-1,fu0 ,fni,fnj,fnk)
+      call invtpt2 (avm,minx,maxx,miny,maxy,gnk-1,fv0 ,fni,fnj,fnk)
+      if (diffuw) 
+     $call invtpt2 (swtdp1,minx,maxx,miny,maxy,gnk-1,fsw0,fni,fnj,fnk)
+      call invtpt2 (ttdp1 ,minx,maxx,miny,maxy,gnk-1,ft0 ,fni,fnj,fnk)
+      call invtpt2 (hutdp1,minx,maxx,miny,maxy,gnk-1,fes0,fni,fnj,fnk)
+      if (ipqc.gt.0) call invtpt2(cltdp1(1-hx,1-hy,1,isund),minx,maxx,
+     $         miny,maxy,gnk-1,fcl0((ipqc-1)*fni*fnj*fnk+1),fni,fnj,fnk)
+      if (ipqr.gt.0) call invtpt2(cltdp1(1-hx,1-hy,1,iexpcp),minx,maxx,
+     $         miny,maxy,gnk-1,fcl0((ipqr-1)*fni*fnj*fnk+1),fni,fnj,fnk)
+      if (ipqi.gt.0) call invtpt2(cltdp1(1-hx,1-hy,1,iexpi),minx,maxx,
+     $         miny,maxy,gnk-1,fcl0((ipqi-1)*fni*fnj*fnk+1),fni,fnj,fnk)
+      if (ipqg.gt.0) call invtpt2(cltdp1(1-hx,1-hy,1,iexpg),minx,maxx,
+     $         miny,maxy,gnk-1,fcl0((ipqg-1)*fni*fnj*fnk+1),fni,fnj,fnk)
+      if (ipen.gt.0) call invtpt2(cltdp1(1-hx,1-hy,1,iaden),minx,maxx,
+     $         miny,maxy,gnk-1,fcl0((ipen-1)*fni*fnj*fnk+1),fni,fnj,fnk)
+*
+      call rpn_comm_xch_halo (aum,minx,maxx,miny,maxy,ldni,ldnj,
+     $                        2*gnk,hx,hy,period_x,period_y,ldni,0)
+*
+      if (west.gt.0) then
+         do k=1,gnk-1
+         do j=1,ldnj
+            aum(0,j,k) = aum(1,j,k)
+            avm(0,j,k) = avm(1,j,k)
+         end do
+         end do
+      endif
+      if (south.gt.0) then
+         do k=1,gnk-1
+         do i=0,ldni
+            aum(i,0,k) = aum(i,1,k)
+            avm(i,0,k) = avm(i,1,k)
+         end do
+         end do
+      endif         
+*380
+*   * Staggering of u-tendency to point u on momentum levels.
+*   * Staggering of v-tendency to point v on momentum levels.
+*   * Transform 'real' wind increments to 'image' wind increments.
+*   * Compute W increments (equation 1.2.25)
+*   * W = (S(G1U+G2V) + sw) / G0
+*
+      wk1   = 0.
+      onet = 1.0d0 / 3.0d0
+      twot = 2.0d0 / 3.0d0
+*
+!$omp parallel private (xx, iur, ivr)
+!$omp do
+      do k=1,gnk-1
+         do j=1,ldnj
+         do i=1,ldni
+            xx        = omsf(i,j)
+            iur       = aum(i,j,k) * xx
+            ivr       = avm(i,j,k) * xx
+            w1(i,j,k) = con * (iur + aum(i-1,j,k)*omsf(i-1,j))
+            w2(i,j,k) = con * (ivr + avm(i,j-1,k)*omsf(i,j-1))
+         end do
+         end do
+      end do
+!$omp end do
+!$omp do
+      do k=1,gnk-1
+         if (k.eq.1) then
+            do j=1,donj
+            do i=1,doni
+               utdp1(i,j,1)  = twot*w1(i,j,1) + onet*w1(i,j,2)
+               vtdp1(i,j,1)  = twot*w2(i,j,1) + onet*w2(i,j,2)
+            end do
+            end do
+         else if (k.eq.gnk-1) then
+            do j=1,donj
+            do i=1,doni
+               utdp1(i,j,gnk-1) = w1(i,j,gnk-1)
+               vtdp1(i,j,gnk-1) = w2(i,j,gnk-1)
+            end do
+            end do
+         else
+            do j=1,ldnj
+            do i=1,ldni
+               utdp1(i,j,k) = con* (w1(i,j,k+1) + w1(i,j,k))
+               vtdp1(i,j,k) = con* (w2(i,j,k+1) + w2(i,j,k))
+            end do
+            end do
+         endif
+      end do
+!$omp end do
+*
+      if (wcte) then
+         call sw2w3 ( wk2,up,vp,swp,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                              minx,maxx,miny,maxy,gnk )
+      endif
+*392
+*   * Nesting the tendencies to zero within the sponge zone.
+*   * Transform increments-omega to increments-sw
+*
+!$omp single
+      call nesajr (utdp1 ,wk1,minx,maxx,miny,maxy,gnk-1,1,1,
+     $                                     hblen_x,hblen_y)
+      call nesajr (vtdp1 ,wk1,minx,maxx,miny,maxy,gnk-1,1,1,
+     $                                     hblen_x,hblen_y)
+      if (diffuw)
+     $     call nesajr(swtdp1,wk1,minx,maxx,miny,maxy,gnk-1,1,1,
+     $                                         hblen_x,hblen_y)
+      call nesajr (ttdp1 ,wk1,minx,maxx,miny,maxy,gnk-1,1,1,
+     $                                     hblen_x,hblen_y)
+      call nesajr (hutdp1,wk1,minx,maxx,miny,maxy,gnk-1,1,1,
+     $                                     hblen_x,hblen_y)
+      do n=1,ntrphy
+         call nesajr (cltdp1(1-hx,1-hy,1,n),wk1,minx,maxx,miny,maxy,
+     $                                   gnk-1,1,1,hblen_x,hblen_y)
+      end do
+*
+      if (mod(gnstepno,gnpstat).eq.0)
+     $call diagphy (utdp1,vtdp1,ttdp1,hutdp1,minx,maxx,miny,maxy,gnk-1)
+!$omp end single
+*
+*400
+*   * Adding the increments to the dynamic matrices ()3dp.
+*
+      con  =  1.0d0 - rgasd_8/cpd_8
+      if (gnpfb.eq.1) then
+!$omp do
+      do k=1,gnk-1
+         if (k.eq.gnk-1) then
+            do j=1+south,donj-north
+            do i=1+west,doni-east
+               up (i,j,gnk-1) = up (i,j,gnk-1) + utdp1(i,j,gnk-1)
+               vp (i,j,gnk-1) = vp (i,j,gnk-1) + vtdp1(i,j,gnk-1)
+            end do
+            end do
+         else
+            do j=1+south,donj-north
+            do i=1+west ,doni-east
+               up (i,j,k) = up (i,j,k) + utdp1 (i,j,k)
+               vp (i,j,k) = vp (i,j,k) + vtdp1 (i,j,k)
+               tpp(i,j,k) = tpp(i,j,k) + ttdp1 (i,j,k)*gots(i,j,k)
+               hmp(i,j,k) = hmp(i,j,k) + hutdp1(i,j,k)
+            end do
+            end do
+            if (diffuw) then
+               do j=1+south,donj-north
+               do i=1+west ,doni-east
+                  swp(i,j,k) = swp(i,j,k) + swtdp1(i,j,k)
+               end do
+               end do 
+            endif  
+            do n=1,ntrphy
+            do j=1+south,donj-north
+            do i=1+west,doni-east
+               clp(i,j,k,n) = clp(i,j,k,n) + cltdp1(i,j,k,n)
+            end do
+            end do
+            end do
+         endif
+      end do
+!$omp end do
+      endif
+*
+      if (wcte) then
+!$omp single
+         call rpn_comm_xch_halo ( up,minx,maxx,miny,maxy,ldni,ldnj,
+     $                            2*gnk,hx,hy,period_x,period_y,ldni,0 )
+!$omp end single
+         call w2sw3 ( swp,up,vp,wk2,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                              minx,maxx,miny,maxy,gnk )
+      endif
+!$omp end parallel
+*
+      if (nstat.gt.0) then
+         dohead=.false.
+         if (.not.headdone) then
+            dohead=(mod(gnstepno-1,serint).eq.0)
+            if (dohead) headdone=.true.
+         endif
+         call seri_out(dohead,etiket)
+      endif
+*
+      call hpdeallc (paphyb   ,ierr,1)
+      call hpdeallc (pawk1    ,ierr,1)
+      call hpdeallc (pawk2    ,ierr,1)
+      call hpdeallc (pawk3    ,ierr,1)
+*
+ 101  format (' RPN FULL PHYSICS PACKAGE')
+ 301  format (1x,'STCOND: ',a,' DZSEDI: ',f10.4/
+     $           ' DZMIN: ',f10.6,5x'nksurf: ',i4)
+ 302  format (1x,'STCOND: ',a,' DZSEDI: ',f10.4)
+ 915  format (60('-'))
+ 920  format (/,'--ABORT--ABORT--ABORT-- in MYPHYS'/)
+ 8001 format(
+     $/,'PROBLEM INITIALIZATING PHYSICAL CONSTANTS: (S/R myphys)',
+     +/,'====================== ABORT =========================')
+
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+@

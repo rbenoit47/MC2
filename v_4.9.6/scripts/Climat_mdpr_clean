@@ -1,0 +1,447 @@
+#! /bin/ksh
+
+# set -x
+
+cclargs    0$                       "[Culls md and pr gemdm/AMIP2 samples]"\
+      -exp       ",,,,"      ",,,,"       "[Experiment name (eg. g302r03_197901)]"\
+      -start     "NONE"      "1978010100" "[Validity date of starting analysis as in YYYYMMDDHH]"\
+      -suffix    ""          ""           "[Suffix to be added to the output filenames, eg. _hi or _lo]"\
+      -prefix    ""          ""           "[(Optional) prefix to be added to the input filenames]"\
+      -dt         0           0           "[Timestep used in the experiment (units of seconds)]"\
+      -delta      0           0           "[Model sampling interval (units of timesteps)]"\
+      -save      ""          ""           "[Directory to save the old .ca files]"\
+      -archive+  "NON"       "OUI"        "[Start and end the process with cmcarc archives]"\
+      -travail   "${BIG_TMPDIR}"  ""      "[Work directory]"\
+      ++ $* > ${BIG_TMPDIR}/cclargs_mdpr_clean.out$$
+#
+. ${BIG_TMPDIR}/cclargs_mdpr_clean.out$$ && /bin/rm -f ${BIG_TMPDIR}/cclargs_mdpr_clean.out$$
+#
+# Purpose:   Removes data at 06H and 18H in a model that produces
+#            samples at a 6H frequency, taking care to correct for
+#            accumulator and averaged variables. Sampled variable
+#            are simply discarded.
+
+# Calling sequence examples...
+# case 1) (when working with a series of cmcarc files)
+# Climat_mdpr_clean -exp "g302r03_197901 g302r03_197902" \
+#                   -start 1978010100  -dt 2700 -delta 8 \
+#                   -save ./save -archive -travail ./trav$$
+# case 2) (when working with the sample files themselves)
+# Climat_mdpr_clean -exp g302r03_197901 -start 1978010100 -dt 2700 -delta 8
+
+# Author:    Katja Winger
+
+# Revisions: 000 - January 2003 : Inital version
+#            001 - January 2003 : A few adjustements
+#            002 - may     2003 : modifier l'appel a cclargs
+
+if [[ $(( ${dt} * ${delta} )) -ne 21600 ]]; then exit 1 ; fi
+
+# Define a few second level variables and directories
+
+c1=`echo ${prefix}xx | wc -c`
+c1=$(( ${c1} + 11 ))
+c2=$(( ${c1} + 7 ))
+
+int=$(( ${delta} * 2 ))
+
+rep=`pwd`
+
+if [ "${save}" ]; then
+  if [ ! -d ${save} ]; then mkdir ${save}; fi
+  cd ${save} ; save=`pwd` ; cd ${rep}
+fi
+
+if [ "${travail}" ]; then
+  if [ ! -d ${travail} ]; then
+    mkdir ${travail}
+    nouveau_travail=OUI
+  else
+    nouveau_travail=NON
+  fi
+else
+  travail=./trav$$ ; /bin/rm -rf ${travail}
+  mkdir ${travail} ; nouveau_travail=OUI
+fi
+
+cd ${travail} ; travail=`pwd` ; cd ${rep}
+
+if [ ${archive} = YES ]; then
+  archive=OUI
+elif [ ${archive} = NO ]; then
+  archive=NON
+fi
+#
+export USE_BIG_TMPDIR=oui
+export BIG_TMPDIR=${travail}
+export ECHO_COMMAND_LINE=on
+export DIAGNOSTIC_EXIT=${BIG_TMPDIR}/DIAGNOSTIC_EXIT
+touch ${DIAGNOSTIC_EXIT}
+
+# Now define a few R.DIAG/ARMNLIB environment variables
+
+USE_BIG_TMPDIR=oui ; export USE_BIG_TMPDIR
+BIG_TMPDIR=${travail} ; export BIG_TMPDIR
+ECHO_COMMAND_LINE=on ; export ECHO_COMMAND_LINE
+RDIAG=${RDIAG:-r.diag}
+EDITFST=${EDITFST:-editfst}
+
+r.echo " "
+r.echo " Climat_mdpr_clean: BIG_TMPDIR     =${BIG_TMPDIR}"
+r.echo " Climat_mdpr_clean: DIAGNOSTIC_EXIT=${DIAGNOSTIC_EXIT}"
+r.echo " Climat_mdpr_clean: Starting at `date`"
+r.echo " "
+
+if [ `hostname` = pollux ]; then export VERY_NICE_DIAG=non ; fi
+
+# Define a "editfst" shell function that will respond to DIAGNOSTIC_EXIT
+
+reditfst()
+{
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+  ${EDITFST} $@
+  editfst_stat=$?
+  if [ ${editfst_stat} != 0 ]; then
+    echo "Erreur ${editfst_stat} dans ${EDITFST}" > ${DIAGNOSTIC_EXIT}
+  fi
+fi
+}
+
+# Finished the prelimaries. Do the work !!!
+
+cd ${travail}
+
+for datum in ${exp} ; do
+  #
+  # 'erasing' of every 6h and 18h md file, with respect to codes that are
+  #  accumulations, averages, minima or maxima
+  #
+  # md:   >> ^^ P0 PN TT HU UU VV AE FC SI FB FV IV PC PR PE A1 A2 AL A3 A4 FR O1 EI
+  #             AR AU AH FI FS AD AG N4 AW AS AV GL GY I8 AB O5 O6 O7 O8 O9 NF N0 N2
+  #             RN AI SN SD N3 S7 S8 I9 I7 I0 TG J8 TM I1 T5 T9 USGW VSGW HY
+  # md: minmax:                                           T5 T9
+  # md: accum.:                   AE                PC PR PE A1 A2    A3 A4 FR O1
+  #             AR AU AH       AD AG N4 AW AS AV          AB O5 O6 O7 O8 O9 NF N0 N2
+  #             RN AI SN    N3 S7 S8                            USGW VSGW
+  #
+  if [ ${archive} = OUI ]; then
+    cmcarc -m -v -x -f ${rep}/gemdm_${datum}_md${suffix}.ca || exit 2 
+    if [ "${save}" ]; then r.catf ${rep}/gemdm_${datum}_md${suffix}.ca ${save} -d ; fi
+    list=` ls ${prefix}md${start}_[0123456789]*p `
+  else
+    list=` ls ${rep}/${prefix}md${start}_[0123456789]*p `
+  fi
+  #
+  if [ ` echo ${list} | wc -w ` -ge 2 ] ; then
+    #
+    h6dat=-999
+    #
+    for file in ${list} ; do
+      #
+      filename=${file##*/}
+      #
+      dat=` echo ${filename} | cut -c${c1}-${c2} `
+      ccc=` expr ${dat} + 0 `
+      aaa=` expr ${dat} / ${int} `
+      bbb=` expr ${aaa} \* ${int} `
+      #
+      # 6h
+      #
+      if [ ${bbb} -ne ${ccc} ]; then
+        #
+        r.delf -dn 6h* -na
+        h6dat=${ccc}
+        #
+        ${RDIAG} select ${file} 6ht5 6ht9 6ha1 -name t5 t9 ae 
+        #
+        echo "\
+        desire(-1,['PC','PR','PE','A1','A2'])" |\
+        reditfst -s ${file} -d 6ha2 -nobox
+        #
+        echo "\
+        desire(-1,['A3','A4','FR','O1'])" |\
+        reditfst -s ${file} -d 6ha3 -nobox
+        #
+        echo "\
+        desire(-1,['AR','AU','AH'])" |\
+        reditfst -s ${file} -d 6ha4 -nobox
+        #
+        echo "\
+        desire(-1,['AD','AG','N4','AW','AS','AV'])" |\
+        reditfst -s ${file} -d 6ha5 -nobox
+        #
+        echo "\
+        desire(-1,['AB','O5','O6','O7','O8','O9','NF','N0'])
+        desire(-1,['N2','RN','AI','SN'])" |\
+        reditfst -s ${file} -d 6ha6 -nobox
+        #
+        echo "\
+        desire(-1,['N3','S7','S8'])" |\
+        reditfst -s ${file} -d 6ha7 -nobox
+        #
+        echo "\
+        desire(-1,['USGW','VSGW'])" |\
+        reditfst -s ${file} -d 6ha8 -nobox
+        #
+        six_hour_file=${file}
+        #
+      elif [ ` expr ${h6dat} + ${delta} ` -eq ${ccc} ]; then
+        #
+        # 12h
+        #
+        ${RDIAG} select ${file} 12ht5 12ht9 12ha1 12hn3 -name t5 t9 ae al
+        ${RDIAG} select ${file} 12hn4 -name ei
+        #
+        echo "\
+        desire(-1,['P0','PN','TT','HU','UU','VV'])" |\
+        reditfst -s ${file} -d 12hn1 -nobox
+        #
+        echo "\
+        desire(-1,['FC','SI','FB','FV','IV'])" |\
+        reditfst -s ${file} -d 12hn2 -nobox
+        #
+        echo "\
+        desire(-1,['PC','PR','PE','A1','A2'])" |\
+        reditfst -s ${file} -d 12ha2 -nobox
+        #
+        echo "\
+        desire(-1,['A3','A4','FR','O1'])" |\
+        reditfst -s ${file} -d 12ha3 -nobox
+        #
+        echo "\
+        desire(-1,['AR','AU','AH'])" |\
+        reditfst -s ${file} -d 12ha4 -nobox
+        #
+        echo "\
+        desire(-1,['FI','FS'])" |\
+        reditfst -s ${file} -d 12hn5 -nobox
+        #
+        echo "\
+        desire(-1,['AD','AG','N4','AW','AS','AV'])" |\
+        reditfst -s ${file} -d 12ha5 -nobox
+        #
+        echo "\
+        desire(-1,['GL','GY','I8'])" |\
+        reditfst -s ${file} -d 12hn6 -nobox
+        #
+        echo "\
+        desire(-1,['AB','O5','O6','O7','O8','O9','NF','N0'])
+        desire(-1,['N2','RN','AI','SN'])" |\
+        reditfst -s ${file} -d 12ha6 -nobox
+        #
+        echo "\
+        desire(-1,'SD')" |\
+        reditfst -s ${file} -d 12hn7 -nobox
+        #
+        echo "\
+        desire(-1,['N3','S7','S8'])" |\
+        reditfst -s ${file} -d 12ha7 -nobox
+        #
+        echo "\
+        desire(-1,['I9','I7','I0','TG','J8','TM','I1'])" |\
+        reditfst -s ${file} -d 12hn8 -nobox
+        #
+        echo "\
+        desire(-1,['USGW','VSGW'])" |\
+        reditfst -s ${file} -d 12ha8 -nobox
+        #
+        ${RDIAG} joinup min 6ht5 12ht5
+        ${RDIAG} joinup max 6ht9 12ht9
+        ${RDIAG} timmin min t5 -def KEEPTIME
+        ${RDIAG} timmax max t9 -def KEEPTIME
+        for f in a1 a2 a3 a4 a5 a6 a7 a8; do
+          ${RDIAG} xylin 12h$f 6h$f $f -a 0.5 -b 0.5
+        done
+        #
+        ${RDIAG} joinup ${file} 12hn1 a1 12hn2 a2 12hn3 a3 12hn4 a4 \
+                        12hn5 a5 12hn6 a6 12hn7 a7 12hn8 t5 t9 a8
+        #
+        r.delf -dn 12h* 6h* min max ${six_hour_file}
+        r.delf -dn a1 a2 a3 a4 a5 a6 a7 a8 t5 t9
+        #
+      fi
+      #
+    done
+    #
+  fi
+  #
+  if [ ! -s ${DIAGNOSTIC_EXIT} -a ${archive} = OUI ]; then
+    cmcarc -v -a ${prefix}md*p -f ${rep}/gemdm_${datum}_md${suffix}.ca || exit 3
+    r.delf -dn ${prefix}md*p
+  fi
+  #
+  #
+  #
+  #
+  # 'erasing' of every 6h and 18h pr file, with respect to codes that are
+  # accumulations, averages, minima or maxima
+  # pr:         UU UG X2 VV V6 X3 GZ HU TT WW CA T5 T6 T7 T9 W6 W7 W8 W9 X4 X5
+  # pr: minmax:                                  T5       T9
+  # pr: avge.:     UG X2    V6 X3             CA    T6 T7    W6 W7 W8 W9 X4 X5
+  #
+  # high resolution:
+  # pr:         GZ HU TT UU VV WW CA T5 T6 T7 T9 UG V6 W6 W7 W8 W9 X2 X3 X4 X5
+  # pr: minmax:                      T5       T9
+  # pr: avge.:                    CA    T6 T7    UG V6 W6 W7 W8 W9 X2 X3 X4 X5
+  #
+  #
+  if [ ${archive} = OUI ]; then
+    for ca in ${rep}/gemdm_${datum}_pr${suffix}*.ca ; do
+      cmcarc -m -v -x -f ${ca} || exit 4
+    done
+    if [ "${save}" ]; then r.catf ${rep}/gemdm_${datum}_pr${suffix}*.ca ${save} -d ; fi
+    list=` ls ${prefix}pr${start}_[0123456789]*p `
+  else
+    list=` ls ${rep}/${prefix}pr${start}_[0123456789]*p `
+  fi
+  #
+  #
+  if [ ` echo ${list} | wc -w ` -ge 2 ] ; then
+    #
+    h6dat=-999
+    #
+    for file in ${list} ; do
+      #
+      filename=${file##*/}
+      #
+      dat=` echo ${filename} | cut -c${c1}-${c2} `
+      ccc=` expr ${dat} + 0 `
+      aaa=` expr ${dat} / ${int} `
+      bbb=` expr ${aaa} \* ${int} `
+      #
+      if [ ${bbb} -ne ${ccc} ]; then
+        # 
+        # 6h
+        #
+        r.delf -dn 6h*
+        h6dat=${ccc}
+        #
+        if [ "${suffix}" == "_hi" ] ; then
+          #
+          ${RDIAG} select ${file} 6ht5 6ht9 6ha1 -name t5 t9 ca
+          #
+          echo "\
+          desire(-1,['T6','T7'])" |\
+          reditfst -s ${file} -d 6ha2 -nobox
+          #
+          echo "\
+          desire(-1,['UG','V6','W6','W7','W8','W9'])
+          desire(-1,['X2','X3','X4','X5'])" |\
+          reditfst -s ${file} -d 6ha3 -nobox
+          #
+        else
+          #
+          ${RDIAG} select ${file} 6ht5 6ht9 6ha3 -name t5 t9 ca
+          #
+          echo "\
+          desire(-1,['UG','X2'])" |\
+          reditfst -s ${file} -d 6ha1 -nobox
+          #
+          echo "\
+          desire(-1,['V6','X3'])" |\
+          reditfst -s ${file} -d 6ha2 -nobox
+          #
+          echo "\
+          desire(-1,['T6','T7'])" |\
+          reditfst -s ${file} -d 6ha4 -nobox
+          #
+          echo "\
+          desire(-1,['W6','W7','W8','W9','X4','X5'])" |\
+          reditfst -s ${file} -d 6ha5 -nobox
+          #
+        fi 
+        #
+        six_hour_file=${file}
+        #
+      elif [ ` expr ${h6dat} + ${delta} ` -eq ${ccc} ]; then
+        #
+        # 12h
+        #
+        if [ "${suffix}" == "_hi" ] ; then
+          #
+          ${RDIAG} select ${file} 12ht5 12ht9 12ha1 -name t5 t9 ca
+          #
+          echo "\
+          desire(-1,['GZ','HU','TT','UU','VV','WW'])" |\
+          reditfst -s ${file} -d 12hn1 -nobox
+          #
+          echo "\
+          desire(-1,['T6','T7'])" |\
+          reditfst -s ${file} -d 12ha2 -nobox
+          #
+          echo "\
+          desire(-1,['UG','V6','W6','W7','W8','W9'])
+          desire(-1,['X2','X3','X4','X5'])" |\
+          reditfst -s ${file} -d 12ha3 -nobox
+          #
+        else
+          #
+          ${RDIAG} select ${file} 12ht5 12ht9 12hn1 12hn2 -name t5 t9 uu vv 
+          ${RDIAG} select ${file} 12ha3 -name ca
+          #
+          echo "\
+          desire(-1,['UG','X2'])" |\
+          reditfst -s ${file} -d 12ha1 -nobox
+          #
+          echo "\
+          desire(-1,['V6','X3'])" |\
+          reditfst -s ${file} -d 12ha2 -nobox
+          #
+          echo "\
+          desire(-1,['GZ','HU','TT','WW'])" |\
+          reditfst -s ${file} -d 12hn3 -nobox
+          #
+          echo "\
+          desire(-1,['T6','T7'])" |\
+          reditfst -s ${file} -d 12ha4 -nobox
+          #
+          echo "\
+          desire(-1,['W6','W7','W8','W9','X4','X5'])" |\
+          reditfst -s ${file} -d 12ha5 -nobox
+          #
+        fi
+        #
+        ${RDIAG} joinup min 6ht5 12ht5
+        ${RDIAG} joinup max 6ht9 12ht9
+        ${RDIAG} timmin min t5 -def KEEPTIME
+        ${RDIAG} timmax max t9 -def KEEPTIME
+        if [ "${suffix}" == "_hi" ] ; then
+          for f in a1 a2 a3; do
+            ${RDIAG} xylin 12h$f 6h$f $f -a 0.5 -b 0.5
+          done
+          ${RDIAG} joinup ${file} 12hn1 a1 t5 a2 t9 a3
+          r.delf -dn a1 a2 a3 t5 t9
+        else
+          for f in a1 a2 a3 a4 a5; do
+            ${RDIAG} xylin 12h$f 6h$f $f -a 0.5 -b 0.5
+          done
+          ${RDIAG} joinup ${file} 12hn1 a1 12hn2 a2 12hn3 a3 t5 a4 t9 a5
+          r.delf -dn a1 a2 a3 a4 a5 t5 t9
+        fi
+        #
+        r.delf -dn 12h* 6h* min max ${six_hour_file}
+        #
+      fi
+      #
+    done
+    #
+  fi
+  #
+  if [ ! -s ${DIAGNOSTIC_EXIT} -a ${archive} = OUI ]; then
+    cmcarc -v -a ${prefix}pr*p -f ${rep}/gemdm_${datum}_pr.ca || exit 3
+    r.delf -dn ${prefix}pr*p
+  fi
+  #
+done
+#
+# Cleanup (but only if everything worked out)
+#
+cd ${rep}
+#
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+   if [ ${nouveau_travail} = OUI ]; then rm -rf ${BIG_TMPDIR} ; fi
+   r.echo " Climat_mdpr_clean: Ending at `date`"
+   exit 0
+fi
+#
+exit 4

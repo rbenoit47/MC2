@@ -1,0 +1,439 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r physlb -- Prepares slice j and runs the physics package on it.
+*
+      subroutine physlb (icpu,njdone,kount,
+     $         up,vp,swp,tp,esp,clp,um,vm,tm,esm,clm,
+     $         ttrad,tugwd,tvgwd,thudifv,ttdifv,tudifv,tvdifv,twdifv,
+     $         thucond,ttcond,cltend,lebus,geofld,geosize,
+     $         outbus,outbusc,prt,dez,psm,area,nis,njs,nks)
+      implicit none
+*
+      integer icpu,njdone,kount,nis,njs,nks,geosize
+      real up (nis,njs,nks),vp (nis,njs,nks),swp(nis,njs,nks),
+     $     tp (nis,njs,nks),esp(nis,njs,nks),
+     $     clp(nis,njs,nks,*),um (nis,njs,nks),
+     $     vm (nis,njs,nks),tm (nis,njs,nks),
+     $     esm(nis,njs,nks),clm(nis,njs,nks,*),
+     $     ttrad(nis,njs,nks),tugwd(nis,njs,nks),tvgwd(nis,njs,nks),
+     $     thudifv(nis,njs,nks),ttdifv(nis,njs,nks),tudifv(nis,njs,nks),
+     $     tvdifv(nis,njs,nks),twdifv(nis,njs,nks),thucond(nis,njs,nks),
+     $     ttcond(nis,njs,nks),cltend(nis,njs,nks,*),
+     $     prt(nis,njs,nks),dez(nis,njs,nks)
+      real psm(nis,njs),area(nis,njs),lebus(*),outbus(*),outbusc(*),
+     $     geofld(geosize)
+*
+*AUTHOR   Robert Benoit / Michel Desgagne     Apr   1993
+*
+*REVISION
+*001      JM Belanger/M. Desgagne   Sept. 1994
+*         - New physics interface (PARAM).
+*002      Bernard Bilodeau (Feb 1999) - Entry bus
+*003      J. Mailhot  (Mar 1999) - Changes for new SURFACE interface
+*
+*OBJECT
+*     This routine will succesively prepare "njs" slices and call the
+*     physics package (phyexe) for each slice. PHYSLB loads slice j
+*     of the dynamic variables on busdyn. It gets back tendencies
+*     (due to physical processes) from busvol and does the recuperation
+*     of the output fields from the appropriate buses.
+*     In the description below (t*) stands for the time level after the
+*     dynamic timestep.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    icpu       I     I    S  cpu number executing slice "trnch"
+*    njdone    I/O    I    S  number of slices previously done
+*    kount      I     I    S  timestep
+*    up        I/O    R    A  u component of the wind at time (t*)
+*    vp        I/O    R    A  v component of the wind at time (t*)
+*    swp        I     R    A  real vertical wind      at time (t*)
+*    tp        I/O    R    A  temperature             at time (t*)
+*    esp       I/O    R    A  humidity                at time (t*)
+*    clp        I     R    A  tracers                 at time (t*)
+*    um         I     R    A  u component of the wind at time (t-dt)
+*    vm         I     R    A  v component of the wind at time (t-dt)
+*    tm         I     R    A  temperature             at time (t-dt)
+*    esm        I     R    A  humidity                at time (t-dt)
+*    clm        I     R    A  tracers                 at time (t-dt)
+*    ttrad      O     R    A  temperature tendency due to radiative
+*                             processes
+*    tugwd      O     R    A  u tendency due to gravity wave drag
+*    tvgwd      O     R    A  v tendency due to gravity wave drag
+*    thudifv    O     R    A  humidity tendency due to vertical
+*                             diffusion
+*    ttdifv     O     R    A  temperature tendency due to vertical
+*                             diffusion
+*    tudifv     O     R    A  u tendency due to vertical diffusion
+*    tvdifv     O     R    A  v tendency due to vertical diffusion
+*    twdifv     O     R    A  omega tendency due to vertical diffusion
+*    thucond    O     R    A  humidity tendency due to condensation
+*    ttcond     O     R    A  temperature tendency due to condensation
+*    qctend     O     R    A  water content tendency due to condensation
+*    qrtend     O     R    A  liq. precipitation tendency.
+*    qitend     O     R    A  ice content tendency.
+*    qgtend     O     R    A  graupel.hail tendency.
+*    etend      O     R    A  turbulent energy tendency.
+*    outbus    I/O    R    A  bus containing physics output variables
+*    geofld     I     R       bus containing geophysical fields
+*    geosize    I     I       size of geofld
+*    prt        I     R    A  hydrostatic pressure on thermo. levels
+*    dez        I     R    A  vertical distances between grid points
+*    psm        I     R    A  surface pressure        at time (t-dt)
+*    nis        I     I    S  first horizontal dimension
+*    njs        I     I    S  second horizontal dimension
+*    nks        I     I    S  vertical dimension
+*
+*IMPLICIT
+*
+#include "yomdyn1.cdk"
+#include "mc2lck.cdk"
+#include "physcom.cdk"
+#include "physnml.cdk"
+#include "lesbus.cdk"
+#include "busind.cdk"
+#include "lcldim.cdk"
+#include "lun.cdk"
+#include "consdyn_8.cdk"
+*
+*MODULES
+*
+**
+      integer xnerr,i,j,k,ii,im,offbo,offbd,offbe,offbp,offbv
+      integer lght,init0,ifcp,nkk
+      integer pid,gid,mul,offp,offg,maxind
+      integer read_db_file,write_db_file
+      external read_db_file,write_db_file
+*
+      real busent(max(1,sizebus)),busdyn(max(1,sizdbus)),
+     $     busper,busper2(max(1,sizpbus)),busvol(max(1,sizvbus))
+      pointer (pabusper,busper(*))
+      real um1(nis),vm1(nis),tm1(nis),qm1(nis)
+*
+*----------------------------------------------------------------------
+*
+c      busdyn = 0.
+      if (.not.incore) pabusper=loc(busper2(1))
+*40
+*   *************** computing physics on njs slices ********************
+*
+      j=0
+  400 continue
+!$omp critical
+      if (j.ne.0) call mzonopr(-3,j)
+      njdone = njdone + 1
+      if (njdone .le. njs ) then
+         if (incore) then
+            j = njdone
+            pabusper = loc (lebus((j-1)*sizpbus+1))
+         else
+            if (kount.eq.0) then
+               j = njdone
+            else
+               xnerr = read_db_file (un_gbusper,j,1)
+               xnerr = read_db_file (un_gbusper,busper,sizpbus)
+            endif
+         endif
+         call mzonopr(3,j)
+      endif
+!$omp end critical
+      if (njdone .gt. njs ) go to 500
+*
+*     copy busgeo into busent
+*     -----------------------
+*
+      if (kount.eq.0) then
+*
+      do i=1,sizebus
+         busent(i)=0.0
+      end do     
+      do 20 pid=1,enttop
+         if (entpar(pid,3).gt.0) then
+            do gid=1,geotop
+               if (entnm(pid).eq.geonm(gid,1)) then
+                  do mul=1,geopar(gid,3)
+                     offp  =entpar(pid,1)+(mul-1)*fni
+                     offg  =geopar(gid,1)+(mul-1)*ldni*ldnj+(j-1)*fni
+                     maxind=geopar(gid,1)+(mul-1)*ldni*ldnj+ldni*ldnj-1
+                     do i=1,fni
+                        busent(offp+i-1)=geofld(min(offg+i-1,maxind))
+                     end do
+                  end do
+                  goto 20
+               endif
+            end do
+            print*, 'PROBLEM WITH ',entnm(pid)
+            stop
+         endif
+ 20   continue
+*
+      endif
+*
+*   * Prepare slice j
+*
+      call tranche2 (busdyn( umoins) ,um   ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn( vmoins) ,vm   ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn( tmoins) ,tm   ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn(humoins) ,esm  ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn( pmoins) ,psm  ,j,nis,njs,  1,nis,  1,32)
+
+      call tranche2 (busdyn(  uplus) ,up   ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn(  vplus) ,vp   ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn(  tplus) ,tp   ,j,nis,njs,nks,nis,nks,32)
+      call tranche2 (busdyn( huplus) ,esp  ,j,nis,njs,nks,nis,nks,32)
+*
+      if((qcmoins.gt.0).and.(ipqc.gt.0)) call tranche2(busdyn(qcmoins),
+     $                        clm(1,1,1,ipqc),j,nis,njs,nks,nis,nks,32)
+      if((qcplus .gt.0).and.(ipqc.gt.0)) call tranche2(busdyn( qcplus),
+     $                        clp(1,1,1,ipqc),j,nis,njs,nks,nis,nks,32)
+      if((qrmoins.gt.0).and.(ipqr.gt.0)) call tranche2(busdyn(qrmoins),
+     $                        clm(1,1,1,ipqr),j,nis,njs,nks,nis,nks,32)
+      if((qrplus .gt.0).and.(ipqr.gt.0)) call tranche2(busdyn( qrplus),
+     $                        clp(1,1,1,ipqr),j,nis,njs,nks,nis,nks,32)
+      if((qimoins.gt.0).and.(ipqi.gt.0)) call tranche2(busdyn(qimoins),
+     $                        clm(1,1,1,ipqi),j,nis,njs,nks,nis,nks,32)
+      if((qiplus .gt.0).and.(ipqi.gt.0)) call tranche2(busdyn( qiplus),
+     $                        clp(1,1,1,ipqi),j,nis,njs,nks,nis,nks,32)
+      if((qgmoins.gt.0).and.(ipqg.gt.0)) call tranche2(busdyn(qgmoins),
+     $                        clm(1,1,1,ipqg),j,nis,njs,nks,nis,nks,32)
+      if((qgplus .gt.0).and.(ipqg.gt.0)) call tranche2(busdyn( qgplus),
+     $                        clp(1,1,1,ipqg),j,nis,njs,nks,nis,nks,32)
+      if((enplus .gt.0).and.(ipen.gt.0)) call tranche2(busdyn(enplus),
+     $                        clp(1,1,1,ipen),j,nis,njs,nks,nis,nks,32)
+*
+*     Vertical motion (in pa/s)
+      do k=1,nks
+      do i=1,nis
+         busdyn(sigm +(k-1)*nis+i-1)  = prt(i,j,k)/prt(i,j,nks)
+         busdyn(omegap+(k-1)*nis+i-1) = -swp(i,j,k)*
+     $       prt(i,j,k)*grav_8/(rgasd_8*tp(i,j,k)*(1.+0.608*esp(i,j,k)))
+      end do
+      end do
+*
+      call getindx2 ('FCPOID',  'D',ifcp,   lght,init0)
+      if (init0.eq.1) then
+         do i=1,nis
+            busdyn(ifcp+i-1) = 1.
+         end do
+      endif
+      call getindx2 ('FCPMSK',  'D',ifcp,   lght,init0)
+      if (init0.eq.1) then
+         do i=1,nis
+            busdyn(ifcp+i-1) = -2.
+         end do
+      endif
+*
+*     Grid mesh
+      do i=1,nis
+         busdyn(dxdy   +i-1)  = area(i,j)
+         busdyn(pplus  +i-1)  = prt(i,j,nks)
+         busdyn(eponmod+i-1)  = 1.
+      end do
+*
+*   * Physics package : Radiation, Boundary Layer, Vertical Diffusion
+*                       Gravity Wave Drag and Convection.
+*
+      busvol = 0.
+c      do i=1,dyntop
+c         nkk=1
+c         if (dynpar(i,2).gt.nis) nkk=nks
+c         call statfld ( busdyn(dynpar(i,1)),dynnm(i), j,'physl', 
+c     $                   .true., 1,nis,1,1,nkk, 1,1,1,nis,1,nkk)
+c      end do
+**********************************************************************
+      call phyexe1 (busent ,busdyn ,busper ,busvol ,
+     $              sizebus,sizdbus,sizpbus,sizvbus,
+     $              dt,j,kount,icpu,nis,nks)
+**********************************************************************
+*
+*     Transfer user asked physics output fields onto outbus.
+*
+      do 50 i=1,phyotop
+*
+         if (phyonm(i,1).eq.'SCREEN') then
+            do ii=1,nis
+             outbus(phyopar(i,1)+0*nis*njs+(j-1)*nis+ii-1)= 1./knams_8 *
+     $       (up(ii,j,nks)  + busvol(udifv+(nks-1)*nis+ii-1) * 2.0*grdt)
+             outbus(phyopar(i,1)+1*nis*njs+(j-1)*nis+ii-1)= 1./knams_8 *
+     $       (vp(ii,j,nks)  + busvol(vdifv+(nks-1)*nis+ii-1) * 2.0*grdt)
+             outbus(phyopar(i,1)+2*nis*njs+(j-1)*nis+ii-1)= -tcdk_8 +
+     $       tp(ii,j,nks)  + busvol(tdifv+(nks-1)*nis+ii-1) * 2.0*grdt
+             outbus(phyopar(i,1)+3*nis*njs+(j-1)*nis+ii-1)=
+     $       esp(ii,j,nks) + busvol(qdifv+(nks-1)*nis+ii-1) * 2.0*grdt
+            end do
+            goto 50
+         endif
+*
+         if (phyonm(i,1).eq.'PCPN') then
+            do ii=1,nis
+             outbus(phyopar(i,1)+0*nis*njs+(j-1)*nis+ii-1) =
+     $              busper(alc+ii-1) + busper(als+ii-1) +
+     $              busper(asc+ii-1) + busper(ass+ii-1)
+             outbus(phyopar(i,1)+1*nis*njs+(j-1)*nis+ii-1) =
+     $              busper(alc+ii-1) + busper(asc+ii-1)
+             outbus(phyopar(i,1)+2*nis*njs+(j-1)*nis+ii-1) =
+     $              busper(tlc+ii-1) + busper(tls+ii-1) +
+     $              busper(tsc+ii-1) + busper(tss+ii-1)
+             outbus(phyopar(i,1)+3*nis*njs+(j-1)*nis+ii-1) =
+     $              busper(tsc+ii-1) + busper(tss+ii-1)
+            end do
+            goto 50
+         endif
+*
+         if (phyonm(i,1).eq.'MIXED') then
+            do k =1,nks
+            do ii=1,nis
+             outbus(phyopar(i,1)+0*nis*njs*nks+(k-1)*nis*njs+
+     $              (j-1)*nis+ii-1)=busvol(fice+(k-1)*nis+ii-1)
+             outbus(phyopar(i,1)+1*nis*njs*nks+(k-1)*nis*njs+
+     $              (j-1)*nis+ii-1)=busvol(fice+(k-1)*nis+ii-1) *
+     $              clp(ii,j,k,ipqc)
+             outbus(phyopar(i,1)+2*nis*njs*nks+(k-1)*nis*njs+
+     $              (j-1)*nis+ii-1)=(1 -
+     $              busvol(fice+(k-1)*nis+ii-1))*clp(ii,j,k,ipqc)
+            end do
+            end do
+            goto 50
+         endif
+*     
+         if (phyonm(i,3).eq.'P') then
+*
+            do im=1,phyopar(i,4)
+            do k =1,phyopar(i,3)
+            do ii=1,nis
+               offbo=phyopar(i,1)+(im-1)*nis*njs*phyopar(i,3)
+               offbp=phyopar(i,6)+(im-1)*nis*phyopar(i,3)
+               outbus(offbo+(k-1)*nis*njs+(j-1)*nis+ii-1) =
+     $         busper(offbp+(k-1)*nis+ii-1)
+            end do
+            end do
+            end do
+*
+         endif
+*
+         if (phyonm(i,3).eq.'V') then
+*
+            do im=1,phyopar(i,4)
+            do k =1,phyopar(i,3)
+            do ii=1,nis
+               offbo=phyopar(i,1)+(im-1)*nis*njs*phyopar(i,3)
+               offbv=phyopar(i,6)+(im-1)*nis*phyopar(i,3)
+               outbus(offbo+(k-1)*nis*njs+(j-1)*nis+ii-1) =
+     $         busvol(offbv+(k-1)*nis+ii-1)
+            end do
+            end do
+            end do
+*
+         endif
+*
+         if (phyonm(i,3).eq.'D') then
+            do im=1,phyopar(i,4)
+            do k =1,phyopar(i,3)
+            do ii=1,nis
+               offbo=phyopar(i,1)+(im-1)*nis*njs*phyopar(i,3)
+               offbd=phyopar(i,6)+(im-1)*nis*phyopar(i,3)
+               outbus(offbo+(k-1)*nis*njs+(j-1)*nis+ii-1) =
+     $         busdyn(offbd+(k-1)*nis+ii-1)
+            end do
+            end do
+            end do
+*
+         endif
+*
+         if (kount.eq.0) then
+         if (phyonm(i,3).eq.'E') then
+*
+            do im=1,phyopar(i,4)
+            do k =1,phyopar(i,3)
+            do ii=1,nis
+               offbo=phyopar(i,1)+(im-1)*nis*njs*phyopar(i,3)
+               offbe=phyopar(i,6)+(im-1)*nis*phyopar(i,3)
+               outbus(offbo+(k-1)*nis*njs+(j-1)*nis+ii-1) =
+     $         busent(offbe+(k-1)*nis+ii-1)
+            end do
+            end do
+            end do
+*
+         endif
+         endif
+*
+ 50   continue
+*
+      do i=1,phyotopc
+         if (phyonmc(i,3).eq.'P') then
+*
+            do im=1,phyoparc(i,4)
+            do k =1,phyoparc(i,3)
+            do ii=1,nis
+               offbo=phyoparc(i,1)+(im-1)*nis*njs*phyoparc(i,3)
+               offbp=phyoparc(i,6)+(im-1)*nis*phyoparc(i,3)
+               outbusc(offbo+(k-1)*nis*njs+(j-1)*nis+ii-1) =
+     $         busper(offbp+(k-1)*nis+ii-1)
+            end do
+            end do
+            end do
+*
+         endif
+      end do
+*
+      if (kount.gt.0) then
+      do i=1,nis*nks
+         busvol(udifv+i-1) = busvol(udifv+i-1) + busper(ufcp+i-1)
+         busvol(vdifv+i-1) = busvol(vdifv+i-1) + busper(vfcp+i-1)
+      end do
+      call tranche2 (busvol(trad)   ,ttrad   ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(udifv)  ,tudifv  ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(vdifv)  ,tvdifv  ,j,nis,njs,nks,nis,nks,23)
+      if (wdifv.gt.0) 
+     $call tranche2 (busvol(wdifv)  ,twdifv  ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(tdifv)  ,ttdifv  ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(qdifv)  ,thudifv ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(ugwd)   ,tugwd   ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(vgwd)   ,tvgwd   ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(tcond)  ,ttcond  ,j,nis,njs,nks,nis,nks,23)
+      call tranche2 (busvol(hucond) ,thucond ,j,nis,njs,nks,nis,nks,23)
+      if((qccond.gt.0).and.(ipqc.gt.0))
+     $   call tranche2 (busvol(qccond) ,cltend(1,1,1,ipqc)  ,j,
+     $                                 nis,njs,nks,nis,nks,23)
+      if((qrcond.gt.0).and.(ipqr.gt.0))
+     $   call tranche2 (busvol(qrcond) ,cltend(1,1,1,ipqr)  ,j,
+     $                                 nis,njs,nks,nis,nks,23)
+      if((qicond.gt.0).and.(ipqi.gt.0))
+     $   call tranche2 (busvol(qicond) ,cltend(1,1,1,ipqi)  ,j,
+     $                                 nis,njs,nks,nis,nks,23)
+      if((qgcond.gt.0).and.(ipqg.gt.0))
+     $   call tranche2 (busvol(qgcond) ,cltend(1,1,1,ipqg)  ,j,
+     $                                 nis,njs,nks,nis,nks,23)
+      if((edifv.gt.0) .and.(ipen.gt.0))
+     $   call tranche2 (busvol(edifv)  ,cltend(1,1,1,ipen)  ,j,
+     $                                 nis,njs,nks,nis,nks,23)
+*
+      endif
+*
+      if (.not.incore) then
+!$omp critical
+         xnerr = write_db_file (un_gbusper,j,1)
+         xnerr = write_db_file (un_gbusper,busper,sizpbus)
+!$omp end critical
+      endif
+*
+      go to 400
+*
+  500 continue
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+
+
+
+

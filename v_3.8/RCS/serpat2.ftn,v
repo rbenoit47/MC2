@@ -1,0 +1,112 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R SERPAT2 - TRANSFERER DE POINTS A TEMPS
+*
+      SUBROUTINE SERPAT2 ( ST , VT , T , NT , NK , 
+     +                     NSURF2, NPROF2, NSTAT2 )
+#include "impnone.cdk"
+      INTEGER T,NT,NK,NSURF2,NPROF2,NSTAT2
+      REAL ST(NT,NSURF2,NSTAT2),VT(NK,NT,NPROF2,NSTAT2)
+*
+*Author
+*          R. Benoit
+*
+*Revision
+* 001      V.Alex.(Feb 87)
+*                   Documentation
+* 002      B. Bilodeau (Jul 2002) - Optimization
+*
+*Object
+*          to reorder the time-series with respect to time
+*          instead of station number
+*
+*Arguments
+*
+*          - Output -
+* ST       table of surface variables ordered in time
+* VT       table of profile variables in time
+*
+*          - Input -
+* T        time-pointer referring to timestep
+* NT       number of timesteps
+* NK       vertical dimension
+* NSURF2   number of surface variables
+* NPROF2   number of profile variables
+* NSTAT2   number of stations
+*
+*
+*IMPLICITES
+*
+#include "sercmdk.cdk"
+*
+*MODULE
+      EXTERNAL SERDATA
+*
+**
+      INTEGER K,L,M
+*
+      IF (NSTAT .LE. 0) THEN
+        CALL SERDATA
+        RETURN
+      ENDIF
+*
+      IF (.NOT. INITOK) THEN
+        RETURN
+      ENDIF
+*
+      DO 3 L=1,NSTAT
+*
+      DO 1 M=1,NSURF
+*
+    1    ST(T,M,L) = SERS(L,M)
+*
+      DO 2 M=1,NPROF
+         DO 2 K=1,NK
+*
+    2       VT(K,T,M,L) = SERP(K,L,M)
+*
+    3 CONTINUE
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

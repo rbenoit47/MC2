@@ -1,0 +1,21 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*** s/r mc2stop
+*
+      subroutine mc2stop (errcode)
+      implicit none
+*
+      integer errcode
+      include 'mpif.h'
+      integer errcode_,err
+*
+      call MPI_ALLREDUCE (errcode,errcode_,1,
+     $                    MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,err)
+      call MPI_Barrier(MPI_comm_world, err)
+*      
+      if (errcode_ < 0) then
+         call MPI_FINALIZE(err)
+         stop
+      endif
+*
+      return
+      end

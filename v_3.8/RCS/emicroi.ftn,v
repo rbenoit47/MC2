@@ -1,0 +1,578 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***s/p emicroi -- explicit microphysics for cold cloud (warm + cold)
+*
+#include "phy_macros_f.h"
+      subroutine emicroi ( W,T,Q,QC,QR,QI,PS,TM,QM,QCM,QRM,QIM,PSM ,
+     $                     SATUCO,S,SR,IR,ZSTE,ZSQE,ZSQCE,ZSQRE,ZSQIE,
+     $                     DT,NI,N,NK,J,KOUNT )
+#include "impnone.cdk"
+*
+      logical SATUCO
+      integer NI,N,NK,J,KOUNT
+      real W(NI,NK),T(NI,NK),Q(NI,NK),QC(NI,NK),QR(NI,NK),QI(NI,NK)
+      real TM(NI,NK),QM(NI,NK),QCM(NI,NK),QRM(NI,NK),QIM(NI,NK)
+      real ZSTE(NI,NK),ZSQE(NI,NK),ZSQCE(NI,NK),ZSQRE(NI,NK)
+      real ZSQIE(NI,NK),PS(NI),PSM(NI),SR(NI),IR(NI),S(NI,NK)
+      real DT
+*
+*Author
+*          Kong,Yau (McGill University)         Feb 1995
+*
+*Revision
+*
+*Object
+*
+*Arguments
+*
+*          - Input -
+* W        vertical velocity
+* T        virtual temperature
+* Q        specific humidity
+* QC       cloud mixing ratio
+* QR       rain  mixing ratio
+* QI       ice & snow mixing ratio
+* PS       surface pressure
+* TM       virtual temperature at (t-dt)
+* QM       specific humidity   at (t-dt)
+* QCM      cloud mixing ratio  at (t-dt)
+* QRM      rain  mixing ratio  at (t-dt)
+* QIM      ice & snow mixing ratio  at (t-dt)
+* PSM      surface pressure    at (t-dt)
+* SATUCO   .TRUE. to have water/ice phase for saturation
+*          .FALSE. to have water phase only for saturation
+* S        sigma values
+*
+*          - Output -
+* SR       liquid precipitation rate (rain)
+* IR       solid  precipitation rate (snow)
+* ZSTE     tendency on virtual temperature
+* ZSQE     tendency on specific humidity
+* ZSQCE    tendency on cloud      mixing ratio
+* ZSQRE    tendency on rain       mixing ratio
+* ZSQIE    tendency on ice & snow mixing ratio
+*
+*          - Input -
+* DT       timestep
+* NI       1st horizontal dimension
+* N        NI or NIxNJ (first dimension of T, Q etc)
+* NK       vertical dimension
+* J        index of the row
+* KOUNT    number of timestep
+*
+*  NOTE
+*       Two parameters (nsplit & nspliti) calculated from physlb8.ftn
+*       and transferred via sedipara.cdk are the splitting small time
+*       step numbers used in the sedimentation terms of rain and ice.
+*       The determination of 'nspliti' also depends on the vertical
+*       levelling (Gal-Chen). If higher vertical resolution would be
+*       used, the small time step should also decrease, and in turn
+*       'nspliti' increase [see the documentation] -- This is already
+*       done automatically in "physlb8.ftn"
+*
+**
+      logical log1,log2,log3,log4      
+      integer  i,k,niter,ll,ll0
+      real fre,ckice,AC, EPSQC,EPSQR,EPS, VDmax
+      real k1,k2,k3,ck1,ck2,ck3,ck4,ck5,ck6,ck7,ck8,ck9
+      real X,D,DEL,ER,ES,LCP,LFP,LSP,DT2
+      real cloudnc,rqr,rqr2,rqr4,esi,si,ani,di
+      real source,sink,sour,ratio
+      real ANUvi,AHNUci,AHNUri,AVDvi,ACLci,AFRri,AMLir,AMVDiv
+      real dei,ani0,ck0,ck01,ck02,qvs0,vr,vi0,de1,lamda,lamdai,si0
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+     AUTOMATIC ( A1   , REAL , (nk   ))
+     AUTOMATIC ( A2   , REAL , (nk   ))
+     AUTOMATIC ( B1   , REAL , (nk   ))
+     AUTOMATIC ( DE   , REAL , (ni,nk))
+     AUTOMATIC ( VT   , REAL , (ni,nk))
+     AUTOMATIC ( VI   , REAL , (ni,nk))
+     AUTOMATIC ( DP   , REAL , (ni,nk))
+     AUTOMATIC ( QS   , REAL , (ni,nk))
+     AUTOMATIC ( QSW  , REAL , (ni,nk))
+     AUTOMATIC ( QSI  , REAL , (ni,nk))
+*
+************************************************************************
+*
+      parameter(EPSQC=1e-12)
+      parameter(EPSQR=1e-6 )
+      parameter(EPS  =1e-32)
+      parameter(k1 = 0.001 )
+      parameter(k2 = 0.0005)
+      parameter(k3 = 2.54  )
+      parameter(cloudnc=3e8)
+      parameter(dei=900.0, ani0=1e3)
+*
+#include "consphy.cdk"
+#include "dintern.cdk"
+#include "sedipara.cdk"
+#include "fintern.cdk"
+*
+      LCP=CHLC/CPD
+      LFP=CHLF/CPD
+      LSP=LCP+LFP
+      dt2=DT
+      ck0=1./3.
+      ck01=0.25*ck0
+      ck02=1.0+ck01
+      ck1=dt2*k1
+      ck2=k2
+      ck3=dt2*k3
+      ck4=14.0873
+      ck5=4098.170*LCP
+      ck6=5806.485*LSP
+      ck7=1.0/(dt2*GRAV)
+      ck8=1./(PI*dei*ani0)**ck0
+      ck9=3.1752e-11*dt2/GRAV
+*
+*
+*
+***   copie des champs T, Q, QC, QR et QI
+      do k=1,nk
+         do i=1,ni
+            ZSTE(i,k)   = T(i,k) 
+            ZSQE(i,k)   = Q(i,k)
+            ZSQCE(i,k)  = QC(i,k)
+            ZSQRE(i,k)  = QR(i,k)
+            ZSQIE(i,k)  = QI(i,k)
+         end do
+      end do
+*
+c   prepare PS, T, and Q field
+      do 105 i=1,ni
+         PSM(i)= 0.5*(PSM(i)+PS(i))
+105   continue
+      do 150 k=1,nk
+         do 115 i=1,ni
+            TM(i,k)= 0.5*(TM(i,k)+T(i,k))
+            QM(i,k)= 0.5*(QM(i,k)+Q(i,k))
+            QCM(i,k)=0.5*(QCM(i,k)+QC(i,k))
+            QRM(i,k)=0.5*(QRM(i,k)+QR(i,k))
+            QIM(i,k)=0.5*(QIM(i,k)+QI(i,k))
+ 115     continue
+*
+         do 120 i=1,ni
+            DE(i,k)=S(i,k)*PSM(i)/(RGASD*TM(i,k))
+ 120     continue
+         do 130 i=1,ni
+            VT(i,k)=ck4/DE(i,k)**0.375
+            VI(i,k)=0.0
+*
+c   Here, VI must be zeroed, since it will not be fully assigned later.
+*
+ 130     continue
+*
+ 150  continue
+*
+      do 160 k=1,nk
+      do 160 i=1,ni
+         if(QR(i,k).lt.EPSQC) then
+            Q(i,k)= Q(i,k)-QR(i,k)
+            QR(i,k)= 0.0
+         endif
+         if(QI(i,k).lt.EPSQC) then
+            Q(i,k)= Q(i,k)-QI(i,k)
+            QI(i,k)= 0.0
+         endif
+         if(QRM(i,k).lt.EPSQC) then
+            QM(i,k)= QM(i,k)-QRM(i,k)
+            QRM(i,k)= 0.0
+         endif
+         if(QIM(i,k).lt.EPSQC) then
+            QM(i,k)= QM(i,k)-QIM(i,k)
+            QIM(i,k)= 0.0
+         endif
+ 160  continue
+*
+c   calculate DP for sedimentation term
+*
+      do 170 k=2,nk-1
+      do 170 i=1,ni
+         DP(i,k)=PSM(i)*(S(i,k+1)-S(i,k-1))/2.0
+ 170  continue
+      do 180 i=1,ni
+         DP(i,1)=PSM(i)*(S(i,2)-S(i,1))
+         DP(i,nk)=PSM(i)*(S(i,nk)-S(i,nk-1))
+ 180  continue
+*
+c   saturate mixing ratio: 	QSW   vs. liquid water
+c                               QS    vs. ice surface  at (*)
+c                               QSI   vs. ice surface
+      do 190 k=1,nk
+      do 190 i=1,ni
+         QSW(i,k)= FOQSA(TM(i,k),PSM(i)*S(i,k))
+         QS(i,k) = FOQST(T(i,k),  PS(i)*S(i,k))
+         QSI(i,k)= FOQST(TM(i,k),PSM(i)*S(i,k))
+ 190  continue
+*
+*
+c --PART I: Cold Microphysics Processes
+*
+c   calculating source and sink terms
+      do 800 k=2,nk
+      do 800 i=1,ni
+         de1=sqrt(DE(i,k))
+         qvs0=FOQSA(TRPL,PSM(i)*S(i,k))
+         log1= QSW(i,k).gt.QM(i,k).and.(QCM(i,k)+QIM(i,k)).lt.EPSQC.and.
+     $         QRM(i,k).lt.EPSQR
+         log2= QIM(i,k).lt.EPSQC
+         log3= TM(i,k).lt.TRPL.and.log1
+         log4= TM(i,k).ge.TRPL.and.log2
+         if(log3.or.log4) go to 790
+         if(TM(i,k).gt.233.16) go to 410
+         QCM(i,k)= 0.0
+         QRM(i,k)= 0.0
+ 410     continue
+         if(QRM(i,k).lt.EPSQR) go to 420
+         rqr=DE(i,k)*QRM(i,k)
+         rqr2= sqrt(rqr)
+         rqr4= sqrt(rqr2)
+         lamda=2.375e-3*rqr4
+         vr=ck4*sqrt(rqr4)/de1
+ 420     continue
+         if(TM(i,k).lt.TRPL) go to 450
+*
+         QIM(i,k) = 0.0
+         AMLir=QI(i,k)
+         AMVDiv=0.0
+*     
+         ANUvi= 0.0
+         AHNUci= 0.0
+         AVDvi= 0.0
+         ACLci= 0.0
+         AFRri= 0.0
+         AHNUri= 0.0
+         go to 600
+ 450     continue
+         AMLir= 0.0
+         AMVDiv=0.0
+*     
+c   T < To
+         esi= QSI(i,k)*PSM(i)*S(i,k)/62.2
+         si= QM(i,k)/QSI(i,k)
+         si0=QSW(i,k)/QSI(i,k)
+*MD Le rapport "si= QM(i,k)/QSI(i,k)" peut etre ici assez grand
+*MD et faire saute l'evaluation de "exp(12.96*(si-1.0)-0.639)"
+         ani=amax1(1e3*exp(12.96*(si-1.0)-0.639),ani0)
+         if(TM(i,k).le.233.16) then
+*     
+c   T<=-40 (homogeneous freezing)
+            AHNUci= QC(i,k)
+            AHNUri= QR(i,k)
+         else
+            AHNUci= 0.0
+            AHNUri= 0.0
+         endif
+         if(QM(i,k).lt.QSW(i,k).or.TM(i,k).gt.268.16) go to 460
+         ANUvi= ck9*(W(i,k-1)+W(i,k+1))*(TM(i,k-1)-TM(i,k+1))*
+     ]        ani*si0*(5806.485/(TM(i,k)-7.66)**2-4098.171/
+     ]        (TM(i,k)-35.86)**2)/DP(i,k)/DE(i,k)
+         if(ANUvi.gt.0.0) go to 470
+ 460     ANUvi= 0.0
+ 470     continue
+         if(QIM(i,k).lt.EPSQC) go to 550
+         lamdai=(DE(i,k)/(PI*dei*ani))**ck0
+         VI(i,k)= 7.3455*lamdai**0.25/de1
+         vi0=VI(i,k)*QIM(i,k)**ck01
+         lamdai=lamdai*QIM(i,k)**ck0
+         di= 1.8171*lamdai
+         fre=1.0+217.7331*lamdai**0.625/sqrt(de1)
+         ckice= ani*dt2/DE(i,k)
+         if(si.le.1.0) go to 530
+         if(QCM(i,k).lt.1e-5.or.di.lt.2e-4) go to 530
+         ACLci=10.6508*ckice*de1*QCM(i,k)*lamdai**2.25
+         go to 540
+ 530     ACLci= 0.0
+ 540     AVDvi=ckice*(si-1.)*fre*lamdai/(1.7276e6+0.9161e7/esi)-ACLci/
+     ]        (9.0929+48.2164/esi)
+         if(AVDvi.lt.0.0.and.si.gt.1.) AVDvi=0.0
+         VDmax=(Q(i,k)-QS(i,k))/(1.0+ck6*QS(i,k)/(T(i,k)-7.66)**2)
+         if(si.ge.1.0) then
+            AVDvi=amin1(AVDvi,VDmax)
+         else
+            AVDvi=amax1(AVDvi,VDmax)
+         endif
+         go to 560
+ 550     ACLci=0.0
+         AVDvi=0.0
+         ani=0.0
+         di=0.0
+         vi0=0.0
+ 560     if(QIM(i,k).lt.EPSQC.or.QRM(i,k).lt.EPSQR) go to 580
+         AFRri= PI*ckice*rqr*abs(vr-vi0)*(5.*lamda*lamda+
+     ]        2.*lamda*lamdai+0.5*lamdai*lamdai)
+         AFRri=amin1(AFRri,QR(i,k))
+         go to 600
+ 580     AFRri= 0.0
+ 600     continue
+*     
+c     iterating the sink terms for each mixing ratio quantity
+*     
+         do 750 niter=1,2
+*
+c  (1) for Qi
+            source=QI(i,k)+ANUvi+AHNUci+dim(AVDvi,0.0)+
+     $             ACLci+AHNUri+AFRri
+            sink=AMLir+AMVDiv+dim(-AVDvi,0.0)
+            sour=amax1(source,0.0)
+            if(sink.le.sour) go to 650
+            ratio=sour/sink
+            AMLir=ratio*AMLir
+            AMVDiv=ratio*AMVDiv
+            if(AVDvi.ge.0.0) go to 650
+            AVDvi=ratio*AVDvi
+ 650        continue
+*     
+c     (2) for Qr
+            source=QR(i,k)+AMLir
+            sink=AHNUri+AFRri
+            sour=amax1(source,0.0)
+            if(sink.le.sour) go to 690
+            ratio=sour/sink
+            AHNUri=ratio*AHNUri
+            AFRri=ratio*AFRri
+ 690        continue
+*
+c  (3) for Qc
+            source=QC(i,k)
+            sink=AHNUci+ACLci
+            sour=amax1(source,0.0)
+            if(sink.le.sour) go to 710
+            ratio=sour/sink
+            AHNUci=ratio*AHNUci
+            ACLci=ratio*ACLci
+ 710        continue
+*
+c  (4) for Qv
+            source=Q(i,k)+dim(-AVDvi,0.0)+AMVDiv
+            sink=ANUvi+dim(AVDvi,0.0)
+            sour=amax1(source,0.0)
+            if(sink.le.sour) go to 730
+            ratio=sour/sink
+            ANUvi=ratio*ANUvi
+            if(AVDvi.le.0.0) go to 730
+            AVDvi=ratio*AVDvi
+ 730        continue
+*     
+ 750     continue
+*     
+cc   adjusting all related quantities
+         Q(i,k)= Q(i,k)-ANUvi-AVDvi+AMVDiv
+         QC(i,k)= QC(i,k)-AHNUci-ACLci
+         QR(i,k)= QR(i,k)+AMLir-AHNUri-AFRri
+         QI(i,k)= QI(i,k)+ANUvi+AHNUci+AVDvi+ACLci+AHNUri+AFRri
+     $                 -AMLir-AMVDiv
+*
+         T(i,k)= T(i,k)+LFP*(AHNUci+AHNUri+AFRri+ACLci-AMLir)+
+     $           LSP*(ANUvi+AVDvi)-LCP*AMVDiv
+*
+c   total deposition and sublimation
+c      tdep=tdep+DE(i,k)*(ANUvi+dim(AVDvi,0.0))
+c      tsub=tsub+DE(i,k)*dim(-AVDvi,0.0)
+*
+c   positive adjustment for all new hydrometeor fields
+         if(QC(i,k).lt.EPSQC) then
+            Q(i,k)= Q(i,k)-QC(i,k)
+            QC(i,k)= 0.0
+         endif
+         if(QR(i,k).lt.EPSQC) then
+            Q(i,k)= Q(i,k)-QR(i,k)
+            QR(i,k)= 0.0
+         endif
+         if(QI(i,k).lt.EPSQC) then
+            Q(i,k)= Q(i,k)-QI(i,k)
+            QI(i,k)= 0.0
+         endif
+         Q(i,k)=amax1(Q(i,k),0.0)
+*     
+         go to 800
+ 790     continue
+ 800  continue
+*
+c   end of ice phase microphysics
+*
+c --PART II: Warm Microphysics Processes
+*
+c   re-calculate QS with new T  (vs. liquid water here!)
+      do 920 k=1,nk
+      do 920 i=1,ni
+         QS(i,k) = FOQSA(T(i,k),  PS(i)*S(i,k))
+ 920  continue
+*     
+c   autoconversion & coalescence
+*
+      do 940 k=2,nk
+      do 940 i=1,ni
+         if(QCM(i,k).le.EPSQC.and.QRM(i,k).lt.EPSQR) go to 930
+         if(QRM(i,k).lt.EPSQR) then
+            AC= ck1*dim(QCM(i,k), ck2)
+         else
+            AC= ck1*dim(QCM(i,k), ck2)+ck3*QCM(i,k)*(DE(i,k)*QRM(i,k))**
+     $           0.875/sqrt(DE(i,k))
+         endif
+         if(AC.gt.QC(i,k)) then
+            QR(i,k)= QR(i,k)+QC(i,k)
+            QC(i,k)= 0.0
+         else
+            QC(i,k)= QC(i,k)- AC
+            QR(i,k)= QR(i,k)+ AC
+         endif
+ 930     continue
+ 940  continue
+*
+c   microphysical adjustment for condensation/evaporation
+*
+      do 1060 k=1,nk
+      do 1060 i=1,ni
+         X= Q(i,k)- QS(i,k)
+         if(X.le.0.0.and.QC(i,k).le.0.0.and.QR(i,k).le.0.0) go to 1050
+         X= X/(1.0+ ck5*QS(i,k)/(T(i,k)-35.86)**2)
+         if(X.lt.(-QC(i,k))) go to 990
+         T(i,k)= T(i,k)+ LCP*X
+         Q(i,k)= Q(i,k)- X
+         QC(i,k)= QC(i,k)+ X
+         go to 1050
+ 990     if(QR(i,k).gt.EPSQC) go to 1010
+ 1000    D= 0.0
+         go to 1040
+ 1010    if(QM(i,k).ge.QSW(i,k)) go to 1000
+*     
+c   ES = P*QS/(0.622*100)  with unit of hPa (mb)
+*
+         ES= QSW(i,k)*PSM(i)*S(i,k)/62.2
+         ER= dt2*(1.0-QM(i,k)/QSW(i,k))*(1.0+11.69*(DE(i,k)*QRM(i,k))**
+     $        0.1875)*(DE(i,k)*QRM(i,k))**0.5/(2.02e4+1.55e5/ES)/DE(i,k)
+         if(QR(i,k).gt.ER) go to 1020
+         DEL= -QR(i,k)
+         go to 1030
+ 1020    DEL= -ER
+ 1030    D= amax1(X+QC(i,k), DEL)
+ 1040    X= D - QC(i,k)
+         QR(i,k)= QR(i,k)+ D
+         QC(i,k)= 0.0
+         T(i,k)= T(i,k) + LCP*X
+         Q(i,k)= Q(i,k) - X
+ 1050    continue
+ 1060 continue
+*
+c      finish the warm microphysics processes
+*
+c   sedimentation term for RI & RL
+      do 1200 i=1,ni
+         IR(i)=0.0
+         SR(i)=0.0
+         do 1120 k=1,nk
+            A1(k)=ci6*DE(i,k)*VI(i,k)
+            A2(k)=cr6*DE(i,k)*VT(i,k)
+ 1120    continue
+         do 1190 ll=1,nspliti
+*
+c   solid (snow) precipitation terms
+            do 1130 k=1,nk
+               B1(k)=A1(k)*QI(i,k)**ck02
+ 1130       continue
+            do 1140 k=2,nk
+               QI(i,k)=dim(QI(i,k)+(B1(k-1)-B1(k))/DP(i,k), EPS)
+ 1140       continue
+            IR(i)=B1(nk)+IR(i)
+*
+c   melting sub-adjusting caused by sedimentation
+            do 1150 k=2,nk
+               if(T(i,k).gt.TRPL) then
+                  T(i,k)=T(i,k)-LFP*QI(i,k)
+                  QR(i,k)=QR(i,k)+QI(i,k)
+                  QI(i,k)=0.0
+               endif
+ 1150       continue
+*
+c   rain-drop sedimentation
+            do 1180 ll0=1,nsplit
+               do 1160 k=1,nk
+ 1160             B1(k)=A2(k)*QR(i,k)**1.125
+                  do 1170 k=2,nk
+                     QR(i,k)=dim(QR(i,k)+(B1(k-1)-B1(k))/DP(i,k), EPS)
+ 1170             continue
+                  SR(i)=B1(nk)+SR(i)
+ 1180          continue
+*     
+ 1190       continue
+            IR(i)=ck7*IR(i)
+            SR(i)=ck7*SR(i)
+ 1200    continue
+*
+c   finish the microphysics adjustment
+*
+*
+c   positive adjustment for Q
+      do 1350 k=1,nk
+      do 1350 i=1,ni
+         Q(i,k)= amax1(Q(i,k), 0.0)
+1350  continue
+*
+***   calcul des tendances pour les champs T, Q, QC, QR et QI
+***   retour aux champs de depart  
+      do k=1,nk
+         do i=1,ni
+            ZSTE(i,k) = (T(i,k) - ZSTE(i,k))/DT
+            ZSQE(i,k) = (Q(i,k) - ZSQE(i,k))/DT
+            ZSQCE(i,k)= (QC(i,k)-ZSQCE(i,k))/DT
+            ZSQRE(i,k)= (QR(i,k)-ZSQRE(i,k))/DT
+            ZSQIE(i,k)= (QI(i,k)-ZSQIE(i,k))/DT
+            T(i,k) = T(i,k) -  ZSTE (i,k)*DT
+            Q(i,k) = Q(i,k) -  ZSQE (i,k)*DT
+            QC(i,k)= QC(i,k)- ZSQCE (i,k)*DT
+            QR(i,k)= QR(i,k)- ZSQRE (i,k)*DT
+            QI(i,k)= QI(i,k)- ZSQIE (i,k)*DT
+         end do
+      end do
+*
+***
+*
+      return
+      end
+
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

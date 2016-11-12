@@ -1,0 +1,36 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r rd3dfld
+*
+      subroutine rd3dfld (fld,work,iun,nis,njs,nks,ni,nj,nk)
+      implicit none
+*
+      integer iun,nis,njs,nks,ni,nj,nk
+      real fld(nis,njs,nks),work(ni,nj,nk)
+*
+*OBJECT
+*     fill vector fld(nis,njs,nks)
+*
+*METHOD
+*     first read in unit iun with vector work(ni,nj,nk)
+*
+*EXTERNALS
+*
+*AUTHOR    Yves Chartier                   Nov   1992
+*
+*HISTORY
+*
+**
+      integer i,j,k
+c--------------------------------------------------------------------
+c
+      read (iun) work
+c
+      do 10 k=1,nk
+         do 10 j=1,nj
+            do 10 i=1,ni
+               fld(i,j,k)=work(i,j,k)
+ 10   continue
+c
+c--------------------------------------------------------------------
+      return
+      end

@@ -1,0 +1,76 @@
+      subroutine inibus (geobus,geosize,ni,nj)
+      implicit none
+*
+      integer geosize,ni,nj
+      real geobus (geosize)
+*
+#include "lesbus.cdk"
+#include "geobus.cdk"
+#include "lcldim.cdk"
+#include "rec.cdk"
+*
+      character*2 nv
+      integer err,ivar,i,j,offk,offj
+      real f2d
+      pointer (paf2d, f2d(ni,nj))
+*
+      call hpalloc (paf2d, ni*nj, err, 1)
+      do 100 ivar=1,geotop
+         nv = geonm(ivar,2)
+         if (nv.eq.'00') goto 100
+         do j=1,nj
+         do i=1,ni
+            f2d(i,j) = 0.
+         end do
+         end do
+         if (nv.eq.'AL') then
+            do j=1,nj
+            do i=1,ni
+               f2d(i,j) = 0.5
+            end do
+            end do
+         endif 
+         if (nv.eq.'TM') then
+            do j=1,nj
+            do i=1,ni
+               f2d(i,j) = 288.16
+            end do
+            end do
+         endif 
+         if (nv.eq.'TP') then
+            do j=1,nj
+            do i=1,ni
+               f2d(i,j) = 288.16
+            end do
+            end do
+         endif 
+         if (nv.eq.'TS') then
+            do j=1,nj
+            do i=1,ni
+               f2d(i,j) = 288.16
+            end do
+            end do
+         endif 
+         if (nv.eq.'ZP') then
+            do j=1,nj
+            do i=1,ni
+               f2d(i,j) = 0.1
+            end do
+            end do
+         endif 
+*
+         offk = geopar(ivar,1)
+         do j=1,nj
+            offj=ni*(j-1)
+            do i=1,ni
+               geobus(offk+offj+i-1)=f2d(i,j)
+            end do
+         end do
+*
+ 100  continue
+      call hpdeallc(paf2d ,err,1)
+*
+      call latlon2 (geobus(dlat),geobus(dlon),xpq(hx+1),ypq(hy+1),ni,nj)
+*
+      return
+      end

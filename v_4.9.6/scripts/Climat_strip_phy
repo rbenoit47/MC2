@@ -1,0 +1,287 @@
+#! /bin/ksh
+#
+# set -x
+#
+eval `cclargs    0$                   "[Premier menage apres une integration gemdm]"\
+      -exp       ",,,,"    ",,,,"     "[Liste des fichiers de sortie de la physique]"\
+      -prefix    ""        ""         "[prefix to be added to the names in ${liste}]"\
+      -etaname+  "lh40t2"  "aucun"    "[Nom de la configuration verticale]"\
+      -gaussout+ "OUI"     "NON"      "[Interpoler les sorties sur des grilles gaussiennes ?]"\
+      -pilout+   "NON"     "OUI"      "[Sauvegarder les fichier d'origine pour piloter LAM?]"\
+      -outlon    "192"     ",,,,"     "[Dimension (longitudes) des grilles gaussiennes de sorties]"\
+      -outlat    "096"     ",,,,"     "[Dimension (latitudes) des grilles gaussiennes de sorties]"\
+      -nbits     "16"      ",,,,"     "[Compaction (bits) retained after horizontal interpolation]"\
+      -travail   "./$$"    ",,,,"     "[Repertoire de travail (i.e. BIG_TMPDIR)]"\
+      ++ $*`
+#
+# Description...
+#    Cette script reorganise les sorties GEM/DM de la dynamiques (dm et dp)
+#    et de la physique (pm). Les champs multi-niveaux de la physique sont
+#    interpoles en pression et places dans un fichier pr. Le contenu du
+#    fichier dp y est egalement place. Tous les autres champs valides sur
+#    niveaux modeles sont places dans un fichier md, qu'ils provienent du
+#    fichier dm ou du fichier pm.
+#
+# Parametres...
+# exp      - Liste des fichiers de sortie de la physique (pm) a traiter
+#
+# Auteur...
+#    Bernard Dugas
+#
+# Revisions...
+#    001 - fevrier   2001: version initiale
+#    002 - mars      2001: ajouter les parametres "gaussout", "outlon" et "outlat"
+#                          ajouter la variable d'environnement VERY_NICE_DIAG
+#    003 - avril     2001: travailler sur des donnees temporaires jusqu'a la fin
+#    004 - septembre 2001: ajouter les specifications de lh70tp1
+#    005 - novembre  2001: adaptation a GEM/DM v2.3.1
+#    006 - aout      2002: ajouter la cle pilout (Lubos Spacek)
+#    007 - aout      2002: corriger les interpolations vectorielles
+#    008 - september 2002: ajouter le parametre nbits.
+#    009 - novembre  2002: ajouter les specifications de lh60t2
+#    010 - decembre  2002: executer r.filetype sur les fichiers a l'entree
+#    011 - janvier   2003: initialisation de md selon la valeur de $pilout
+#
+if [ ! -d ${travail} ]; then
+  mkdir ${travail}
+  nouveau_travail=OUI
+else
+  nouveau_travail=NON
+fi
+#
+START=`true_path .`
+travail=`true_path ${travail}` ; cd ${travail}
+#
+if [ `hostname` = pollux ]; then export VERY_NICE_DIAG=non ; fi
+#
+# Definir certaines variables d'environnement de R.DIAG
+USE_BIG_TMPDIR=oui ; export USE_BIG_TMPDIR
+BIG_TMPDIR=${travail} ; export BIG_TMPDIR
+ECHO_COMMAND_LINE=on ; export ECHO_COMMAND_LINE
+RDIAG=${RDIAG:-r.diag_STD98}
+EDITFST=${EDITFST:-editfst2000}
+#
+if [ "${DIAGNOSTIC_EXIT}"var = var ]; then
+  DIAGNOSTIC_EXIT=${BIG_TMPDIR}/DIAGNOSTIC_EXIT ; export DIAGNOSTIC_EXIT
+  if [ -s ${DIAGNOSTIC_EXIT} ]; then rm -f ${DIAGNOSTIC_EXIT} ; fi
+  touch ${DIAGNOSTIC_EXIT}
+elif [ -s ${DIAGNOSTIC_EXIT} ]; then
+  exit 99
+fi
+#
+reditfst()
+{
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+  ${EDITFST} $@
+  editfst_stat=$?
+  if [ ${editfst_stat} != 0 ]; then
+    echo "Erreur ${editfst_stat} dans ${EDITFST}" > ${DIAGNOSTIC_EXIT}
+  fi
+fi
+}
+#
+checktype()
+{
+r.filetype ${1} > /dev/null ; type_return=$?
+#
+case "${type_return}" in
+  1|2|33|34)
+    ls -al ${1}
+    ;;
+  *)
+    echo "${1} is not supported by Climat_strip_phy" | tee ${DIAGNOSTIC_EXIT}
+    ;;
+esac
+}
+#
+# Conversions de l'anglais au francais
+#
+if [ ${gaussout} = YES ]; then
+  gaussout=OUI
+elif [ ${gaussout} = NO ]; then
+  gaussout=NON
+fi
+#
+if [ ${pilout} = YES ]; then
+  pilout=OUI
+elif [ ${pilout} = NO ]; then
+  pilout=NON
+fi
+#
+if [ ${etaname} = LH40T2 ]; then
+  kind=GEM3
+  plv=20
+  cat > niveau.dat <<+
+    2    4    6   10   20   30   50   70  100  150  200  250  300  400  500  600
+  700  850  925 1000
++
+elif [ ${etaname} = LH42T1 ]; then
+  kind=GEM3
+  plv=21
+  cat > niveau.dat <<+
+    1    2    4    6   10   20   30   50   70  100  150  200  250  300  400  500
+  600  700  850  925 1000
++
+elif [ ${etaname} = LH50T5 ]; then
+  kind=GEM3
+  plv=18
+  cat > niveau.dat <<+
+    5   10   20   30   50   70  100  150  200  250  300  400  500  600  700  850
+  925 1000
++
+elif [ ${etaname} = LH60T2 ]; then
+  kind=GEM3
+  plv=22
+  cat > niveau.dat <<+
+    2    3    5    7   10   15   20   30   50   70  100  150  200  250  300  400
+  500  600  700  850  925 1000
++
+elif [ ${etaname} = LH70TP1 -o ${etaname} = LH80TP1 ]; then
+  kind=GEM3
+  plv=25
+  cat > niveau.dat <<+
+-1100-1200-1400-1600 -100    2    4    6   10   20   30   50   70  100  150  200
+  250  300  400  500  600  700  850  925 1000
++
+else
+  kind=GEM
+  plv=16
+  cat > niveau.dat <<+
+   10   20   30   50   70  100  150  200  250  300  400  500  700  850  925 1000
++
+fi
+#
+r.echo " "
+r.echo "Climat_strip_phy: RDIAG          =${RDIAG}"
+r.echo "Climat_strip_phy: BIG_TMPDIR     =${BIG_TMPDIR}"
+r.echo "Climat_strip_phy: DIAGNOSTIC_EXIT=${DIAGNOSTIC_EXIT}"
+r.echo "Climat_strip_phy: Starting at `date`"
+r.echo " "
+#
+if [ ! "${exp}" ]; then
+  echo "Erreur dans Climat_strip_phy: rien a faire - pas de nom de fichiers d'entree"
+  exit 1
+fi
+#
+c1=`echo ${prefix}xx | wc -c`
+for fichier in ${exp} ; do
+  #
+  label=`echo ${fichier} | cut -c ${c1}- `
+  dm=dm${label}
+  pm=pm${label}
+  dp=dp${label}
+  #
+  dm=${START}/${prefix}${dm}
+  pm=${START}/${prefix}${pm}
+  dp=${START}/${prefix}${dp}
+  #
+  checktype ${dm} ; checktype ${pm} ; checktype ${dp}  
+  #
+  pr=${START}/${prefix}pr${label}
+  md=${START}/${prefix}md${label}
+  #
+  r.echo " "
+  r.delf -dn md pr prt p0 cubes cubet zcrochets -na
+  if [ ${pilout} = NON ]; then
+    r.catf ${dm} md
+  elif [ ${pilout} = OUI ]; then
+    echo "\
+    desire(-1,['PN','P0'])
+    desire(-1,['TT','HU','UU','VV'],-1,-1,[1.0,SIGMA])" |\
+    reditfst -s ${dm} -d md -nobox
+  fi
+  #
+  r.echo " "
+  r.echo "Extraction des champs multi-niveaux de ${pm}"
+  echo "\
+  desire(-1,['HY','W6','W7','X5','T5','T6','T7','T9'])
+  desire(-1,['X2','X3','X4','W8','W9','UG','V6','CA'])" |\
+  reditfst -s ${pm} -d cubes -nobox
+#
+# if [ ${etaname} = LH70TP1 ]; then
+#   r.echo " "
+#   r.echo "Correction des valeurs de niveaux au-dessus de 1mb"
+#   ${RDIAG} relabl  cubes corr  -lv1 =-1100 =-1131
+#   ${RDIAG} relabl  corr  cubes -lv1 =-1200 =-1211
+#   ${RDIAG} relabl  cubes corr  -lv1 =-1300 =-1344
+#   ${RDIAG} relabl  corr  cubes -lv1 =-1400 =-1438
+#   ${RDIAG} relabl  cubes corr  -lv1 =-1500 =-1558
+#   ${RDIAG} relabl  corr  cubes -lv1 =-1700 =-1707
+#   ${RDIAG} relabl  cubes corr  -lv1 =-1800 =-1894
+#   ${RDIAG} relabl  corr  cubes -lv1 =-110  =-113
+#   r.delf   -dn corr
+# fi
+  #
+  echo "\
+  exclure(-1,['X2','X3','X4','W8','W9','UG','V6','CA'])
+  exclure(-1,['W6','W7','X5','T5','T6','T7','T9'])" |\
+  reditfst -s ${pm} -d md -e -nobox
+  #
+  echo "desire(-1,[\"T5\",\"T9\"],-1,-1,[1.0,SIGMA])" | reditfst -s ${pm} -d md -nobox
+  #
+  ${RDIAG} fsttri -s cubes -d cubet -e -desc 1> fsttri1 2>&1
+  ${RDIAG} fsttri -s ${dp} -d prt   -e -desc 1> fsttri2 2>&1
+  #
+  echo "desire(-1,\"P0\")" | reditfst -s md -d p0 -nobox
+  #
+  ${RDIAG} loge   p0 logp0
+  ${RDIAG} newnam logp0 lp -name lp
+  ${RDIAG} select cubet univeau -lv1 1000
+  ${RDIAG} xlin   univeau  un -a 0 -b 1 -name LP
+  ${RDIAG} gmlt   un lp mlp
+  #
+  # Calculer les integrales verticales de UG et V6 sur les niveaux
+  # modeles. Les resultats sont multiplies par 100*P0/g. Ceci corresponds
+  # alors aux stress net produit par le parametrage des ondes de gravite
+  # en unites de N/m**2.
+  #
+  ${RDIAG} select cubet ug v6 -name UG V6
+  #
+  ${RDIAG} vsinth ug lp sumug -kind ${kind}
+  ${RDIAG} mlt    sumug p0 sumugmps
+  ${RDIAG} xlin   sumugmps usgwd -a 10.19767 -name USGW
+  #
+  ${RDIAG} vsinth v6 lp sumvg -kind ${kind}
+  ${RDIAG} mlt    sumvg p0 sumvgmps
+  ${RDIAG} xlin   sumvgmps vsgwd -a 10.19767 -name VSGW
+  #
+  reditfst -s usgwd -d md -i 0 -nobox
+  reditfst -s vsgwd -d md -i 0 -nobox
+  #
+  # Interpoler les champs multi-niveaux de ${pm} sur les memes
+  # niveaux pression que ceux utilises dans le fichier ${dp}
+  #
+  ${RDIAG} gsapl  cubet mlp cubep -plv ${plv} -kind ${kind} < niveau.dat
+  ${RDIAG} joinup pr prt cubep
+  #
+  # Conversion (optionnelle) en grilles gaussiennes
+  #
+  if [ "${gaussout}" = OUI ]; then
+    ${RDIAG} llagg md md_gg -lon ${outlon} -lat ${outlat} -npg =-${nbits}
+    Climat_make_gaussien -s pr -lon ${outlon} -lat ${outlat} \
+      -vents OUI -ucomp "UU UG X2" -vcomp "VV V6 X3" -nbits ${nbits}
+    r.echo " "
+    r.catf md_gg md -d
+    r.catf pr_gg pr -d
+  fi
+  #
+  r.catf md ${md} -d
+  r.catf pr ${pr} -d
+  #
+  r.echo " "
+  ls -al ${md} ${pr}
+  r.echo " "
+  #
+  if [ ! -s ${DIAGNOSTIC_EXIT} -a ${pilout} = NON ]; then /bin/rm -f ${dm} ${dp} ${pm} ; fi
+  if [ ! -s ${DIAGNOSTIC_EXIT} -a ${pilout} = OUI ]; then /bin/rm -f ${dp} ${pm} ; fi
+  #
+done
+#
+# Faire le menage si tout a fonctionne
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+  cd ${START}
+  if [ ${nouveau_travail} = OUI ]; then rm -rf ${travail} ; fi
+  r.echo "Climat_strip_phy: Ending at `date`"
+  exit 0
+fi
+exit 2

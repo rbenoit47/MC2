@@ -1,0 +1,231 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine pilctrl (unrstrt,prout,status)
+      implicit none
+*
+      logical prout
+      integer unrstrt,status
+*
+*     ##########################################
+*     #  Initialization of controle parameters #
+*     #  (see MC2 user guide for descriptions) #
+*     ##########################################
+*
+#include "mc2nml.cdk"
+#include "halo.cdk"
+#include "path.cdk"
+      character*32  dumc
+      character*10 nmlname
+      integer longueur
+      integer k,unnml,nptpil,pnerrdirf,pnflag1,pnflag2,n1,n2,status2
+      real*8 dayfrac
+      data unnml,nptpil /11,10/
+*
+*---------------------------------------------------------------------
+*
+      status  = -1
+      status2 = -1
+*
+      pilot_dir = 'process/pilot'
+      if (unrstrt.lt.0) then
+         gnnt    = 0
+         grdt    = 1800.0
+         gnnrstrt= gnnt
+         Pil_runstrt_S = "19990201.000000"
+         gnmtn   = 1
+         h_interp= 'CUBIC'
+         sfc_only=.false.
+         ctebcs  = .false.
+         hblen_x = nptpil
+         hblen_y = -1
+         gnpilver= 0
+	 maxcfl = 1	!Maximum value for CFL condition
+         do k=1,maxntrpil
+            trpil(k) = '@#@#'
+         end do
+*
+* *** Updating configuration with namelists &pil_cfgs and &pe_topo
+*
+         open(unnml,file=nml,access='SEQUENTIAL',
+     $              form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml,' NOT FOUND'
+            goto 9991
+         endif
+*
+         nmlname = 'pil_cfgs'
+         rewind ( unnml )
+         read (unnml, nml=pil_cfgs, end = 9120)
+         write (6,601) nmlname
+*
+         nmlname = 'pe_topo'
+         rewind ( unnml )
+         read (unnml, nml=pe_topo, end = 9120)
+         write (6,601) nmlname
+*
+         close (unnml)
+*
+         gnnrstrt = min(gnnt,gnnrstrt)
+         if (gnnrstrt.lt.1) gnnrstrt = gnnt
+         gnlst = int(grdt)
+         gcrunstrt = Pil_runstrt_S
+         dayfrac=(real(gnnt)*grdt)/86400.0
+         call incdatsd (gcrunend,gcrunstrt,dayfrac)
+	 hx = 2*maxcfl + 1
+	 hy = hx
+         hblen_x = max(hblen_x,0)
+         if (hblen_y.lt.0) hblen_y = hblen_x
+         halo= max(hblen_x,hblen_y) + hx + 1
+ 665     if (2 * (halo+1) * (Grd_ni + Grd_nj - 2*halo).ge.
+     $                                  Grd_ni*Grd_nj) then
+            halo  = halo - 1
+            goto 665
+         endif
+         hblen_x = min(hblen_x,halo - hx - 1)
+         hblen_y = min(hblen_y,halo - hx - 1)
+         status2 = 1
+*
+         n_tracers = 0
+         do k=1,maxntrpil
+            if (trpil(k).eq.'@#@#') goto 22
+            n_tracers =  n_tracers+ 1
+         end do
+ 22      continue
+*        
+      else
+*
+         nmlname = 'pil_cfgs'
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $         'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         read (unrstrt) n1 !theoc
+         read (unrstrt) n1,n2 ! gni,gnj
+         call hpalloc (paxp ,n1    , pnerrdirf,1)
+         call hpalloc (payp ,n2    , pnerrdirf,1)
+         call rpilpar (unrstrt)
+         call hpdeallc(paxp        , pnerrdirf,1)
+         call hpdeallc(payp        , pnerrdirf,1)
+         call mod_rstrt (unrstrt,prout,status2,'PIL')
+*
+      endif
+*
+      call low2up  (h_interp,dumc)
+      h_interp = dumc
+      if (h_interp.eq.'VOISIN') h_interp = 'NEAREST'
+*
+      print*
+      write (6, nml=pil_cfgs_print)
+      print*
+      write (6, nml=pe_topo)
+      print*
+*
+      if (status2.eq.1) status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+*---------------------------------------------------------------------
+*
+ 601  format (' CONFIGURATION UPDATED WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+      return
+      end
+*
+      subroutine rpilpar(un)
+      implicit none
+*
+      integer un
+*
+**
+#include "lcldim.cdk"
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "halo.cdk"
+#include "levels.cdk"
+#include "nesting.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "filename.cdk"
+#include "physcom.cdk"
+#include "tracers.cdk"
+#include "nbcpu.cdk"
+#include "vinterpo.cdk"
+#include "hinterpo.cdk"
+#include "nestpnt.cdk"
+#include "bubble.cdk"
+#include "mtn.cdk"
+*
+*----------------------------------------------------------------------
+*
+      call rgridpar (un)
+      read (un) gcrunstrt,gcjobstrt,gcjobend,gcrunend,
+     $          xref,yref,halo,maxcfl
+*
+      read (un) gnnt,gnlst,grdt,Pil_nesdt,gnstepno,gnnrstrt,gnmtn,
+     $          hblen_x,hblen_y,
+     $          gnpilver,gngalsig,ctebcs,h_interp,sfc_only
+*
+      read (un) trpil
+*
+      read (un) bb_dpth,bb_radius,bb_xcntr,bb_zcntr,
+     $          mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos,mtn_heigth,
+     $          mtn_thrate,mtn_flo
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine wpilpar (un)
+      implicit none
+*
+      integer un
+*
+**
+#include "lcldim.cdk"
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "halo.cdk"
+#include "levels.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "nesting.cdk"
+#include "filename.cdk"
+#include "physcom.cdk"
+#include "tracers.cdk"
+#include "nbcpu.cdk"
+#include "hinterpo.cdk"
+#include "vinterpo.cdk"
+#include "nestpnt.cdk"
+#include "bubble.cdk"
+#include "mtn.cdk"
+*
+      real*8 dayfrac
+*----------------------------------------------------------------------
+*
+      call wgridpar (un)
+*
+      dayfrac = (gnstepno * grdt) / 86400.0
+      call incdatsd(gcjobstrt,gcrunstrt,dayfrac)
+      dayfrac=((gnstepno+min(gnnt-gnstepno,gnnrstrt))*grdt)/86400.0
+      call incdatsd(gcjobend,gcrunstrt,dayfrac)
+*
+      write (un) gcrunstrt,gcjobstrt,gcjobend,gcrunend,
+     $           xref,yref,halo,maxcfl
+*
+      write (un) gnnt,gnlst,grdt,Pil_nesdt,gnstepno,gnnrstrt,gnmtn,
+     $           hblen_x,hblen_y,
+     $           gnpilver,gngalsig,ctebcs,h_interp,sfc_only
+*
+      write (un) trpil
+*
+      write (un) bb_dpth,bb_radius,bb_xcntr,bb_zcntr,
+     $           mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos,mtn_heigth,
+     $           mtn_thrate,mtn_flo
+*
+*----------------------------------------------------------------------
+      return
+      end

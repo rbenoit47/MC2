@@ -1,0 +1,138 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  INIGST
+*
+      SUBROUTINE INIGST ( SETX, MARKX, BIAISX, MFX, UNITX, DEBUGX, K)
+*
+#include "impnone.cdk"
+      REAL SETX,MARKX
+      INTEGER BIAISX,MFX,UNITX,K
+      LOGICAL DEBUGX
+*
+*Author
+*          J. Cote RPN(Dec 1984)
+*
+*Revision
+* 001      M. Lepine  -  RFE model code revision project (Mar 87)
+*                            -  Elimination of " *IF DEF "
+* 002      A. Simard (Feb 90) - Option DEBUG = TRUE
+*                 for the first slice in order to verify
+*                 the allocation of memory
+* 003      B. Bilodeau  (July 1991)- Adaptation to UNIX
+*
+*Object
+*          to initialize the memory management
+*
+*Arguments
+*
+*          - Input -
+* SETX     value to which the memory is initialized (if not already
+*          0)
+* MARKX    marker at the end of each allocated array for verifying
+*          overflow
+* BIAISX   number of words reserved in freespace
+* MFX      dimension of freespace
+* UNITX    unit number attached to output file for diagnostics
+* DEBUGX   .TRUE. to control the volume of diagnostic outputs
+* K        stack number to initialize
+*
+*Notes
+*          The system links pointers in the work space.  The pointers
+*          indicate the start of the variable in the space. The
+*          freespace is divided in 3 parts:
+*          1)A zone reserved of dimension 'BIAIS'
+*          2)A stack starts at 'BIAIS+MFX' towards the bottom.  This
+*          stack function acts as 'LIFO'(last in first out)
+*          A marker is placed after each space required for each
+*          variable and this is verified on the disallocation of the
+*          variable.
+*          In order to use system properly:
+*          1)Make requests for dimensions which are always a multiple
+*          of NI or NI*NJ
+*          2)Eliminate the variables after using them
+*
+*IMPLICITES
+*
+#include "memcdk.cdk"
+*
+*
+*    AUTRES MODULES DU SYSTEME:
+*
+*       ALLCTN  = ALLOCATION DES POINTEURS
+*       DFLERMS = FIN DES OPERATIONS EN CAS D'ERREUR FATALE,
+*       CONTNU  = VERIFICATION DU CONTENU DU SYSTEME
+*       DSLCTN  = ELIMINATION DES VARIABLES
+*       LOCTN   = LOCALISATION D'UNE VARIABLE
+*
+**
+      LOGICAL MPAT
+      SAVE MPAT
+      INTEGER J
+*
+      DATA BLANC/'        '/
+      DATA MPAT/.TRUE./
+*
+      SET = SETX
+      MARK = MARKX
+      BIAIS(K) = BIAISX
+      UNIT = UNITX
+*     DEBUG = MPAT.OR.DEBUGX
+*
+      IF(K.EQ.2)THEN
+         DIMX = 0
+         NAMX = 0
+      ENDIF
+      T(K) = ( MFX + 1 ) + BIAIS(K)
+      A(K) = 0
+      NA(K) = 0
+      DO 2 J=1,NV
+         NOM(J,K) = BLANC
+         DIM(J,K) = 0
+    2    BAS(J,K) = T(K)
+*
+      IF (DEBUG)
+     X    WRITE (UNIT,*) MFX,' MOTS DISPONIBLES (INIGST)'
+      MPAT=.FALSE.
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,244 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P ATMFLUX
+*
+*
+      SUBROUTINE ATMFLUX(R,VAR,TVAR,KCOEF,GAMMA,
+     1                   ALPHA,BETA,PS,T,Q,TAU,SG,SELOC,
+     1                   C,D,TYPVAR,N,NK,TRNCH)
+*
+*
+#include "impnone.cdk"
+*
+      INTEGER N,NK,TRNCH
+      REAL R(N,NK+1),VAR(N,NK),TVAR(N,NK),KCOEF(N,NK)
+      REAL GAMMA(N,NK)
+      REAL ALPHA(N), BETA(N), PS(N)
+      REAL T(N,NK), Q(N,NK), TAU, SG(N,NK), SELOC(N,NK)
+      REAL C(N,NK), D(N,NK)
+      INTEGER TYPVAR
+*
+*
+*Author
+*          S. Belair (February 1996)
+*
+*Revision
+* 001      Include the countergradient term
+*          S. Belair - October 1996.
+*
+*Object
+*        Calculate the atmospheric fluxes for heat, vapour,
+*        and momentum.
+*
+*Arguments
+*                        -Output-
+*
+* R         Resulting atmospheric flux
+*           For U and V:  rho (w'v') = rho Km dv/ds
+*           For Theta:    rho cp (w'theta')
+*           For qv:       rho L (w'qv')
+*
+*                         -Input-
+*
+* VAR       Variable at t (U,V,Theta, or qv)
+* TVAR      Time tendency of the variable
+* KCOEF     Vertical diffusion coefficient in sigma form
+* GAMMA     Counter-gradient term (non-zero only for theta and hu)
+* ALPHA     inhomogeneous bottom boundary condition
+* BETA      homogeneous bottom boundary condition
+* PS        Surface pressure
+* T         Temperature
+* Q         Specific humidity
+* TAU       Timestep
+* SG        Sigma levels
+* SELOC     Staggered sigma levels
+* C         Work field
+* D         Work field
+* TYPVAR    Type of variable to treat
+*           '0'  --->  U
+*           '1'  --->  V
+*           '2'  --->  Q
+*           '3'  --->  Theta
+* N,NK      Horizontal and vertical dimensions
+*
+*
+      EXTERNAL DIFUVD4N
+      EXTERNAL SERXST
+*
+*
+      INTEGER J,K
+      REAL TSTAG,QSTAG,A
+*
+*
+*
+#include "consphy.cdk"
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*
+*                                  Calculate VAR(t+1) (put into C)
+      DO K=1,NK
+        DO J=1,N
+          C(J,K) = VAR(J,K) + TVAR(J,K)*TAU
+        END DO
+      END DO
+*
+*                                  Vertical derivative of VAR(t+1)
+*                                  (Values on staggered levels).
+*                                  Put into D.
+*
+      CALL DIFUVD4N(D, C, SG, N, NK)
+*
+*                                  Product K * dVAR/ds (into R).
+*                                  Values on staggered levels.
+*                                  CAREFUL:  We must divide by
+*                                  a factor A = g sigma / R T
+*                                  (on staggered levels again)
+*
+*
+      DO K=1,NK-1
+        DO J=1,N
+          TSTAG = 0.5*( T(J,K)+T(J,K+1) )
+          A = ( RGASD*TSTAG ) / ( GRAV*SELOC(J,K) )
+          R(J,K) = KCOEF(J,K) * D(J,K) * A
+*
+*
+*
+*                                  Add the countergradient part of the
+*                                  flux:
+*                                         = K * gamma / A**2
+*
+          IF (TYPVAR.EQ.2) THEN
+             R(J,K) = R(J,K) + KCOEF(J,K) * GAMMA(J,K) * A
+             GAMMA(J,K) = GAMMA(J,K) / A
+          END IF
+          IF (TYPVAR.EQ.3)
+     1       R(J,K) = R(J,K) + KCOEF(J,K) *
+     1                GAMMA(J,K) * A * A
+        END DO
+      END DO
+*
+*                                  The same product for the
+*                                  lowest level NK (actually,
+*                                  NK is one less than the number
+*                                  of model levels).
+*                                  Km*dVAR/ds = alfa + beta*u(t+1)
+*                                  Note:  Need to multiply by A also
+*
+      DO J=1,N
+        A = ( RGASD*T(J,NK) ) / ( GRAV*SELOC(J,NK) )
+        R(J,NK)   = (ALPHA(J) + BETA(J)*C(J,NK) ) * A
+        IF (TYPVAR.EQ.2)
+     1        GAMMA(J,NK) = GAMMA(J,NK) / A
+      END DO
+*
+*                                  Multiply by the air density
+*                                  rho = p / (R Tv) = s ps / RTv
+*                                  CAREFUL:  the calculations must
+*                                            be on the SELOC levels,
+*                                            but the variables T and
+*                                            Q are defined on SG levels.
+*
+*                                  For all the levels except NK, NK+1
+      DO K=1,NK-1
+        DO J=1,N
+          TSTAG = 0.5*( T(J,K)+T(J,K+1))
+          QSTAG = 0.5*( Q(J,K)+Q(J,K+1))
+          R(J,K) = SELOC(J,K)*PS(J) /
+     1             ( RGASD * FOTVT(TSTAG,QSTAG) )
+     1           * R(J,K)
+        END DO
+      END DO
+*
+*                                  For NK and NK+1
+*
+      DO J=1,N
+          TSTAG = T(J,NK)
+          QSTAG = Q(J,NK)
+          R(J,NK) = SELOC(J,NK)*PS(J) /
+     1             ( RGASD * FOTVT(TSTAG,QSTAG) )
+     1           *   R(J,NK)
+          R(J,NK+1) = R(J,NK)
+      END DO
+*
+*
+*                                  At this point, R contains
+*                                  rho (w'var').  For the temperature
+*                                  and the specific humidity, however,
+*                                  we need to multiply by cp and L,
+*                                  respectively.
+*
+*                                  Furthermore, a factor (T/theta)
+*                                  is kept for the fluxes of sensible
+*                                  heat (because we want w'T', and
+*                                  not w'theta')
+*
+      DO K=1,NK
+        DO J=1,N
+          IF (TYPVAR.EQ.2) R(J,K) = CHLC * R(J,K)
+          IF (TYPVAR.EQ.3)
+     1      R(J,K) = CPD  * R(J,K) *
+     1             ( SELOC(J,K)*PS(J) / 100000. )**0.286
+        END DO
+      END DO
+*
+      DO J=1,N
+        R(J,NK+1) = R(J,NK)
+      END DO
+*
+*
+*                                  Time series for the fluxes
+*
+      IF (TYPVAR.EQ.0)
+     1  CALL SERXST( R, 'F5', TRNCH, N, 0.0, 1.0, -1 )
+      IF (TYPVAR.EQ.1)
+     1  CALL SERXST( R, 'F6', TRNCH, N, 0.0, 1.0, -1 )
+      IF (TYPVAR.EQ.2)
+     1  CALL SERXST( R, 'F3', TRNCH, N, 0.0, 1.0, -1 )
+      IF (TYPVAR.EQ.3)
+     1  CALL SERXST( R, 'F4', TRNCH, N, 0.0, 1.0, -1 )
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

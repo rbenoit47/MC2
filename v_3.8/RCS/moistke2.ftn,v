@@ -1,0 +1,497 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  MOISTKE2
+*
+#include "phy_macros_f.h"
+      SUBROUTINE MOISTKE2(EN,ENOLD,ZN,ZD,KT,QC,FRAC,FNN,
+     W                    GAMA,GAMAQ,GAMAL,H,
+     W                    U,V,T,TVE,Q,PS,S,SE,
+     W                    ZE,C,B,X,NKB,TAU,KOUNT,
+     Y                    Z,KCL,UE2,X1,XB,XH,TRNCH,N,M,NK,IT)
+#include "impnone.cdk"
+      INTEGER N,M,NK
+      INTEGER NKB,KOUNT
+      INTEGER IT,TRNCH
+      REAL EN(N,NK),ENOLD(N,NK),ZN(N,NK),ZD(N,NK),KT(N,NK)
+      REAL QC(N,NK),FRAC(N,NK),FNN(N,NK)
+      REAL GAMA(N,NK),GAMAQ(N,NK),GAMAL(N,NK),H(N)
+      REAL U(M,NK),V(M,NK)
+      REAL T(M,NK),TVE(N,NK),Q(M,NK),PS(N)
+      REAL S(N,NK),SE(N,NK)
+      REAL ZE(N,NK),C(N,NK),B(N,NKB),X(N,NK)
+      REAL TAU
+      REAL Z(N,NK)
+      REAL KCL(N),UE2(N)
+      REAL X1(N,NK)
+      REAL XB(N),XH(N)
+*
+*Author
+*          J. Mailhot (Nov 2000)
+*
+*Revision
+* 001      J. Mailhot (Jun 2002) Add cloud ice fraction 
+*                      Change calling sequence and rename MOISTKE1
+* 002      J. Mailhot (Feb 2003) Add boundary layer cloud content 
+*                      Change calling sequence and rename MOISTKE2
+* 003      A. Plante  (May 2003) IBM conversion
+*                        - calls to exponen4 (to calculate power function '**')
+*                        - divisions replaced by reciprocals (call to vsrec from massvp4 library)
+*
+*Object
+*          Calculate the turbulence variables (TKE, mixing length,...)
+*          for a partly cloudy boundary layer, in the framework of a
+*          unified turbulence-cloudiness formulation.
+*          Uses moist conservative variables (thetal and qw), diagnostic
+*          relations for the mixing and dissipation lengths, and a predictive
+*          equation for moist TKE.
+*
+*
+*Arguments
+*
+*          - Input/Output -
+* EN       turbulent energy
+* ZN       mixing length of the turbulence
+* ZD       dissipation length of the turbulence
+*
+*          - Input -
+* ENOLD    turbulent energy (at time -)
+* QC       boundary layer cloud water content
+* FRAC     cloud fraction (computed in BAKTOTQ2)
+*          - Output -
+* FRAC     constant C1 in second-order moment closure (used by CLSGS)
+*
+*          - Input -
+* FNN      flux enhancement factor (computed in BAKTOTQ2)
+* GAMA     countergradient term in the transport coefficient of theta
+* GAMAQ    countergradient term in the transport coefficient of q
+* GAMAL    countergradient term in the transport coefficient of ql
+* H        height of the the boundary layer
+*
+*          - Input -
+* U        east-west component of wind
+* V        north-south component of wind
+* T        temperature
+* TVE      virtual temperature on 'E' levels
+* Q        specific humidity
+*
+*          - Input -
+* PS       surface pressure
+* S        sigma level
+* SE       sigma level on 'E' levels
+* TAU      timestep
+* KOUNT    index of timestep
+* KT       ratio of KT on KM (real KT calculated in DIFVRAD)
+* Z        height of sigma level
+*
+*          - Input/Output -
+* KCL      index of 1st level in boundary layer
+*
+*          - Input -
+* UE2      (U*)**2 (square of friction velocity)
+* ZE       work space (N,NK)
+* C        work space (N,NK)
+* B        work space (N,NKB)
+* X        work space (N,NK)
+* X1       work space (N,NK)
+* XB       work space (N)
+* XH       work space (N)
+* NKB      second dimension of work field B
+* TRNCH    number of the slice
+* N        horizontal dimension
+* M        1st dimension of T, Q, U, V
+* NK       vertical dimension
+* IT       number of the task in muli-tasking (1,2,...) =>ZONXST
+*
+*Notes
+*          Refer to J.Mailhot and R.Benoit JAS 39 (1982)Pg2249-2266
+*          and Master thesis of J.Mailhot.
+*          Mixing length formulation based on Bougeault and Lacarrere .....
+*          Subgrid-scale cloudiness scheme appropriate for TKE scheme
+*          based on studies by Bechtold et al:
+*          - Bechtold and Siebesma 1998, JAS 55, 888-895
+*          - Cuijpers and Bechtold 1995, JAS 52, 2486-2490
+*          - Bechtold et al. 1995, JAS 52, 455-463
+*
+*
+*IMPLICITS
+*
+#include "clefcon.cdk"
+*
+#include "surfcon.cdk"
+*
+#include "machcon.cdk"
+*
+#include "consphy.cdk"
+*
+#include "options.cdk"
+*
+*MODULES
+*
+      EXTERNAL DIFUVDFJ
+      EXTERNAL MIXLEN1, BLCLOUD2, TKEALG
+*
+      REAL HEURSER
+      INTEGER IERGET
+      EXTERNAL SERXST,MZONXST, SERGET, EXPONEN4
+*
+*
+**
+*
+*
+      REAL FIMS
+      INTEGER J,K
+*
+      INTEGER TYPE
+*
+*------------------------------------------------------------------------
+*
+      REAL AA,CAB,C1,CU,CW,LMDA
+      SAVE AA,CAB,C1,CU,CW,LMDA
+      DATA AA, CAB, C1, CU, CW, LMDA  / 0.516 , 2.5, 0.32, 3.75, 0.2, 200. /
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC (FIMI ,REAL   , (N,NK))
+      AUTOMATIC (FIMIR,REAL*8 , (N,NK))
+      AUTOMATIC (FITI ,REAL   , (N,NK))
+      AUTOMATIC (FITIR,REAL*8 , (N,NK))
+      AUTOMATIC (FITSR,REAL*8 , (N,NK))
+      AUTOMATIC (WORK ,REAL   , (N,NK))
+*
+      TYPE=4
+*
+*      1.     Preliminaries
+*      --------------------
+*
+*
+      CALL SERGET ('HEURE', HEURSER, 1, IERGET)
+*
+      IF(KOUNT.EQ.0) THEN
+        DO K=1,NK
+        DO J=1,N
+          ZN(J,K)=MIN(KARMAN*Z(J,K),LMDA)
+          ZD(J,K)=ZN(J,K)
+          QC(J,K)=0.0
+          FNN(J,K)=0.0
+          FRAC(J,K)=0.0
+        END DO
+        END DO
+      ENDIF
+*
+*
+*      2.     Boundary layer cloud properties
+*      --------------------------------------
+*
+*
+      CALL BLCLOUD2 (U, V, T, TVE, Q, QC, FNN,
+     1               S, PS, B, C, X,
+     1               N, M, NK)
+*
+*
+*                                GAMA terms set to zero
+*                                (when formulation uses conservative variables)
+      DO K=1,NK
+      DO J=1,N
+         GAMA(J,K)=0.0
+         GAMAQ(J,K)=0.0
+         GAMAL(J,K)=0.0
+      END DO
+      END DO
+*
+*
+      DO K=1,NK-1
+      DO J=1,N
+*                                top of the unstable PBL (from top down)
+        IF( X(J,K).GT.0. ) KCL(J) = K
+      END DO
+      END DO
+*
+*
+      CALL SERXST(C,'RI',TRNCH,N,0.,1.,-1)
+      CALL MZONXST( C, 'RI', TRNCH, N, HEURSER, 1.0, -1, IT)
+*
+      CALL SERXST(C,'RM',TRNCH,N,0.,1.,-1)
+      CALL MZONXST( C, 'RM', TRNCH, N, HEURSER, 1.0, -1, IT)
+*
+      DO K=1,NK
+      DO J=1,N
+         FITSR(J,K)=BETA*(1+AS*MAX(C(J,K),0.))
+         WORK(J,K)=1-CI*MIN(C(J,K),0.)
+      ENDDO
+      ENDDO
+      CALL EXPONEN4(FIMI,WORK,-1/6.,N*NK,N*NK,1)      
+      CALL EXPONEN4(FITI,WORK,-1/3.,N*NK,N*NK,1)      
+      FITIR=FITI
+      FIMIR=FIMI
+      CALL VREC(FITIR,FITIR,N*NK)
+      CALL VREC(FIMIR,FIMIR,N*NK)
+      CALL VREC(FITSR,FITSR,N*NK)
+      DO K=1,NK
+      DO J=1,N      
+         FIMS=(1+AS*MAX(C(J,K),0.))
+         ZE(J,K)=MIN(KARMAN*Z(J,K),LMDA)
+c        IF( C(J,K).GT.0.0 ) THEN
+         IF( C(J,K).GE.0.0 ) THEN
+           ZE(J,K)=ZE(J,K)/FIMS
+         ELSE
+           ZE(J,K)=ZE(J,K)*FIMIR(J,K)
+         ENDIF
+*
+*                                KT contains the ratio KT/KM (=FIM/FIT)
+*
+c        IF(X(J,K).GE.0.0) THEN
+         IF(C(J,K).GE.0.0) THEN
+           KT(J,K)=FIMS*FITSR(J,K)
+         ELSE
+            KT(J,K)=FIMI(J,K)*FITIR(J,K)
+         ENDIF
+      END DO
+      END DO
+*
+*                                From gradient to flux form of buoyancy flux
+*                                and flux Richardson number (for time series output)
+      DO K=1,NK
+      DO J=1,N
+         X(J,K)=KT(J,K)*X(J,K)
+         C(J,K)=KT(J,K)*C(J,K)
+*                                Computes constant C1
+         FRAC(J,K)=2.0*AA*KT(J,K)/CAB
+      END DO
+      END DO
+*
+*
+      CALL SERXST ( C , 'RF' , TRNCH , N , 0.0 , 1.0 , -1 )
+      CALL MZONXST ( C , 'RF' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*
+*     CALCUL DES LONGUEURS DE MELANGE ET DISSIPATION
+*
+      IF(KOUNT.EQ.0)THEN
+        DO K=1,NK
+        DO J=1,N
+          ZN(J,K)=ZE(J,K)
+          ZD(J,K)=ZE(J,K)
+        END DO
+        END DO
+      ELSE
+        DO K=1,NK
+        DO J=1,N
+          ZN(J,K)=ZE(J,K)+(ZN(J,K)-ZE(J,K))*EXP(-TAU/7200.)
+          ZD(J,K)=MAX(ZN(J,K),1.E-6)
+        END DO
+        END DO
+      ENDIF
+*
+*      3.     Mixing and dissipation length scales
+*      -------------------------------------------
+*
+*
+*                                Compute the mixing and dissipation lengths
+*                                according to Bougeault and Lacarrere (1989)
+*                                and Belair et al (1999)
+*
+      CALL EXPONEN4(X1,S,-CAPPA,N*NK,N*NK,1)   
+      DO K=1,NK
+      DO J=1,N
+*                                Virtual potential temperature (THV)
+         X1(J,K)=T(J,K)*(1.0+DELTA*Q(J,K)-QC(J,K))
+     1                 *X1(J,K)
+      END DO
+      END DO
+      
+*
+*
+      if ( ilongmel.eq.1) then
+
+      CALL MIXLEN1( ZN, ZD, X1, ENOLD, C, Z, H, 
+     1              TAU, N, NK)
+
+      endif
+*
+      CALL SERXST (ZN, 'L1', TRNCH, N, 0.0, 1.0, -1)
+      CALL SERXST (ZD, 'L2', TRNCH, N, 0.0, 1.0, -1)
+*
+*
+      CALL SERXST  ( ZD , 'LE' , TRNCH , N , 0.0    , 1.0, -1    )
+      CALL MZONXST ( ZD , 'LE' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*
+*
+*
+*
+*      4.     Turbulent kinetic energy
+*      -------------------------------
+*
+*
+*
+      IF(KOUNT.EQ.0)THEN
+*
+*
+        DO K=1,NK
+        DO J=1,N
+           X(J,K)=0.0
+        END DO
+        END DO
+*
+        CALL SERXST ( X , 'EM' , TRNCH , N , 0.0 , 1.0 , -1 )
+        CALL MZONXST ( X , 'EM' , TRNCH , N , HEURSER, 1.0, -1, IT)
+        CALL SERXST ( X , 'EB' , TRNCH , N , 0.0 , 1.0 , -1 )
+        CALL MZONXST ( X , 'EB' , TRNCH , N , HEURSER, 1.0, -1, IT)
+        CALL SERXST ( X , 'ED' , TRNCH , N , 0.0 , 1.0 , -1 )
+        CALL MZONXST ( X , 'ED' , TRNCH , N , HEURSER, 1.0, -1, IT)
+        CALL SERXST ( X , 'ET' , TRNCH , N , 0.0 , 1.0 , -1 )
+        CALL MZONXST ( X , 'ET' , TRNCH , N , HEURSER, 1.0, -1, IT)
+        CALL SERXST ( X , 'ER' , TRNCH , N , 0.0 , 1.0 , -1 )
+        CALL MZONXST ( X , 'ER' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*
+*
+      ELSE
+*
+*
+*                                Solve the algebraic part of the TKE equation
+*                                --------------------------------------------
+*
+*                                Put dissipation length in ZE (work array)
+      DO K=1,NK
+      DO J=1,N
+         ZE(J,K) = ZD(J,K)
+      END DO
+      END DO
+*
+         CALL TKEALG(C,EN,ZN,ZE,B,X,TAU,N,NK)
+*
+*                                Mechanical production term
+         CALL SERXST ( B , 'EM' , TRNCH , N , 0.0 , 1.0 , -1 )
+         CALL MZONXST ( B , 'EM' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*                                Thermal production term
+         CALL SERXST ( X , 'EB' , TRNCH , N , 0.0 , 1.0 , -1 )
+         CALL MZONXST ( X , 'EB' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*                                Viscous dissipation term
+         CALL SERXST ( ZE , 'ED' , TRNCH , N , 0.0 , 1.0 , -1 )
+         CALL MZONXST ( ZE , 'ED' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*
+*
+*
+*                                Solve the diffusion part of the TKE equation
+*                                --------------------------------------------
+*                                (uses scheme i of Kalnay-Kanamitsu 1988 with
+*                                 double timestep, implicit time scheme and time
+*                                 filter with coefficient of 0.5)
+*
+         DO K=1,NK
+         DO J=1,N
+*                                X contains (E*-EN)/TAU
+            X(J,K)=(C(J,K)-EN(J,K))/TAU
+*                                ZE contains E*
+            ZE(J,K)=C(J,K)
+*                                C contains K(EN) with normalization factor
+            C(J,K) = ( (GRAV/RGASD)*SE(J,K)/TVE(J,K) )**2
+            C(J,K)=AA*CLEFAE*ZN(J,K)*SQRT(ENOLD(J,K))*C(J,K)
+*                                countergradient and inhomogeneous terms set to zero
+            X1(J,K)=0.0
+         END DO
+         END DO
+*
+         IF( TYPE.EQ.4 ) THEN
+*                                surface boundary condition
+           DO J=1,N
+             XB(J)=CU*UE2(J) + CW*XH(J)**2
+             ZE(J,NK)=XB(J)
+           END DO
+*
+         ENDIF
+*
+         CALL DIFUVDFJ (EN,ZE,C,X1,X1,XB,XH,S,SE,2*TAU,TYPE,1.,
+     %                  B(1,1),B(1,NK+1),B(1,2*NK+1),B(1,3*NK+1),
+     %                  N,N,N,NK)
+*
+         DO K=1,NK
+         DO J=1,N
+*                                TKE at final time
+            EN(J,K)=ZE(J,K)+2*TAU*EN(J,K)
+            EN(J,K)=MAX(ETRMIN,0.5*(EN(J,K)+ZE(J,K)))
+*                                Transport term
+            C(J,K)=(EN(J,K)-ZE(J,K))/TAU
+*                                Variation rate of TKE (residual)
+            X(J,K)=C(J,K)+X(J,K)
+         END DO
+         END DO
+*
+         CALL SERXST ( C , 'ET' , TRNCH , N , 0.0 , 1.0 , -1 )
+         CALL MZONXST ( C , 'ET' , TRNCH , N , HEURSER, 1.0, -1, IT)
+         CALL SERXST ( X , 'ER' , TRNCH , N , 0.0 , 1.0 , -1 )
+         CALL MZONXST ( X , 'ER' , TRNCH , N , HEURSER, 1.0, -1, IT)
+*
+      ENDIF
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d4 1
+d35 3
+d134 1
+a134 1
+      EXTERNAL SERXST,MZONXST, SERGET
+d140 1
+a140 1
+      REAL FIMS,FIMI,FITS,FITI
+d150 10
+d218 13
+a231 3
+         FITS=BETA*(1+AS*MAX(C(J,K),0.))
+         FIMI=(1-CI*MIN(C(J,K),0.))**(-1/6.)
+         FITI=BETA*(1-CI*MIN(C(J,K),0.))**(-1/3.)
+d237 1
+a237 1
+           ZE(J,K)=ZE(J,K)/FIMI
+d244 1
+a244 1
+           KT(J,K)=FIMS/FITS
+d246 1
+a246 1
+           KT(J,K)=FIMI/FITI
+d292 1
+d297 1
+a297 1
+     1                 *S(J,K)**(-CAPPA)
+d300 1
+@

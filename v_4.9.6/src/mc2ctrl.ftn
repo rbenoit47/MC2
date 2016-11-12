@@ -1,0 +1,336 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine mc2ctrl (prout,status)
+      implicit none
+*
+      logical prout
+      integer status
+*
+*     ##########################################
+*     #  Initialization of controle parameters #
+*     #  (see MC2 user guide for descriptions) #
+*     ##########################################
+*
+#include "mc2nml.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+#include "partopo.cdk"
+      character*256 dumc
+      character*10 nmlname
+      integer unnml,pnerrdirf,pnflag1,pnflag2,nptpil,k,status2,longueur
+      data unnml,nptpil /11,10/
+*
+      status  = -1
+      status2 = -1
+      call getenvc('rep_from_which_model_is_launched',dfwmil)
+      nml    = dfwmil(1:longueur(dfwmil))//'/process/model_settings'
+*
+      if (.not.modrstrt) then
+         grninit = 0
+         gndtini = 0
+         gndstat = 1
+         gnpstat = 1
+         gnstatdp= 0
+         gnnls   = 1
+         nstepsor_d = gnnt
+         launchsor = .false.
+         gnmaphy = 0
+         gnload  = 0
+         gnnohyd = 1          ! non-hydrostatic option
+         grtstar = 273.16     ! ----becoming obsolete----
+*
+c NEW parameters to define basic state: 
+c        tzero_star, ttop_star, ntrop_star, htrop_star, nstrat_star
+c        see qntstar.ftn for details and tstar(k) in stdout
+*
+         tzero_star = 273.16     ! isothermal basic state
+         ttop_star  = -1.        ! isothermal basic state
+         ntrop_star = -1.        ! isothermal basic state
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c  NEW  non-isothermal basic state next
+c
+c        tzero_star = 288.15  ! surf temp  : non-isothermal basic state
+c        ttop_star  = 210.15  ! top  temp  : non-isothermal basic state
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+         htrop_star = 10000   ! tropopause : non-isothermal basic state
+         nstrat_star= -1.     ! isothermal basic state stratosphere
+*
+c NEW parameters to define (simulate) gal-chen
+c see h_geop.cdk for details
+         iscal(1)= 1000000    ! simulating gal-chen
+         iscal(2)= 1000000    ! simulating gal-chen
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c  try the following shaer coordinate
+c
+c        iscal(1)= 10000      ! scaling in shaer et al coordinate
+c        iscal(2)=  2000      ! scaling in shaer et al coordinate
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+         grepsi  = 0.1        ! time decentering
+         grtf    = 0.05       ! parameter for the time-filter
+         vmh_stime = 0
+         vmh_ndt   = 20
+*
+         nosolv    = .false.
+         semi_lag  = .true.
+         slab      = .false.  ! no slab-symmetry
+         nofcms    = .false.  ! coriolis and map scale active
+         no_coriol = .false.  ! coriolis active
+         no_msf    = .false.  ! map scale active
+         staguv    = .true.
+         glconta   = .false.
+         glcpld    = .false.
+         gncpld    = 1
+*
+         flextop   = .false.  ! rigid top
+*
+         gnk     = 21
+         htop    = 30000.0
+         nktop   = -1
+         gnnpbl  = -1
+         do k=1,maxdynlv
+            zt(k)=-1.0
+         end do
+         v_interp= 'CUBIC_UQAM'
+*
+         Grdc_proj_S = '@'
+         Grdc_phir= 22.5
+         Grdc_dgrw= 135.
+         Grdc_xlat1 = 0.
+         Grdc_xlon1 = 180.
+         Grdc_xlat2 = 0.
+         Grdc_xlon2 = 270.
+         Grdc_ndt   = 0
+         Grdc_nsor  = 0
+         do k=1,max_trnm
+            Grdc_trnm_S(k) = '@#$%'
+         end do
+*
+         npex = 1
+         npey = 1
+*
+         Tsl_ic  = .false.
+         Tsl_iter= 1
+         precond = 'jacobi'
+         hsolvpre= 1.0e-4
+         maxite  = 200
+         diagres = .false.
+         wall    = .false.    ! open boundary
+         period_x = .false.   ! no periodicity in x
+         period_y = .false.   ! no periodicity in y
+         tmg      = .false.
+*
+         nesmt_bgx = nptpil
+         nesmt_bgy = nptpil
+         nesmt_ndx = nptpil
+         nesmt_ndy = nptpil
+         hord_type  = "explicit"
+         hord_del   = 4
+         hord_lnr   = 0.1    ! non-dimensional
+         hord_nutop = 1.     ! non-dimensional
+         hord_zspng = 0
+         hord_fuv   = 1.
+         hord_fww   = 1.
+         hord_fhu   = 0.
+         hord_ftt   = 0.
+         hord_ftr   = 0.
+*
+         gnpvw   = 0
+         grpilver= 0.5
+*
+         g_id = 1
+         g_if = gni
+         g_jd = 1
+         g_jf = gnj
+         do k=1,maxlvl_out
+            z_out(k)=-1
+         end do
+         theocase   = " "
+         trig_rstrt = .false.
+         time2stop  = -1
+*
+* *** Updating configuration with namelist pil_cfgs
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $         form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9991
+         endif
+*
+         nmlname = 'mc2_cfgs'
+         rewind ( unnml )
+         read (unnml, nml=mc2_cfgs, end = 9120)
+         write (6,601) nmlname
+*
+         nmlname = 'pe_topo'
+         rewind ( unnml )
+         read (unnml, nml=pe_topo, end = 9120)
+         write (6,601) nmlname
+*
+         close (unnml)
+*
+         if (grninit.le.0.) gndtini = 0
+         call low2up  (v_interp,dumc)
+         v_interp = dumc
+         if (v_interp.eq.'VOISIN') v_interp = 'NEAREST'
+         call low2up  (precond,dumc)
+         precond = dumc
+         if (Grd_proj_S.eq.'L')  precond = 'JACOBI'
+         call low2up  (hord_type,dumc)
+         hord_type = dumc
+         call low2up  (theocase,dumc)
+         if (.not.theoc) dumc=" "
+         theocase = dumc
+         nstepsor_d = max(1,nstepsor_d)
+         vmh_stime  = max(0,vmh_stime)
+         vmh_ndt    = max(1,vmh_ndt)
+         if (gnpilver.gt.0) then
+            gnpilver = min(gnk-1,max(4,gnpilver))
+         else
+            gnpilver = 0
+         endif
+         nktop = min(gnk,max(0,nktop))
+         gndstat = max(1,gndstat)
+         gnpstat = max(1,gnpstat)
+         grepsi  = max(0.,min(1.,grepsi))
+         hord_lnr = min(1.,max(0.,hord_lnr))
+         hord_zspng = min(gnk-2,max(0,hord_zspng))
+         if (hord_zspng.gt.0) hord_zspng=max(4,hord_zspng)
+         gnpvw = min(gnk-1,max(0,gnpvw))
+         if (gnpvw.gt.0) gnpvw=max(4,gnpvw)
+#if defined (NEC)
+         launchsor = .false.
+#endif
+*     
+         g_id  = min(gni+hx,max(1-hx,g_id))
+         g_if  = min(gni+hx,max(1-hx,g_if))
+         g_jd  = min(gnj+hy,max(1-hy,g_jd))
+         g_jf  = min(gnj+hy,max(1-hy,g_jf))
+         g_idp = min(gni,max(1,g_id))
+         g_ifp = min(gni,max(1,g_if))
+         g_jdp = min(gnj,max(1,g_jd))
+         g_jfp = min(gnj,max(1,g_jf))
+*
+         if (z_out(1).lt.0) then
+            do k=1,gnk
+               z_out(k)=k
+            end do
+            nk_out=gnk
+         else
+            nk_out=0
+            do k=1,maxlvl_out
+               if ((z_out(k).lt.gnk).and.(z_out(k).gt.0)) then
+                  nk_out=nk_out+1
+                  z_tmp(nk_out) = z_out(k)
+               endif
+            end do
+            do k=1,nk_out
+               z_out(k) = z_tmp(k)
+            end do
+         endif
+         status2 = 1
+*
+      else
+*
+         nmlname = 'mc2_cfgs'
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $        'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         call rmc2par (un_rstrt)
+         time2stop = -1
+         call mod_rstrt (un_rstrt,prout,status2,'MC2')
+*
+      endif
+*
+*     Print controle parameters
+*
+      if (prout) then
+      print*
+      write (6, nml=mc2_cfgs_p)
+      print*
+      write (6, nml=pe_topo)
+      print*
+      endif
+*
+      if (status2.eq.1) status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+ 601  format (' CONFIGURATION UPDATED WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+*
+      return
+      end
+*
+      subroutine rmc2par(un)
+      implicit none
+*
+      integer un
+*
+**
+#include "mc2nml.cdk"
+*
+*----------------------------------------------------------------------
+*
+      read (un) gndstat,gnpstat,gnnls,nstepsor_d,gnmaphy,gnnohyd,
+     $          grepsi,vmh_stime,vmh_ndt,launchsor,theocase,
+     $          gnpilver,gnpvw,grpilver,grtf,trig_rstrt,time2stop,
+     $          hord_type,hord_del,hord_zspng,kh,nu,
+     $          hord_lnr,hord_nutop,hord_fuv,hord_fww,hord_fhu,hord_ftt,
+     $          hord_ftr,glconta,glcpld,gncpld,gnload,no_coriol,no_msf,
+     $          nofcms,nosolv,wall,slab,flextop,tzero_star,ttop_star,
+     $          ntrop_star,htrop_star,nstrat_star,semi_lag,
+     $          iscal,precond,hsolvpre,maxite,diagres,
+     $          gnstatdp,nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy,
+     $          g_id,g_if,g_jd,g_jf,z_out,nk_out, Tsl_ic, Tsl_iter,
+     $          g_idp,g_ifp,g_jdp,g_jfp,
+     $          npex,npey,period_x,period_y,htop,staguv,
+     $          gnk,nktop,gnnpbl,zt,grtstar,v_interp,grninit,gndtini,
+     $          current_nest,tf_nest,
+     $          Grdc_ni,Grdc_nj,Grdc_iref,Grdc_jref,
+     $          Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_ndt,Grdc_nsor,
+     $          Grdc_dgrw,Grdc_phir,Grdc_proj_S,Grdc_trnm_S,
+     $          Grdc_xlat1,Grdc_xlon1,Grdc_xlat2,Grdc_xlon2
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine wmc2par (un)
+      implicit none
+*
+      integer un
+*
+**
+#include "mc2nml.cdk"
+*
+*----------------------------------------------------------------------
+*
+      write(un) gndstat,gnpstat,gnnls,nstepsor_d,gnmaphy,gnnohyd,
+     $          grepsi,vmh_stime,vmh_ndt,launchsor,theocase,
+     $          gnpilver,gnpvw,grpilver,grtf,trig_rstrt,time2stop,
+     $          hord_type,hord_del,hord_zspng,kh,nu,
+     $          hord_lnr,hord_nutop,hord_fuv,hord_fww,hord_fhu,hord_ftt,
+     $          hord_ftr,glconta,glcpld,gncpld,gnload,no_coriol,no_msf,
+     $          nofcms,nosolv,wall,slab,flextop,tzero_star,ttop_star,
+     $          ntrop_star,htrop_star,nstrat_star,semi_lag,
+     $          iscal,precond,hsolvpre,maxite,diagres,
+     $          gnstatdp,nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy,
+     $          g_id,g_if,g_jd,g_jf,z_out,nk_out, Tsl_ic, Tsl_iter,
+     $          g_idp,g_ifp,g_jdp,g_jfp,
+     $          npex,npey,period_x,period_y,htop,staguv,
+     $          gnk,nktop,gnnpbl,zt,grtstar,v_interp,grninit,gndtini,
+     $          current_nest,tf_nest,
+     $          Grdc_ni,Grdc_nj,Grdc_iref,Grdc_jref,
+     $          Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_ndt,Grdc_nsor,
+     $          Grdc_dgrw,Grdc_phir,Grdc_proj_S,Grdc_trnm_S,
+     $          Grdc_xlat1,Grdc_xlon1,Grdc_xlat2,Grdc_xlon2
+*
+*----------------------------------------------------------------------
+      return
+      end

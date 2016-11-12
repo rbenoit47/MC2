@@ -1,0 +1,60 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wrht
+*
+      subroutine wrht (unf)
+      implicit none 
+*
+#include "lcldim.cdk"
+#include "halo.cdk"
+#include "partopo.cdk"
+      integer unf
+**
+      integer fstinf,fstluk
+      external fstinf,fstluk
+      integer i,j,iproc,key,err,ni1,nj1,nk1
+      real, dimension (:), allocatable :: ht
+*
+*----------------------------------------------------------------------
+*  
+      key = fstinf(unf,ni1,nj1,nk1,-1,'THERMO_H',-1,-1,-1,' ','HT')
+*
+      if (key.lt.0) then
+         write(6,101)
+         stop
+      endif
+*
+      allocate (ht(ni1))
+      err = fstluk(ht, key, ni1,nj1,nk1)
+*
+      if (halo.le.0) then
+*
+         do j=0,npey-1
+         do i=0,npex-1
+            iproc = j*npex + i
+            call bmf_write ( gc_ld2(5,iproc), 'HT  ',ni1,1,ni1,
+     $                       1,1,1,1,1,1,0,0,0,0,41,0,ni1,ht )
+         end do
+         end do
+*
+      else
+*
+         iproc=0
+         call bmf_write ( gc_ld2(5,iproc)  , 'HT  ',ni1,1,ni1,
+     $                       1,1,1,1,1,1,0,0,0,0,41,0,ni1,ht )
+         call bmf_write ( gc_ld2(5,iproc)+1, 'HT  ',ni1,1,ni1,
+     $                       1,1,1,1,1,1,0,0,0,0,41,0,ni1,ht )
+         call bmf_write ( gc_ld2(5,iproc)+2, 'HT  ',ni1,1,ni1,
+     $                       1,1,1,1,1,1,0,0,0,0,41,0,ni1,ht )
+         call bmf_write ( gc_ld2(5,iproc)+3, 'HT  ',ni1,1,ni1,
+     $                       1,1,1,1,1,1,0,0,0,0,41,0,ni1,ht )
+*
+      endif
+*
+      deallocate (ht)
+*
+ 101  format (/' Record HT must be available when input'/
+     $         ' in Gal-Chen coordinates --- ABORT ---'/)
+*----------------------------------------------------------------------
+      return
+      end
+      

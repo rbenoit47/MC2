@@ -1,0 +1,107 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r inibusc
+*
+      subroutine inibusc
+      implicit none
+*
+*AUTHOR   Michel Desgagne       Dec   2002
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*IMPLICITES
+*
+#include "physcom.cdk"
+#include "grd.cdk"
+#include "lesbus.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+      integer ncasc
+      parameter (ncasc=7)
+      character*16 upolistc(ncasc)
+      character*12 busname
+      character*4 outname
+      character*3 shape
+      character*1 bus
+      integer id,jd,kd,nspc,adrpbus,pnk,ipas,fadd,fmul
+      data upolistc /"SNODP","TWATER","GLSEA","ALVIS","TGLACIER",
+     $               "TMICE","TSOIL"/
+*
+*-------------------------------------------------------------------
+*
+      phyotopc=0
+      phyospcc=0
+*
+      if (Grdc_proj_S .ne. '@') then
+      do 30 id=1,ncasc
+         busname = upolistc(id)
+         ipas    = Grdc_ndt
+         do jd=1,pertop
+            if (busname.eq.pernm(jd)) then
+               do kd=1,phyotopc
+                  if(busname.eq.phyonm(kd,1)) goto 30
+               end do
+               call decoshp (shape,fadd,fmul,perdc(jd))
+               bus     = 'P'
+               adrpbus = perpar(jd,1)
+               outname = peron(jd)
+               if (busname.eq.'GLSEA') outname='LG'
+               goto 430
+            endif
+         end do
+         goto 30
+ 430     nspc = fni*fnj
+         pnk  = 1
+         if ((shape.eq.'SLB').or.(shape.eq.'SLS')) then
+            nspc = fni*fnj*fnk
+            pnk  = fnk
+         endif
+         phyotopc             = phyotopc + 1
+         phyonmc (phyotopc,1) = busname
+         phyonmc (phyotopc,2) = outname
+         phyonmc (phyotopc,3) = bus
+         phyoparc(phyotopc,1) = phyospcc + 1
+         phyoparc(phyotopc,2) = nspc*fmul
+         phyoparc(phyotopc,3) = pnk
+         phyoparc(phyotopc,4) = fmul
+         phyoparc(phyotopc,5) = ipas
+         phyoparc(phyotopc,6) = adrpbus
+         phyospcc = phyoparc(phyotopc,1) + phyoparc(phyotopc,2) - 1
+ 30   continue
+      endif
+*
+      sizobusc = phyospcc
+*
+      if ((myproc.eq.0).and.(Grdc_proj_S.ne.'@')) then
+      write (6,130)
+      print*
+      write (6,101)  'OUTPUT FOR CASCADE'
+      write (6,130)
+      write (6,110)
+      write (6,130)
+      do id=1,phyotopc
+         write (6,120) phyonmc(id,1),phyonmc(id,2),phyonmc(id,3),
+     $                 phyoparc(id,1),phyoparc(id,2),phyoparc(id,3),
+     $                 phyoparc(id,4),phyoparc(id,5),phyoparc(id,6)
+      end do
+      write (6,130)
+      endif
+*
+ 101  format (/20x,'+',2(8('-'),'+'),4('-'),'+'/
+     $         20x,'|**',a,'**|')
+ 110  format ('|',2x,'Names',2x,'|',' STD ',
+     $     '|BUS|  Start | Length | nk | Mul |Nstep| Pbusid |')
+ 120  format ('|',1x,a8,'|',1x,a2,'  |',1x,a1,' |',2(i7,' |'),
+     $         i3,' |',2(i4,' |'),i7,' |')
+ 130  format ('+',9('-'),'+',5('-'),'+',3('-'),'+',2(8('-'),'+'),
+     $            4('-'),'+',2(5('-'),'+'),8('-'),'+')
+*
+ 901  format (i8)
+*
+*-------------------------------------------------------------------
+      return
+      end
+*

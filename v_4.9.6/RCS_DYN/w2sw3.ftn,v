@@ -1,0 +1,93 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r w2sw3
+      subroutine w2sw3(sw,u,v,w,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                  lminx,lmaxx,lminy,lmaxy,lnk)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk
+      real w (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     u (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     v (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     sw(lminx:lmaxx,lminy:lmaxy,lnk)
+      real sbxy (lminx:lmaxx,lminy:lmaxy),
+     $     gg1  (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     gg2  (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     gg0wr(lminx:lmaxx,lminy:lmaxy,lnk),
+     $     dhdt (lminx:lmaxx,lminy:lmaxy,lnk)
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*     calculate
+*                        true vertical motion sw (m/s)
+*     from
+*                 generalized vertical motion  W (m/s)
+*
+#include "lcldim.cdk"
+*
+      integer i,j,k,km1
+      real*8 p25
+      parameter(p25=0.25d0)
+*
+*----------------------------------------------------------------
+*
+!$omp do
+      do k=1,gnk
+         if (k.eq.gnk) then
+*
+         do j=1-hy,ldnj+hy-1
+         do i=1-hx,ldni+hx-1
+cccc attention !!! not valid with flextop !!!
+            sw(i,j,gnk) = 0.0
+         end do
+         end do
+*
+         else
+*
+         km1 = max(k-1,1)
+         do j=1-hy,ldnj+hy-1
+         do i=1-hx,ldni+hx-1
+            sw(i,j,k) = dhdt(i,j,k) - sbxy(i,j) * p25 *
+     $                ( gg1(i+1,j,k) * ( u(i+1,j,k) + u(i+1,j,km1) )
+     $                + gg1(i  ,j,k) * ( u(i  ,j,k) + u(i  ,j,km1) )
+     $                + gg2(i,j+1,k) * ( v(i,j+1,k) + v(i,j+1,km1) )
+     $                + gg2(i,j  ,k) * ( v(i,j  ,k) + v(i,j  ,km1) ) )
+     $                + w(i,j,k)/gg0wr(i,j,k)
+         end do
+         end do
+*
+         endif
+      end do
+!$omp end do
+*
+*----------------------------------------------------------------
+      return
+      end
+
+
+
+
+@

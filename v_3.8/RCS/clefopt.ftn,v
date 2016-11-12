@@ -1,0 +1,93 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P CLEFOPT - INITIALISER UNE VARIABLE COMMUNE A LA DYNAMIQUE
+***              ET A LA PHYSIQUE
+*
+      SUBROUTINE CLEFOPT (NOM,VALEUR)
+*
+#include "impnone.cdk"
+      CHARACTER *(*) NOM
+      INTEGER VALEUR
+*
+*Author
+*          B. Bilodeau  (Mar 90)
+*
+*Revision
+* 001      B. Bilodeau  (August 1991)- Adaptation to UNIX
+*
+*Object
+*          to initialize a variable (EVAP or WET) common to the
+*          dynamics and physics
+*
+*Arguments
+*
+*          - Input -
+* NOM      name of the variable to initialize
+* VALEUR   value used to initialize the variable
+*
+*Notes
+*          EVAP - surface evaporation
+*          WET - wet or dry model
+*
+#include "clefvar.cdk"
+#include "bytecdk.cdk"
+*
+*
+*MODULES
+      EXTERNAL MOVLEV
+**
+      IF( NOM .EQ. 'EVAP') THEN
+         CALL MOVLEV(VALEUR,EVAP,1)
+*
+      ELSE IF (NOM .EQ. 'WET') THEN
+         CALL MOVLEV(VALEUR,WET,1)
+*
+         ELSE IF (NOM .EQ. 'BITPMOT') THEN
+            CALL MOVLEV(VALEUR,BITPMOT,1)
+         ELSE IF (NOM .EQ. 'FPOINT') THEN
+            CALL MOVLEV(VALEUR,FPOINT,1)
+      ENDIF
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

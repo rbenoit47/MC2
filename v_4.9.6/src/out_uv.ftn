@@ -1,0 +1,203 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_uv
+      subroutine out_uv (up,vp,prm,qp,ht,hm,msf,rf,ng,lnk,nksor,ip2,unf)
+      implicit none
+*
+      integer ng,lnk,nksor,ip2,unf
+      real up(ng,*),vp(ng,*),prm(ng,lnk),qp(ng,lnk),
+     $     ht(ng,*),hm(ng,*),msf(ng),rf(nksor)
+*
+*OBJECT
+*     interpolation des vents de coord. hauteur a pression
+*     calcul du tourbillon
+*
+*METHOD
+*
+**
+#include "consdyn_8.cdk"
+#include "levels.cdk"
+#include "lcldim.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+#include "partopo.cdk"
+*
+      integer i,j,k,err,nkref,gnpself
+      integer gluu,glvv,glqr,gldd,glpreg,glpprm,glpstr
+      real, dimension (:,:,:), allocatable :: uvpres
+      real, dimension (:,:  ), allocatable :: u,v
+      real, dimension (:    ), allocatable :: qr,dd
+      real gotsr(ng,lnk-1), ortsr(ng,lnk),umod(ng,lnk),vmod(ng,lnk),
+     $     qtsr (ng,lnk  ), ntsr2(ng,lnk-1)
+      real posv,zm_tmp(lnk+1)
+      pointer (paposv, posv(ng,nksor,2,3))
+*----------------------------------------------------------------------
+*
+      if (myproc.eq.0) print*, '=====> OUT_UV'
+*
+      paposv = papositd
+*      
+      gluu   = -1
+      glvv   = -1
+      glqr   = -1
+      gldd   = -1
+      glpreg = -1
+      glpprm = -1
+      glpstr = -1
+      do i=1,nvardyn
+         if (udolist(i).eq.'UU'  ) gluu  =i
+         if (udolist(i).eq.'VV'  ) glvv  =i
+         if (udolist(i).eq.'QR'  ) glqr  =i
+         if (udolist(i).eq.'DD'  ) gldd  =i
+         if (udolist(i).eq.'PREG'  ) glpreg  =i
+         if (udolist(i).eq.'PPRM'  ) glpprm  =i
+         if (udolist(i).eq.'PSTR'  ) glpstr  =i
+      end do
+      if (levtyp.ne.'G') then
+         glpprm = -1
+         glpstr = -1
+      endif
+*
+      nkref= nksor
+      if (levtyp.eq.'G') nkref= lnk
+      if (nkref.lt.1) return
+*
+      do k=2,lnk
+         do i=1,ng
+            umod(i,k) = up(i,k-1)
+            vmod(i,k) = vp(i,k-1)
+         end do
+      end do
+      do i=1,ng
+         umod(i,1) = umod(i,2)
+         vmod(i,1) = vmod(i,2)
+      end do
+      do k=1,lnk-1
+         zm_tmp(k+1) = zm(k)
+      end do
+      zm_tmp(1) = zt(1)
+*
+      allocate (uvpres(ng,nkref,2),
+     $          u(ng,nkref),v(ng,nkref),qr(ng*nkref),dd(ng*nkref))
+*
+      if (levtyp.ne.'G') then
+         call inv_vertint ( uvpres(1,1,1),umod,posv(1,1,1,2),huv_od,
+     $                                                 ng,nkref,lnk )
+         call inv_vertint ( uvpres(1,1,2),vmod,posv(1,1,1,2),huv_od,
+     $                                                 ng,nkref,lnk )
+      else
+         do k=1,nkref
+         do i=1,ng
+            uvpres(i,k,1) = umod(i,k)
+            uvpres(i,k,2) = vmod(i,k)
+         end do
+         end do
+      endif
+*
+      if ( (glqr.gt.0).or.(gldd.gt.0) )
+     $   call out_qrdd ( qr,dd,uvpres,msf,minx,maxx,miny,maxy,nkref )
+*
+      do k=1,nkref
+      do i=1,ng
+         u(i,k) = uvpres(i,k,1) / knams_8 * sqrt(msf(i))
+         v(i,k) = uvpres(i,k,2) / knams_8 * sqrt(msf(i))
+      end do
+      end do
+*
+*     Staggering of U and V.
+*
+      if (staguv) call out_stguv (u,v,minx,maxx,miny,maxy,nkref)
+*
+      if (levtyp.ne.'G') then
+         if (gluu.gt.0)
+     $        call ecris_fst (u,minx,maxx,miny,maxy,rf,'UU  ',1.0,ip2,
+     $                     out_kind,nkref,table_out(1,gluu),'DYN',unf)
+         if (glvv.gt.0)
+     $        call ecris_fst (v,minx,maxx,miny,maxy,rf,'VV  ',1.0,ip2,
+     $                     out_kind,nkref,table_out(1,glvv),'DYN',unf)
+      else
+         if (gluu.gt.0) then
+            table_out(2,gluu) = table_out(2,gluu) + 1
+            call ecris_fst (u,minx,maxx,miny,maxy,zm_tmp,'UU  ',1.0,ip2,
+     $                       out_kind,nkref,table_out(1,gluu),'DYN',unf)
+         endif
+         if (glvv.gt.0) then 
+            table_out(2,glvv) = table_out(2,glvv) + 1
+            call ecris_fst (v,minx,maxx,miny,maxy,zm_tmp,'VV  ',1.0,ip2,
+     $                       out_kind,nkref,table_out(1,glvv),'DYN',unf)
+         endif
+      endif
+*
+*     * Vorticity and Divergence
+*
+      if ((glqr.gt.0).or.(gldd.gt.0)) then
+         if (levtyp.ne.'G') then
+            if (glqr.gt.0)
+     $        call ecris_fst (qr,minx,maxx,miny,maxy,rf,'QR  ',1.0,ip2,
+     $                      out_kind,nkref,table_out(1,glqr),'DYN',unf)
+            if (gldd.gt.0)
+     $        call ecris_fst (dd,minx,maxx,miny,maxy,rf,'DD  ',1.0,ip2,
+     $                      out_kind,nkref,table_out(1,gldd),'DYN',unf)
+         else
+            if (glqr.gt.0) then
+               table_out(2,glqr) = table_out(2,glqr) + 1
+               call ecris_fst (qr,minx,maxx,miny,maxy,zm_tmp,'QR  ',1.0,
+     $                   ip2,out_kind,nkref,table_out(1,glqr),'DYN',unf)
+            endif
+            if (gldd.gt.0) then
+               table_out(2,gldd) = table_out(2,gldd) + 1
+               call ecris_fst (dd,minx,maxx,miny,maxy,zm_tmp,'DD  ',1.0,
+     $                   ip2,out_kind,nkref,table_out(1,gldd),'DYN',unf)
+            endif
+         endif
+      endif
+*
+      if (glpreg.gt.0) then
+         if (levtyp.ne.'G') then
+            call inv_vertint (dd,qp,posv(1,1,1,2),huv_od,ng,nkref,lnk)
+            call ecris_fst (dd,minx,maxx,miny,maxy,rf,'PREG',1.0,ip2,
+     $                  out_kind,nkref,table_out(1,glpreg),'DYN',unf)
+         else
+            table_out(2,glpreg) = table_out(2,glpreg) + 1
+            call ecris_fst (qp,minx,maxx,miny,maxy,zm_tmp,'PREG',1.0,
+     $              ip2,out_kind,nkref,table_out(1,glpreg),'DYN',unf)
+         endif
+      endif
+*
+      call qntstar (qtsr,ntsr2,gotsr,ortsr,ht,hm,ng,0,lnk-1)
+*
+      if (glpprm.gt.0) then
+         do k=1,nkref
+         do i=1,ng
+            u(i,k) = exp(qp(i,k) * ortsr(i,k))
+         end do
+         end do
+         table_out(2,glpprm) = table_out(2,glpprm) + 1
+         call ecris_fst (u,minx,maxx,miny,maxy,zm_tmp,'PPRM',0.01,ip2,
+     $                   out_kind,nkref,table_out(1,glpprm),'DYN',unf)
+      endif
+      if (glpstr.gt.0) then
+         do k=1,nkref
+         do i=1,ng
+            u(i,k) = exp(qtsr(i,k))
+         end do
+         end do
+         table_out(2,glpstr) = table_out(2,glpstr) + 1
+         call ecris_fst (u,minx,maxx,miny,maxy,zm_tmp,'PSTR',0.01,ip2,
+     $                   out_kind,nkref,table_out(1,glpstr),'DYN',unf)
+      endif
+*
+      deallocate (uvpres,u,v,qr,dd)
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+
+
+
+

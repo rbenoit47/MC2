@@ -1,0 +1,170 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine step8 (dimphy,trname,nt)
+      implicit none
+*
+      integer dimphy,nt
+      character*8 trname(nt)
+*
+#include "rec.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+#include "nesting.cdk"
+#include "wrnmem.cdk"
+#include "dtmdtp.cdk"
+#include "gcrk.cdk"
+*
+      integer lastep, stepno, err, nsol
+      real, dimension (:), allocatable :: w1
+      real*8, dimension (:), allocatable :: xyzd,wrk_sol1,wrk_sol2
+      real wrn,dtf
+      pointer (pawrn, wrn(*))
+*
+      real*8 tss,pt5,one
+      logical semi_imp,vert_imp,damp_div,whenby1
+      data whenby1 /.false./
+      parameter (pt5 = 0.5d0, one = 1.0d0)
+      save lastep,whenby1
+*----------------------------------------------------------------------
+      semi_imp=.true.
+      vert_imp=.false.
+      damp_div=.false.
+*
+      tss = dble(grdt)
+      if ( gnstepno .eq. 1 ) tss = pt5 * dble(grdt)
+*
+      dtm = (one-dble(grepsi)) * tss
+      dtp = (one+dble(grepsi)) * tss
+*
+*     Switching T0 into T-   and T+ into T0 (flip pointers)
+*     and re-apply lower boundary conditions W(i,j,1)=0 
+*
+*     Sink point
+*
+      call rpn_comm_xch_halo (qp0,minx,maxx,miny,maxy,ldni,ldnj,
+     $              ndynvar*gnk+1,hx,hy,period_x,period_y,ldni,0)
+      call flipnt ()
+* 
+      nsol = (5*dim_s*nz + 2*(maxx-minx+3)*(maxy-miny+3)*nz +
+     $                     ny+2*(niterj-1))
+      nsol = nsol + 7*dim3d + 3*nksp*dim3d + dim_s + dim_czz
+      allocate (xyzd(10*dim3d),w1(max(10,ndynvar)*dim3d),wrk_sol1(nsol),
+     $          wrk_sol2(dim3d*(im+1)+nthreads))
+      call hpalloc (pawrn, 4*dim3d, err,1)
+      paur  =  loc( wrn(        1))
+      pavr  =  loc( wrn(1*dim3d+1))
+      paswr =  loc( wrn(2*dim3d+1))
+      patpr =  loc( wrn(3*dim3d+1))
+*
+!$omp parallel
+*
+*     Update Metric Parameters if necessary
+*
+      call metric (w1, xyzd)
+*
+*     Prepare Variables for Advection
+*
+!$omp single
+      if (myproc.eq.0) print *,'P,R,Q-TERMS'
+!$omp end single
+*
+      call uvadv3
+*
+      if (.not.nosolv) then
+         if(semi_imp)then
+            call rhs3_pm ( dimphy,w1,minx,maxx,miny,maxy )
+         else if(vert_imp) then
+            call rhs3_p0m( dimphy,w1,minx,maxx,miny,maxy )
+         else
+            call rhs3_p0 ( dimphy,w1,minx,maxx,miny,maxy )
+         endif
+         if(damp_div) then
+            if(myproc.eq.0) print *,'damping 3d-divergence'
+            call difdiv
+         endif
+         call rhs3_r0 ( xyzd )
+      endif
+*
+      if (semi_lag) then
+!$omp single
+         if (myproc.eq.0) print *,'Semi-Lagrangian Advection'
+!$omp end single
+         call traject ( xyzd, w1, dtm, dtp )
+         call fwrd3d  ( xyzd, w1, dtm, dtp )
+      else
+!$omp single
+         if (myproc.eq.0) print *,'Eulerian Advection'
+         call euler  ( w1, dtm, dtp )
+!$omp end single
+      endif
+*
+      stepno = gnstepno
+      if ( grdt .lt. 0.) then
+         stepno = lastep - gnstepno
+      else
+         lastep = gnstepno
+      endif
+*
+*     Update nesting data for the current validity time
+*     (linear interpolation in time between unestt (t-dt)
+*     and unestta).
+*
+      if (.not.ctebcs) call nest_intt (stepno, trname, nt, dtf, whenby1)
+*
+*     Specify Normal Wind Components on Model Boundaries
+*
+      call uvbdy
+*
+      if (.not.nosolv) then
+         if (semi_imp) then
+*
+*           Semi-Implicit Scheme
+*
+*           Pressure Variable: Solve the Elliptic Equation
+*
+!$omp single
+            if (myproc.eq.0) print *,'Semi-Implicit Time Integration'
+!$omp end single
+            call solver2_p (wrk_sol1,wrk_sol2)
+*
+*           Other Variables: Back Substitution 
+*
+            call lhs3_uv
+            call lhs3_wt
+*
+         else if(vert_imp) then
+!$omp single
+            if (myproc.eq.0) print *,'Semi-Implicit in vertical only'
+            call sis_1d
+            call rpn_comm_xch_halo(qpp(minx,miny,1),minx,maxx,miny,maxy,
+     $                     ldni,ldnj,gnk,hx,hy,period_x,period_y,ldni,0)
+            call lhs3_wt
+!$omp end single
+         else
+!$omp single
+            if (myproc.eq.0) print *,'Pure Leapfrog Scheme'
+            call lhs3_qt
+!$omp end single
+         endif
+*
+      endif
+*
+!$omp end parallel
+*
+      deallocate (xyzd,w1,wrk_sol1,wrk_sol2)
+      call hpdeallc (pawrn ,err,1)
+*
+*     Use Nesting Data or Boundary/Symmetry Conditions 
+*                  to Update EXTERIOR Halo
+*     Perform Gravity Wave Absorption on Global Boundaries and Model Top
+*
+      call glb_bound (wall,slab)
+*
+*----------------------------------------------------------------------
+      return
+      end
+

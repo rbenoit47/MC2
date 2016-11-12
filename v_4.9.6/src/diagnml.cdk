@@ -1,0 +1,46 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      character*8 zsurfac(nmlmax), zprofil(nmlmax), enddiagc
+      logical     diagzon, enddiagl
+      integer statijd(2,nmlmax),nstatd,iinf,jinf,isup,jsup,nbbande
+      integer dimi,dimj,mode,dznsrf,dznprf,divzon,nptemps,enddiagi
+      real    statlld(2,nmlmax),heurfin,enddiagr
+*
+      common /diagz_c/ zsurfac,zprofil,enddiagc
+      common /diagz_l/ diagzon,enddiagl
+      common /diagz_i/ statijd,nstatd,iinf,jinf,isup,jsup,nbbande,dimi,
+     $                 dimj,mode,dznsrf,dznprf,divzon,nptemps,enddiagi
+      common /diagz_r/ statlld,heurfin,enddiagr
+*
+      namelist /diag_cfg/ statijd,nstatd,zsurfac,zprofil,diagzon,iinf,
+     $                   jinf,isup,jsup,nbbande,dimi,dimj,mode,dznsrf,
+     $                   dznprf,divzon,nptemps,statlld,heurfin
+*
+*     diagzon    : logical switch to activate the zonal diagnostic
+*     divzon     : switch to choose the type of domaine division
+*                  0 - subdivisions for nbbandes j
+*                  1 - subdivisions for nbbandes zonals
+*                  2 - subdivisions for nbbandes topographics
+*                  3 - subdivisions for nstat stations
+*     nbbande    : number of domain division for extraction
+*                  valid (used) only if divzon = 0, 1 or 2
+*     dimi, dimj : if divzon=3, grid point dimensions of the borders of 
+*                               the station along i,j i.e. if dimi=dimj
+*                               =1, the station will have 3 by 3 points
+*     mode       : type of extraction
+*                  1 - will extract only the mean
+*                  2 - will extract only the standard deviation
+*                  3 - will extract the mean and the standard deviation
+*     iinf,jinf,isup,jsup: limites of the domain of extraction
+*     dznsrf     : number of surface fields to extract
+*     dznprf     : number of profil fields to extract
+*     zsurfac    : comma separated list of surface fields to extract
+*                  each 2 letter field has a prefix and a suffix 
+*                  (e.g. '+P0.')
+*                  + prefix - variable accumulated (temporal mean)
+*                  . prefix - instantaneous diagnosis
+*                  > suffix - vectorial field
+*                  . suffix - scalar field
+*     zprofil    : comma separated list of profil fields to extract
+*                  (as zsurfac)
+*     nptemps    : extract fields each nptemps
+*     heurfin    : last hour of extraction

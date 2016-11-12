@@ -1,0 +1,133 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P DSGMA
+*
+      SUBROUTINE DSGMA ( R , E , STAWS , S , STAGE ,
+     %                   W , N , MR , ME , NK )
+*
+#include "impnone.cdk"
+      INTEGER N, MR, ME, NK
+      REAL R(MR,NK),E(ME,NK),STAWS(NK-1,6),S(NK)
+      LOGICAL STAGE
+      REAL W(N)
+*
+*Author
+*          J. Mailhot RPN(Dec 1984)
+*
+*Revision
+* 001      J. Cote RPN(Feb 1985)
+*                 Documentation
+*                 SEF/RFE Compatible version
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+* 003      R. Benoit  -  Option of 'E' levels
+*
+*Object
+*          to calculate a vertical derivative like in convective
+*          adjustment
+*
+*Arguments
+*
+*          - Output -
+* R        result
+*
+*          - Input -
+* E        field to derive
+* STAWS    matrix of coefficients for the derivative (WETCON)
+* S        sigma levels
+* STAGE    .TRUE. for 'E' level intervals
+* W        work field
+* N        horizontal dimension
+* MR       1st dimension of R
+* ME       1st dimension in E
+* NK       vertical dimension
+*
+*Notes
+*          R and E can occupy the same space. If STAGE=.TRUE.
+*          then R(*, NK)=0.
+*
+**
+*
+      REAL D1,DK,DN
+      INTEGER J,K
+*
+*     DIFFERENCES LOGARITHMIQUES ( NIVEAUX 'STAGGERED' )
+*
+      DO 1 K=1,NK-1
+*
+         DK = STAWS(K,1) + STAWS(K,3)
+         DN = STAWS(K,2) - STAWS(K,3)
+*
+         DO 1 J=1,N
+    1       R(J,K) = DK * E(J,K) + DN * E(J,K+1)
+      IF (STAGE) THEN
+         DO 5 J=1,N
+5           R(J,NK)=0
+*     ON A FINI POUR STAGE=.T.
+      ELSE
+*
+*     INTERPOLATION/EXTRAPOLATION SUR LES NIVEAUX DE DEPART
+*
+      DO 2 J=1,N
+         W(J) = R(J,2) - R(J,1)
+    2    R(J,NK) = R(J,NK-1) - R(J,NK-2)
+*
+      DO 3 K=NK-1,2,-1
+*
+         DK = SQRT( S(K) * S(K+1) )
+         DK = ( S(K) - DK )/( DK - SQRT( S(K-1) * S(K) ) )
+*
+         DO 3 J=1,N
+    3       R(J,K) = R(J,K) + DK * ( R(J,K) - R(J,K-1) )
+*
+      D1 = ( S(2) - S(1) )/( SQRT( S(2) * S(3) ) - SQRT( S(1) * S(2) ) )
+      DN = ( S(NK) - S(NK-1) )
+     X     /( SQRT( S(NK-1) * S(NK-2) ) - SQRT( S(NK) * S(NK-1) ) )
+*
+      DO 4 J=1,N
+         R(J,1 ) = R(J,2) - D1 * W(J)
+    4    R(J,NK) = R(J,NK-1) - DN * R(J,NK)
+      ENDIF
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,145 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r geopfld
+*
+      subroutine geopfld (geobus,geosize,topo_h,ni,nj,nix,njx)
+      implicit none
+*
+      integer geosize,ni,nj,nix,njx
+      real geobus(geosize), topo_h(nix,njx)
+
+*AUTHOR  J-M Belanger    Nov 1995
+*
+*Revision
+*
+* 001      J. Mailhot  (Mar 1999) - Changes for new SURFACE interface
+*
+*LANGUAGE Fortran 77
+*
+*OBJECT (geopfld)
+*
+      
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    geobus     O    R     A    Vector of geophysical fields for MC2
+*    geosize    I    I     S    Size of vector "geobus"
+*                               switch
+
+*IMPLICIT
+#include "lesbus.cdk"
+#include "geobus.cdk"
+#include "yomdyn.cdk"
+#include "physnml.cdk"
+#include "rec.cdk"
+#include "consdyn_8.cdk"
+#include "lcldim.cdk"
+*
+      integer ic,ig,i,j,ng,err
+      logical mod1wtr
+      real absmin
+      parameter (absmin=1.0e-29)
+      data mod1wtr / .false. /
+*
+*-------------------------------------------------------------------
+      ng=ni*nj
+*
+      do i=1,geosize
+         if (abs(geobus(i)).lt.absmin) geobus(i)=0.0
+      end do
+*
+      do i=1,ng
+         geobus(mg     +i-1) = min(max(0.,geobus(mg     +i-1)),1.)
+         geobus(wsoil  +i-1) = min(max(0.,geobus(wsoil  +i-1)),1.)
+         geobus(al     +i-1) = min(max(0.,geobus(al     +i-1)),1.)
+         geobus(glsea  +i-1) = min(max(0.,geobus(glsea  +i-1)),1.)
+         geobus(glacier+i-1) = min(max(0.,geobus(glacier+i-1)),1.)
+         geobus(lhtg   +i-1) = max(0.,geobus(lhtg+i-1))
+	 geobus(z0     +i-1) = max(1.0e-30,geobus(z0     +i-1))
+c         geobus(z0     +i-1) = exp(geobus(z0+i-1))
+      end do
+      if (geobus(tmice).lt.150.) then
+         do i=1,ng
+         geobus(tmice         +i-1) = geobus(tmice         +i-1) +tcdk_8
+         end do
+      end if
+      if (geobus(twater).lt.150.) then
+         do i=1,ng
+         geobus(twater        +i-1) = geobus(twater        +i-1) +tcdk_8
+         end do
+      end if
+      if (geobus(tsoil).lt.150.) then
+         do i=1,ng
+         geobus(tsoil         +i-1) = geobus(tsoil         +i-1) +tcdk_8
+         end do
+      end if
+      if (geobus(tsoil+ng).lt.150.) then
+         do i=1,ng
+         geobus(tsoil+ng      +i-1) = geobus(tsoil+ng      +i-1) +tcdk_8
+         end do
+      end if
+      if (geobus(tglacier).lt.150.) then
+         do i=1,ng
+         geobus(tglacier      +i-1) = geobus(tglacier      +i-1) +tcdk_8
+         end do
+      end if
+      if (geobus(tglacier+ng).lt.150.) then
+         do i=1,ng
+         geobus(tglacier+ng   +i-1) = geobus(tglacier+ng   +i-1) +tcdk_8
+         end do
+      end if
+*
+*     copy "ME" into "MF"
+      do j=1,nj
+      do i=1,ni
+         geobus(mf+(j-1)*ni+i-1) = topo_h(i+4,j+4)
+      end do
+      end do
+*
+*     Modify MC2 land-sea mask if water point completely surrounded
+*     by land points.
+
+      if (mod1wtr) then
+      do j=1,nj
+      do i=1,ni
+         if (geobus(mg+(j-1)*ni+i-1).lt.0.5) then
+            if ((geobus(mg+(j-1)*ni+i  ).gt.0.5)  .and.
+     $          (geobus(mg+(j-1)*ni+i-2).gt.0.5)  .and.
+     $          (geobus(mg+    j*ni+i-1).gt.0.5)  .and.
+     $          (geobus(mg+(j-2)*ni+i-1).gt.0.5)) then
+                 geobus(mg+(j-1)*ni+i-1) = 1.0
+            endif
+         endif
+      end do
+      end do
+      endif
+*
+      call latlon2 (geobus(dlat),geobus(dlon),xpq(hx+1),ypq(hy+1),ni,nj)
+*
+*
+*-------------------------------------------------------------------
+      return
+      end
+
+@

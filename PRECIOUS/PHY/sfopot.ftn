@@ -1,0 +1,40 @@
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***fonction sfopot - resout l'eqn de Poisson pour la temperature
+*
+      function sfopot(t0, p0, pf)
+*
+#include "impnone.cdk"
+*
+      real sfopot, t0, p0  !RB2016 , pf
+*
+*author
+*      N. Brunet (sept 2000)
+*
+*object
+*      solve Poisson equation for temperature
+*      if PF=100000 pa, yields standard theta temperature
+*
+*arguments
+*
+*      t0 - temperature (K) at a given pressure p0
+*      p0 - pressure (pa)
+*      pf - pressure (pa) at the target level
+*
+*      result is in deg K
+*
+*IMPLICITES
+#include "consphy.cdk"
+*MODULES
+      EXTERNAL INCTPHY
+*
+**
+*--------------------------------------------------------------------
+#include "dintern.cdk"
+#include "fintern.cdk"
+*--------------------------------------------------------------------
+#include "initcph.cdk"
+*
+      sfopot = fopoit(t0, p0, pf)
+*
+      return
+      end

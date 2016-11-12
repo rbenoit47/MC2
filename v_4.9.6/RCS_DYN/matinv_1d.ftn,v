@@ -1,0 +1,150 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine matinv_1d (f,h,czz,a,b,w1,w2,w3,nx,ny,nz)
+      implicit none
+*
+      integer nx,ny,nz
+      real*8 f(nx,ny,nz),h (nx,ny,nz),czz(nx,ny,nz,3),a (nx,ny,nz),
+     $       b(nx,ny,nz),w1(nx,ny,nz),w2 (nx,ny,nz  ),w3(nx,ny,nz)
+*
+#include "lcldim.cdk"
+#include "nbcpu.cdk"
+#include "yomdyn.cdk"
+#include "grd.cdk"
+*
+      integer i, j, k, k1, k2, i1, k3
+*
+*---------------------------------------------------------------------- 
+* 
+      do k = 1, nz
+         do j = 1, ny
+         do i = 1, nx
+            f(i,j,k) = 0.0   
+            b(i,j,k) = czz(i,j,k,2)
+         enddo                 
+         enddo   
+      enddo         
+*
+      k3 = iand(max0(nz - 1,0),3)
+
+      do j = 1, ny
+
+         do k = 2, k3 + 1
+         do i = 1, nx
+            w3(i,j,k-1) = 1.0 / b(i,j,k-1)
+            w1(i,j,k  ) = czz(i,j,k  ,1) * w3(i,j,k-1)
+            w2(i,j,k-1) = czz(i,j,k-1,3) * w3(i,j,k-1)
+            b (i,j,k  ) = b(i,j,k)-czz(i,j,k,1)*w2(i,j,k-1)
+            end do
+         end do
+
+         do k = k3 + 2, nz, 4
+         do i = 1, nx
+            w3(i,j,k-1) = 1.0 / b(i,j,k-1)
+            w1(i,j,k  ) = czz(i,j,k  ,1) * w3(i,j,k-1)
+            w2(i,j,k-1) = czz(i,j,k-1,3) * w3(i,j,k-1)
+            b (i,j,k  ) = b(i,j,k)-czz(i,j,k,1)*w2(i,j,k-1)
+
+
+            w3(i,j,k  ) = 1.0 / b(i,j,k  )
+            w1(i,j,k+1) = czz(i,j,k+1,1) * w3(i,j,k)
+            w2(i,j,k  ) = czz(i,j,k  ,3) * w3(i,j,k)
+            b (i,j,k+1) = b(i,j,k+1)-czz(i,j,k+1,1)*w2(i,j,k  )
+
+            w3(i,j,k+1) = 1.0 / b(i,j,k+1)
+            w1(i,j,k+2) = czz(i,j,k+2,1) * w3(i,j,k+1)
+            w2(i,j,k+1) = czz(i,j,k+1,3) * w3(i,j,k+1)
+            b (i,j,k+2) = b(i,j,k+2)-czz(i,j,k+2,1)*w2(i,j,k+1)
+
+            w3(i,j,k+2) = 1.0 / b(i,j,k+2)
+            w1(i,j,k+3) = czz(i,j,k+3,1) * w3(i,j,k+2)
+            w2(i,j,k+2) = czz(i,j,k+2,3) * w3(i,j,k+2)
+            b (i,j,k+3) = b(i,j,k+3)-czz(i,j,k+3,1)*w2(i,j,k+2)
+
+         end do
+         end do
+
+         do i = 1, nx
+               w3(i,j,nz ) = 1.0 / b(i,j,nz )
+         end do
+
+      end do
+*
+         do k = 1, nz
+            do j = 1, ny
+            do i = 1, nx
+               a(i,j,k) = h(i,j,k)
+            end do
+            end do
+         end do
+*
+      k2 = iand(max0(nz - 1,0),3)
+
+      do j = 1, ny
+         do k = 2, k2 + 1
+*VDIR NODEP
+         do i = 1, nx
+            a(i,j,k) = a(i,j,k) - w1(i,j,k)*a(i,j,k-1)
+         end do
+         end do
+
+         do k = k2 + 2, nz, 4
+         do i = 1, nx
+            a(i,j,k  ) = a(i,j,k  ) - w1(i,j,k  )*a(i,j,k-1)
+            a(i,j,k+1) = a(i,j,k+1) - w1(i,j,k+1)*a(i,j,k  )        
+            a(i,j,k+2) = a(i,j,k+2) - w1(i,j,k+2)*a(i,j,k+1)
+            a(i,j,k+3) = a(i,j,k+3) - w1(i,j,k+3)*a(i,j,k+2)
+         end do
+         end do
+               
+         do i = 1, nx
+            f(i,j,nz) = a(i,j,nz) * w3(i,j,nz)
+         end do
+      end do
+                          
+      k1 = iand(max0(nz - 1,0),3)
+
+      do j = 1, ny
+         do k = nz - 1, nz - k1, -1
+*VDIR NODEP
+         do i = 1, nx
+            f(i,j,k) = a(i,j,k)*w3(i,j,k) - w2(i,j,k)*f(i,j,k+1)
+         end do
+         end do
+
+         do k = nz - k1 - 1, 1, -4
+         do i = 1, nx
+            f(i,j,k  )=a(i,j,k  )*w3(i,j,k  )-w2(i,j,k  )*f(i,j,k+1)
+            f(i,j,k-1)=a(i,j,k-1)*w3(i,j,k-1)-w2(i,j,k-1)*f(i,j,k  )
+            f(i,j,k-2)=a(i,j,k-2)*w3(i,j,k-2)-w2(i,j,k-2)*f(i,j,k-1)
+            f(i,j,k-3)=a(i,j,k-3)*w3(i,j,k-3)-w2(i,j,k-3)*f(i,j,k-2)
+         end do
+         end do
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

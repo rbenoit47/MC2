@@ -1,0 +1,56 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r xpyp_n
+*
+      subroutine xpyp_n (xp,yp,xr,yr,ofi,ofj,d60,ni,nj)
+      implicit none
+*     
+      integer ni,nj,ofi,ofj
+      real xp(ni),yp(nj)
+      real*8 xr,yr,d60
+**
+      integer i,j
+      real*8 con
+
+      con = d60 / 1000.
+*
+      xp(1) = xr
+      do i=1,ofi
+         xp(1) = xp(1) + con
+      end do
+      do i=2,ni
+         xp(i) = xp(i-1) + con
+      end do
+*
+      yp(1) = yr
+      do j=1,ofj
+         yp(1) = yp(1) + con
+      end do
+      do j=2,nj
+         yp(j) = yp(j-1) + con
+      end do
+*
+      return
+      end
+@

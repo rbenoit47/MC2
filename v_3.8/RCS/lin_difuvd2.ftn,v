@@ -1,0 +1,131 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P LIN_DIFUVD2
+*
+      SUBROUTINE LIN_DIFUVD2(P, A, B, C, D, DELTA, N, NK)
+*
+
+      IMPLICIT NONE
+      INTEGER N, NK
+      REAL P(N,NK), A(N,NK), B(N,NK), C(N,NK), D(N,NK), DELTA(N,NK)
+*
+*Author
+*          S. Laroche (oct 2000)
+*
+*Object
+*          this is the transverse vectorization of the subroutine
+*          ROSSR1 (originally from DIFUVD2, R. Benoit)
+*
+*Arguments
+*
+*          - Output -
+* P        result
+*
+*          - Input -
+* A        lower-diagonal
+* B        diagonal
+* C        upper-diagonal
+* D        right side
+* DELTA    work space
+* N        1st dimension of all other vectors
+* NK       2nd dimension (order)
+*
+*Notes
+*          This subroutine solves the tri-diagonal matrix problem
+*          below using ROSSR:
+*
+*  *****                                      ****  ****     ***    ****
+*  *****                                      ****  ****     ***    ****
+*  ** B(1),C(1), 0  , 0  , 0  , - - - -  ,  0   **  **  P(1)  **    **D(
+*  ** A(2),B(2),C(2), 0  , 0  , - - - -  ,  0   **  **  P(2)  **    **D(
+*  **  0  ,A(3),B(3),C(3), 0  , - - - -  ,  0   **  **  P(3)  **    **
+*  **  0  , 0  ,A(4),B(4),C(4), - - - -  ,  0   **  **  P(4)  **    **
+*  **  0  , 0  , 0  ,A(5),B(5), - - - -  ,  0   **  **  P(5)  ** -- **
+*  **  -                                    -   **  **    -   ** -- **
+*  **  -                                    -   **  **    -   **    **
+*  **  0  ,  , 0 ,A(NK-2),B(NK-2),C(NK-2),  0   **  ** P(NK-2)**    **
+*  **  0  ,  , 0 ,  0   ,A(NK-1),B(NK-1),C(NK-1)**  ** P(NK-1)**    **
+*  **  0  ,  , 0 ,  0   ,   0   , A(NK) , B(NK) **  **  P(NK) **    **D(
+*  ****                                       ****  ****    ****    ****
+*  ****                                       ****  ****    ****    ****
+*
+*          Delta is a working array of dimension NK.  If the array D
+*          is not required subsequently then the call CALL ROSSR1(P.A,
+*          B,C,D,D,NK) will reduce storage requirements.  If further
+*          the array C is not required subsequently, then the call
+*          will further reduce storage requirements.
+*
+**
+*
+*-----------------------------------------------------------------------
+*
+      REAL X
+      INTEGER I, K
+*
+      DO I=1,N
+       C(I,NK)=0.
+       X=1./B(I,1)
+       P(I,1)=-C(I,1)*X
+       DELTA(I,1)=D(I,1)*X
+      ENDDO
+*
+      DO K=2,NK
+       DO I=1,N
+        X=1./(B(I,K)+A(I,K)*P(I,K-1))
+        P(I,K)=-C(I,K)*X
+        DELTA(I,K)=(D(I,K)-A(I,K)*DELTA(I,K-1))*X
+       ENDDO
+      ENDDO
+*
+      DO I=1,N
+       P(I,NK)=DELTA(I,NK)
+      ENDDO
+      DO K=NK-1,1,-1
+       DO I=1,N
+        P(I,K)=P(I,K)*P(I,K+1)+DELTA(I,K)
+       ENDDO
+      ENDDO
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

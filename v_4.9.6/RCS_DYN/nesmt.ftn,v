@@ -1,0 +1,144 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r nesmt -- Horizontal nesting of topography
+*
+      subroutine nesmt (fn,fd,ni,nj,nk,hx,hy,nmtx,nmty,nmx,nmy)
+      implicit none
+*
+      integer ni,nj,nk,hx,hy,nmtx,nmty,nmx,nmy
+      real fn(ni,nj,nk),fd(ni,nj,nk)
+*
+*IMPLICIT
+#include "consdyn_8.cdk"
+**
+      integer i,j,k,id,iff,jd,jf,nit,njt,mnmtx,mnmty,mnmx,mnmy,jds,ids
+      real*8 lx,ly,arg,p,pis2
+*----------------------------------------------------------------------
+*
+      pis2  = dble(pi_8) / 2.
+      mnmtx = min(max(nmtx,0),(ni/2+mod(ni,2)-hx-2))
+      mnmty = min(max(nmty,0),(nj/2+mod(nj,2)-hy-2))
+*
+      id  = mnmtx + hx + 2
+      jd  = mnmty + hy + 2
+      iff = ni - hx - mnmtx
+      jf  = nj - hy - mnmty
+*
+      nit = iff
+      njt = jf
+      lx  = dble(nmx) - 0.5
+      ly  = dble(nmy) - 0.5
+      mnmx= min(max(nmx,0),max((ni/2+mod(ni,2)-1-id),0))
+      mnmy= min(max(nmy,0),max((nj/2+mod(nj,2)-1-jd),0))
+*
+      do k=1,nk
+*west         
+         do i=id,id+mnmx
+            do j=jd+mnmy+1,jf-mnmy-1
+               p   = cos(pis2*dble(i-id)/lx)**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+         end do
+*east
+         ids=iff-mnmx
+         if (ids.eq.id+mnmx) ids = ids + 1
+         do i=ids,iff
+            do j=jd+mnmy+1,jf-mnmy-1
+               p   = cos(pis2*dble(nit-i)/lx)**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+         end do
+*south
+         do j=jd,jd+mnmy
+            do i=id+mnmx+1,iff-mnmx-1
+               p       = (cos(pis2*(j-jd)/ly))**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+         enddo
+*north
+         jds=jf-mnmy
+         if (jds.eq.jd+mnmy) jds = jds + 1
+         do j=jds,jf
+            do i=id+mnmx+1,iff-mnmx-1
+               p       = (cos(pis2*(njt-j)/ly))**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+         end do
+*south-west and south-east
+         do j=jd,jd+mnmy
+            do i=id,id+mnmx
+               p = (cos(pis2*(1.0d0- min(1.0d0,
+     $              sqrt (((lx-i+id)/lx)**2+((ly-j+jd)/ly)**2)))))**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+            do i=iff-mnmx,iff
+               p = (cos(pis2*(1.0d0-min(1.0d0,
+     $              sqrt (((i-nit+lx)/lx)**2+((ly-j+jd)/ly)**2)))))**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+         end do
+*north-west and north-east
+         do j=jf-mnmy,jf
+            do i=id,id+mnmx
+               p = (cos(pis2*(1.0d0-min(1.0d0,
+     $              sqrt(((lx-i+id)/lx)**2+((j-njt+ly)/ly)**2)))))**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+            do i=iff-mnmx,iff
+               p = (cos(pis2*(1.0d0-min(1.0d0,
+     $              sqrt(((i-nit+lx)/lx)**2+((j-njt+ly)/ly)**2)))))**2
+               fn(i,j,k)= (1.0-p)*fn(i,j,k)+p*fd(i,j,k)
+            end do
+         end do
+*
+         do j=1,jd
+         do i=1,ni
+            fn(i,j,k) = fd(i,j,k)
+         end do
+         end do
+         do j=jf,nj
+         do i=1,ni
+            fn(i,j,k) = fd(i,j,k)
+         end do
+         end do
+         do i=1,id
+         do j=jd,jf
+            fn(i,j,k) = fd(i,j,k)
+         end do
+         end do
+         do i=iff,ni
+         do j=jd,jf
+            fn(i,j,k) = fd(i,j,k)
+         end do
+         end do
+*
+      end do
+*     
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+@

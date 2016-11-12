@@ -1,0 +1,12 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer dictmax,typemax
+      integer dictlen,typelen
+      parameter (dictmax = 180)
+      parameter (typemax = 20)
+
+      character*48 varname(dictmax)
+      character*16 varunit(dictmax)
+      character*16 type(typemax)
+      
+      common /rpndict/ dictlen,typelen
+      common /crpndict/varname,varunit,type

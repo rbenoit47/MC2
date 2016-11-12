@@ -1,0 +1,123 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_phyc
+*
+      subroutine out_phyc ( outbus,fni,fnj,doni,donj,ni,nj,stepno )
+      implicit none
+*
+      integer fni,fnj,doni,donj,ni,nj,stepno
+      real outbus (*)
+*
+*AUTHOR     Michel Desgagne                Dec   2002
+*
+*REVISION
+*
+*OBJECT
+*    Gather the index of physics variables to write on disk 
+*    for the current timestep.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*   outbus      I    R    A    physics output bus (complete)
+*   sizeobus    I    I    S    dimension of outbus
+*   fni         I    I    S    folded dimension along X
+*   fnj         I    I    S    folded dimension along Y
+*   doni        I    I    S    computational hor. dimension along X
+*   donj        I    I    S    computational hor. dimension along Y
+*   ni          I    I    S    regular dimension along X
+*   nj          I    I    S    regular dimension along Y
+*   stepno      I    I    S    step number
+*
+**
+#include "lesbus.cdk"
+#include "partopo.cdk"
+*
+      character*8 wrponm(phyotopc)
+      integer ngth,gthid(phyotopc),i,j,k,id,im,npar,nnk,
+     $        offw1,offbo,wrpospc
+      parameter (npar = 3)
+      integer wrpopar(npar,phyotopc)
+      real, dimension (:), allocatable :: w1
+*----------------------------------------------------------------------
+*
+      ngth = 0
+      do 10 i=1,phyotopc
+         if ((stepno.eq.0).and.(phyoparc(i,5).le.0)) then
+            ngth = ngth + 1
+            gthid(ngth) = i
+            goto 10
+         endif
+         if (phyoparc(i,5).le.0) goto 10
+         if (mod(stepno,phyoparc(i,5)).eq.0) then
+            ngth = ngth + 1
+            gthid(ngth) = i
+            goto 10
+         endif
+ 10   continue
+*
+      if (ngth.gt.0) then
+*
+         wrpospc = 0
+         do id=1,ngth
+            wrponm (id)   = phyonmc(gthid(id),2)
+            wrpopar(1,id) = wrpospc + 1
+            wrpopar(2,id) = phyoparc(gthid(id),3)
+            wrpopar(3,id) = phyoparc(gthid(id),4)
+            wrpospc       = wrpopar (1,id) +
+     $           ni*nj*phyoparc(gthid(id),3)*phyoparc(gthid(id),4) - 1
+         end do
+*
+         allocate (w1(wrpospc))
+         w1 (:) = 0.
+*
+         do id=1,ngth
+            nnk = phyoparc(gthid(id),3)
+            do im=1,phyoparc(gthid(id),4)
+               offw1=wrpopar(1,id)        + (im-1)*ni  * nj  * nnk
+               offbo=phyoparc(gthid(id),1)+ (im-1)*fni * fnj * nnk
+               do k =1,nnk
+               do j =1,donj
+               do i =1,doni
+                  w1    (offw1 + (nnk-k)*ni *nj  + (j-1)*ni   +i-1) =
+     $                 outbus(offbo +   (k-1)*fni*fnj + (j-1)*doni +i-1)
+               end do
+               end do
+               end do
+            end do
+         end do
+*
+         call out_wrphyoc ( w1, wrpospc, wrponm, wrpopar, ngth, stepno )
+         deallocate (w1)
+*
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+@

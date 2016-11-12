@@ -1,0 +1,52 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.10;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*
+*
+      REAL critmask, critsnow, critwater, critexture
+      REAL minicedp
+*
+      COMMON /SURFACEPAR/ critmask, critsnow, critwater, critexture,
+     1                    minicedp
+*
+*
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

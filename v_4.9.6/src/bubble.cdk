@@ -1,0 +1,5 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      real bb_dpth,bb_radius,bb_xcntr,bb_zcntr
+*
+      common /bubble/ bb_dpth,bb_radius,bb_xcntr,bb_zcntr
+*

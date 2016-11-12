@@ -1,0 +1,51 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine stag_uv (u,v,ni,nj,nk)
+      implicit none
+*
+      integer ni,nj,nk
+      real u(ni,nj,nk),v(ni,nj,nk)
+*
+      integer i,j,k
+*
+*----------------------------------------------------------------------
+*     
+      do k=1,nk
+         do j=1,nj
+         do i=1,ni-1
+            u(i,j,k) = 0.5 * ( u(i+1,j,k) + u(i,j,k) )
+         end do
+         end do
+         do j=1,nj-1
+         do i=1,ni
+            v(i,j,k) = 0.5 * ( v(i,j+1,k) + v(i,j,k) )
+         end do
+         end do
+      end do
+*
+*----------------------------------------------------------------------
+*
+      return
+      end
+@

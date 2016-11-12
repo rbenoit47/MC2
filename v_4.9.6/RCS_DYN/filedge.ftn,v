@@ -1,0 +1,73 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r filedge  -Fill the outer edge of a vector
+*
+      subroutine filedge (f,nis,njs,nks,ni,nj,nk,if,jf,kf)
+      implicit none
+      integer nis,njs,nks,ni,nj,nk,if,jf,kf
+      real f(nis,njs,nks)
+*
+*OBJECT
+*     This program fills the outer edge of a vector with
+*     the last known value of the vector on a particular edge.
+*
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR     Michel Desgagne                Jul     1993
+*
+*HISTORY
+*
+**
+*
+      integer nim,njm,nkm,i,j,k
+*----------------------------------------------------------------------
+*
+      nim= ni-if
+      njm= nj-jf
+      nkm= nk-kf
+*     
+      do 1 k=1,nkm
+         do 1 j=1,njm
+            do 1 i=nim+1,ni
+               f(i,j,k)= f(nim,j,k)
+ 1    continue
+c
+      do 2 k=1,nkm
+         do 2 j=njm+1,nj
+            do 2 i=1,ni
+               f(i,j,k)= f(i,njm,k)
+ 2    continue
+c
+      do 3 k=nkm+1,nk
+         do 3 j=1,nj
+            do 3 i=1,ni
+               f(i,j,k)= f(i,j,nkm)
+ 3    continue
+c
+      return
+*----------------------------------------------------------------------
+      end
+@

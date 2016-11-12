@@ -1,0 +1,241 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r adveul
+*
+      subroutine adveul ( ua,va,wa,ba,pa,hma,cla,
+     $                                   lminx,lmaxx,lminy,lmaxy,lnk )
+      implicit none
+*
+      integer lminx, lmaxx, lminy, lmaxy, lnk
+      real 
+     $ ua(lminx:lmaxx,lminy:lmaxy,*),     va(lminx:lmaxx,lminy:lmaxy,*),
+     $ wa(lminx:lmaxx,lminy:lmaxy,*),     ba(lminx:lmaxx,lminy:lmaxy,*),
+     $ pa(lminx:lmaxx,lminy:lmaxy,0:lnk),hma(lminx:lmaxx,lminy:lmaxy,*),
+     $ cla(lminx:lmaxx,lminy:lmaxy,lnk,*)
+*
+*
+#include "grd.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "nbcpu.cdk"
+*
+      integer i, j, k, n, kp1, kkk, km1, id, jd, iff, jf
+      real*8 ken(minx:maxx,miny:maxy),
+     $       vor(minx:maxx,miny:maxy),
+     $       udw(minx:maxx,miny:maxy),
+     $       udb(minx:maxx,miny:maxy),
+     $       udh(minx:maxx,miny:maxy),
+     $       vdw(minx:maxx,miny:maxy),
+     $       vdb(minx:maxx,miny:maxy),
+     $       vdh(minx:maxx,miny:maxy),
+     $       wdu(minx:maxx,miny:maxy,gnk),
+     $       wdv(minx:maxx,miny:maxy,gnk),
+     $       wdp(minx:maxx,miny:maxy,gnk)
+      real w0(minx:maxx,miny:maxy,gnk)
+      real*8  c07
+      real*8  p25, pt5, frtsvn, u0b, v0b, ubarz, vbarz, coe
+      parameter (p25=0.25d0, pt5=0.5d0, frtsvn=4.d0/7.d0 )
+*
+*----------------------------------------------------------------------
+*
+      c07 = c14 * grav_8 * cappa_8
+*
+      if (flextop) print*,'not a valid option yet'
+      if (flextop) stop
+*
+      id  = 1
+      jd  = 1
+      iff = ldni-east
+      jf  = ldnj-north
+*
+      call sw2w3(w0,u0,v0,sw0,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                        minx,maxx,miny,maxy,gnk)
+*
+      do k = gnk, 0, -1
+      kp1  = min( k+1, gnk)
+      kkk  = min( max(k,1), gnk-1)
+      km1  = max( k-1, 1 )
+      coe  = pt5
+ccccc encore en doute cccc
+ccc   if (k.eq.gnk-1 .or. k.eq.2 ) coe = frtsvn
+ccccc encore en doute cccc
+*
+      if (k.eq.gnk) then
+         do j = jd,jf
+         do i = id,iff
+            wdu(i,j,gnk) = 0.
+            wdv(i,j,gnk) = 0.
+         end do
+         end do
+      endif
+*
+*     horizontal wind components
+*
+      if (k.gt.0 .and. k.lt.gnk) then
+*
+         do j = jd+south-1,jf
+         do i = id+west-1,iff
+            ken(i,j) = p25 * ( u0(i+1,j,k)**2 + u0(i,j,k)**2
+     $                       + v0(i,j+1,k)**2 + v0(i,j,k)**2 )
+         end do
+         end do
+*
+         do j = jd,jf+1
+         do i = id,iff+1
+            vor(i,j) = (v0(i,j,k)-v0(i-1,j,k))*odxu(1)
+     $               - (u0(i,j,k)-u0(i,j-1,k))*odyv(j)
+         end do
+         end do
+*
+         do j = jd, jf
+         do i = id+west, iff
+            v0b = p25 * ( v0(i,j+1,k) + v0(i-1,j+1,k)
+     $                  + v0(i,j  ,k) + v0(i-1,j  ,k) )
+            wdu(i,j,k) = pt5 * (  w0(i,j,k) +  w0(i-1,j,k) )
+     $                       * (  u0(i,j,k) -  u0(i,j,km1) )
+            ua(i,j,k)  = - sby(i,j) *
+     $                    ( ( ken(i,j) - ken(i-1,j) ) * odxu(1)
+     $                    - ( vor(i,j) + vor(i,j+1) ) * pt5 * v0b )
+     $                   - pt5 * ( wdu(i,j,k+1) + wdu(i,j,k) )
+         end do
+         end do
+*
+         do j = jd+south, jf
+         do i = id, iff
+            u0b = p25 * ( u0(i+1,j,k) + u0(i+1,j-1,k)
+     $                  + u0(i  ,j,k) + u0(i  ,j-1,k) )
+            wdv(i,j,k) = pt5 * (  w0(i,j,k) +  w0(i,j-1,k) )
+     $                       * (  v0(i,j,k) -  v0(i,j,km1) )
+            va(i,j,k)  = - sbx(i,j) *
+     $                    ( ( ken(i,j) - ken(i,j-1) ) * odyv(j)
+     $                    + ( vor(i,j) + vor(i+1,j) ) * pt5 * u0b )
+     $                   - pt5 * ( wdv(i,j,k+1) + wdv(i,j,k) )
+         end do
+         end do
+*
+      endif
+*
+*     vertical motion, buoyancy, humidity and tracers
+*
+      if(k.gt.0) then
+*
+         do j = jd,jf+1
+         do i = id,iff+1
+            ubarz    = pt5 * ( u0(i,j,kkk) + u0(i,j,km1) )
+            udw(i,j) =    ubarz *( sw0(i,j,k)- sw0(i-1,j,k) )*odxu(1)
+            udb(i,j) =    ubarz *( tp0(i,j,k)- tp0(i-1,j,k) )*odxu(1)
+            udh(i,j) =    ubarz *( hm0(i,j,k)- hm0(i-1,j,k) )*odxu(1)
+            vbarz    = pt5 * ( v0(i,j,kkk) + v0(i,j,km1) )
+            vdw(i,j) =    vbarz *( sw0(i,j,k)- sw0(i,j-1,k) )*odyv(j)
+            vdb(i,j) =    vbarz *( tp0(i,j,k)- tp0(i,j-1,k) )*odyv(j)
+            vdh(i,j) =    vbarz *( hm0(i,j,k)- hm0(i,j-1,k) )*odyv(j)
+         end do
+         end do
+*
+         do j = jd,jf
+         do i = id,iff
+            wdp(i,j,k) = w0(i,j,k) * ( qp0(i,j,k  )*orts(i,j,k  )
+     $                               - qp0(i,j,k-1)*orts(i,j,k-1) )
+            wa(i,j,k)  = - sbxy(i,j) * pt5 * ( udw(i+1,j) + udw(i,j) 
+     $                                       + vdw(i,j+1) + vdw(i,j) )
+     $             - pt5 * w0(i,j,k) * ( sw0(i,j,kp1) - sw0(i,j,km1) )
+            ba(i,j,k)  = - sbxy(i,j) * pt5 * ( udb(i+1,j) + udb(i,j) 
+     $                                       + vdb(i,j+1) + vdb(i,j) )
+     $             - coe * w0(i,j,k) * ( tp0(i,j,kp1) - tp0(i,j,km1) )
+            hma(i,j,k) = - sbxy(i,j) * pt5 * ( udh(i+1,j) + udh(i,j) 
+     $                                       + vdh(i,j+1) + vdh(i,j) )
+     $             - coe * w0(i,j,k) * ( hm0(i,j,kp1) - hm0(i,j,km1) )
+         end do
+         end do
+*
+         do n=1,ntr
+         do j = jd,jf+1
+         do i = id,iff+1
+            ubarz    = pt5 * ( u0(i,j,kkk) + u0(i,j,km1) )
+            udh(i,j) = ubarz *( cl0(i,j,k,n)- cl0(i-1,j,k,n) )*odxu(1)
+            vbarz    = pt5 * ( v0(i,j,kkk) + v0(i,j,km1) )
+            vdh(i,j) = vbarz *( cl0(i,j,k,n)- cl0(i,j-1,k,n) )*odyv(j)
+         end do
+         end do
+         do j=jd,jf
+         do i=id,iff
+            cla(i,j,k,n) = - sbxy(i,j) * pt5 * ( udh(i+1,j) + udh(i,j) 
+     $                                         + vdh(i,j+1) + vdh(i,j) )
+     $           - coe * w0(i,j,k) * ( cl0(i,j,kp1,n) - cl0(i,j,km1,n) )
+         end do
+         end do
+         end do
+*
+      endif
+*
+*     pressure (horizontal advection)
+*
+         do j = jd,jf+1
+         do i = id,iff+1
+            udh(i,j) = u0(i,j,kkk)*( qp0(i  ,j,k)*orts(i  ,j,k)
+     $                             - qp0(i-1,j,k)*orts(i-1,j,k))*odxu(1)
+            vdh(i,j) = v0(i,j,kkk)*( qp0(i  ,j,k)*orts(i  ,j,k)
+     $                             - qp0(i,j-1,k)*orts(i,j-1,k))*odyv(j)
+         end do
+         end do
+*
+         do j = jd,jf
+         do i = id,iff
+            pa(i,j,k)  = - sbxy(i,j) * pt5 * ( udh(i+1,j) + udh(i,j) 
+     $                                       + vdh(i,j+1) + vdh(i,j) )
+         end do
+         end do
+*
+      end do
+*
+*     thermodynamic variable and generalized pressure
+*
+      do k = 1, gnk
+      if (k.eq.1) then
+         do j = jd,jf
+         do i = id,iff
+            ba(i,j,k) = ba(i,j,k) - c07 * ( - wdp(i,j,k)
+     $                   + pt5 * (  pa(i,j,k) +  pa(i,j,k-1) ) )
+         end do
+         end do
+      else
+         do j = jd,jf
+         do i = id,iff
+            ba(i,j,k) = ba(i,j,k) - c07 * ( - wdp(i,j,k)
+     $                   + pt5 * (  pa(i,j,k) +  pa(i,j,k-1) ) )
+            pa(i,j,k-1) =           c00 * (    pa(i,j,k-1)
+     $                   - pt5 * ( wdp(i,j,k) + wdp(i,j,k-1) ) )
+         end do
+         end do
+      endif
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

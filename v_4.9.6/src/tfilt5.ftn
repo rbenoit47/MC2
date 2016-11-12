@@ -1,0 +1,86 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r tfilt5 Filtre temporel de Robert
+*
+      subroutine tfilt5 (prout)
+      implicit none
+*
+      logical prout
+*
+*AUTHOR   Andre Robert                      Oct   1983
+*
+*REVISION
+*
+*LANGUAGE  Fortran 77
+*
+*OBJECT
+*     * compute filtered values: u0(t) = (1-2*tf)*um(t) + tf*(up + u0)
+*
+*FILES
+*
+*ARGUMENTS
+*
+*IMPLICIT
+#include "dynmem.cdk"
+#include "rec.cdk"
+#include "yomdyn1.cdk"
+#include "nbcpu.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,k,it
+      integer id,jd,iff,jf
+      real c1
+*
+*---------------------------------------------------------------------
+*
+!$omp single
+      if (prout) print*, 'TFILT'
+!$omp end single
+*
+      c1=(1-2.*grtf)
+*
+*   for interior and exterior points
+
+      id =1-hx*west
+      jd =1-hy*south
+      iff=ldni+hx*east
+      jf =ldnj+hy*north
+*
+      if (gnstepno.gt.1) then
+*
+!$omp do
+      do k=1,gnk
+         do j=jd,jf
+         do i=id,iff
+            qp0(i,j,k) = c1*qp0(i,j,k) + grtf*(qpp(i,j,k)+qpm(i,j,k))
+            u0 (i,j,k) = c1*u0 (i,j,k) + grtf*(up (i,j,k)+um (i,j,k))
+            v0 (i,j,k) = c1*v0 (i,j,k) + grtf*(vp (i,j,k)+vm (i,j,k))
+            sw0(i,j,k) = c1*sw0(i,j,k) + grtf*(swp(i,j,k)+swm(i,j,k))
+            tp0(i,j,k) = c1*tp0(i,j,k) + grtf*(tpp(i,j,k)+tpm(i,j,k))
+            hm0(i,j,k) = c1*hm0(i,j,k) + grtf*(hmp(i,j,k)+hmm(i,j,k))
+         end do
+         end do
+         do it=1,ntr
+         do j=jd,jf
+         do i=id,iff
+         cl0(i,j,k,it) = c1*cl0(i,j,k,it) + 
+     $                   grtf*(clp(i,j,k,it)+clm(i,j,k,it))
+         end do
+         end do
+         end do
+         if (k.eq.1) then
+            do j=jd,jf
+            do i=id,iff
+               qp0(i,j,0) = c1*qp0(i,j,0) + grtf*(qpp(i,j,0)+qpm(i,j,0))
+            end do
+            end do
+         endif
+      end do
+!$omp enddo
+*
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end

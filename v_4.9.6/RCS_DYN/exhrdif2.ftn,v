@@ -1,0 +1,187 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.11.14.55.03;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r exhrdif2
+*
+      subroutine exhrdif2 (t1,t2_8)
+      implicit none
+*
+      real t1(*)
+      real*8 t2_8(*)
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *             perform EXPLICIT HORIZONTAL DIFFUSION               *
+*    *                                                                 *
+*    *                                                                 *
+*    *                        of the type                              *
+*    *                                                                 *
+*    *                                                                 *
+*    *                      ----------------                           *
+*    *                      |            n |                           *
+*    *                      | -(-nu_DEL2)  |                           *
+*    *                      |              |                           *
+*    *                      ----------------                           *
+*    *                                                                 *
+*    *                                                                 *
+*    *       calling      SUBROUTINE nu_del2_n       n  times          *
+*    *                                                                 *
+*    *                                                                 *
+*    *******************************************************************
+*
+**
+*EXTERNALS
+#include "dynmem.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+#include "partopo.cdk"
+#include "topo.cdk"
+#include "consdyn_8.cdk"
+#include "dynpar.cdk"
+*
+      integer i,j,n,k,mm,nn,ng
+      real*8 visco(5),zero,pt25,pt5,psi,con,v1,v2,
+     $       recv1(minx:ldni+hx,miny:ldnj+hy)
+      pointer (pav1, v1(minx:ldni+hx,miny:ldnj+hy,*)),
+     $        (pav2, v2(minx:ldni+hx,miny:ldnj+hy,*))
+*
+      real smup,smvp,smswp,smtpp,smhmp,smclp,h0d
+      pointer (pau,  smup(*)),(pav,  smvp(*)),(paw, smswp(*)),
+     $        (pat, smtpp(*)),(pah, smhmp(*)),(pac, smclp(*)),
+     $        (pah0d, h0d(minx:maxx,miny:maxy,*))
+*
+      parameter(zero=0.d0,pt25=0.25d0,pt5=0.5d0)
+*----------------------------------------------------------------------
+*
+      pah0d = loc(t1(        1))
+      pau   = loc(t1(  dim3d+1))
+      pav   = loc(t1(2*dim3d+1))
+      paw   = loc(t1(3*dim3d+1))
+      pat   = loc(t1(4*dim3d+1))
+      pah   = loc(t1(5*dim3d+1))
+      if (ntr.gt.0) pac = loc(t1(6*dim3d+1))
+      pav1  = loc(t2_8(      1))
+      pav2  = loc(t2_8(dim3d+1))
+*
+      if (kh(1).lt.1.0e-10) return
+*
+*   * Smoothing type: -(-del2)**n;   n=1,2,3...,   hor_del=2,4,6,...
+*
+      visco(1)=min( hord_fuv * dble(kh(1)) , pt25 )
+      visco(2)=min( hord_fww * dble(kh(1)) , pt25 )
+      visco(3)=min( hord_ftt * dble(kh(1)) , pt25 )
+      visco(4)=min( hord_fhu * dble(kh(1)) , pt25 )
+      visco(5)=min( hord_ftr * dble(kh(1)) , pt25 )
+*
+      if(hord_ftt.ne.0.) then
+*
+*        diffusion of potential temperature
+*
+         call hauteur_omp (h0d,'HT',hh0,maxx-minx+1,maxy-miny+1,gnk)
+*
+         ng  = (ldni+2*hx)*(ldnj+2*hy)
+         con = c05*pt5
+!$omp do
+         do k = 1, gnk
+            do j = 1-hy,ldnj+hy
+            do i = 1-hx,ldni+hx
+               v1(i,j,k) = -c05*gots(i,j,k)*h0d(i,j,k)
+            end do
+            end do
+            call vexp (recv1, v1(minx,miny,k), ng)
+            do j = 1-hy,ldnj+hy
+            do i = 1-hx,ldni+hx
+               v1(i,j,k) = gots(i,j,k)*recv1(i,j)
+               v2(i,j,k) = gots(i,j,k)*con*(qpp(i,j,k)+qpp(i,j,k-1))
+            end do
+            end do
+            call vrec (recv1, v1(minx,miny,k), ng)
+            do j = 1-hy,ldnj+hy
+            do i = 1-hx,ldni+hx
+               tpp(i,j,k) = (grav_8 + tpp(i,j,k) - v2(i,j,k))*recv1(i,j)
+            end do
+            end do
+         end do
+!$omp end do
+*
+      endif
+*
+!$omp single
+      call rpn_comm_xch_halo (up,minx,maxx,miny,maxy,ldni,ldnj,
+     $          (ndynvar-1)*gnk,hx,hy,period_x,period_y,ldni,0)
+!$omp end single
+*
+      nn=hord_del/2
+*
+      do mm=1,nn
+*
+         if(visco(1).ne.zero)
+     $      call nu_del2_n ( up, smup,minx,maxx,miny,maxy,gnk-1,
+     $                                       visco(1),1,0,mm,nn)
+         if(visco(1).ne.zero)
+     $      call nu_del2_n ( vp, smvp,minx,maxx,miny,maxy,gnk-1,
+     $                                       visco(1),0,1,mm,nn)
+         if(visco(2).ne.zero)
+     $      call nu_del2_n (swp,smswp,minx,maxx,miny,maxy,gnk-1,
+     $                                       visco(2),0,0,mm,nn)
+         if(visco(3).ne.zero)
+     $      call nu_del2_n (tpp,smtpp,minx,maxx,miny,maxy,gnk-1,
+     $                                       visco(3),0,0,mm,nn)
+         if(visco(4).ne.zero)
+     $      call nu_del2_n (hmp,smhmp,minx,maxx,miny,maxy,gnk-1,
+     $                                       visco(4),0,0,mm,nn)
+         do n=1,ntr
+            if(visco(5).ne.zero)
+     $      call nu_del2_n (clp(1-hx,1-hy,1,n),smclp((n-1)*dim3d+1),
+     $                minx,maxx,miny,maxy,gnk-1,visco(5),0,0,mm,nn)
+         end do
+*
+         if(mm.ne.nn) then
+!$omp single
+            call rpn_comm_xch_halo (smup,minx,maxx,miny,maxy,ldni,ldnj,
+     $                      (5+ntr)*gnk,hx,hy,period_x,period_y,ldni,0)
+!$omp end single
+         endif
+*
+      end do
+*
+      if(hord_ftt.ne.0.) then
+!$omp do
+         do k = 1, gnk
+         do j = 1-hy,ldnj+hy
+         do i = 1-hx,ldni+hx
+            tpp(i,j,k) = tpp(i,j,k)*v1(i,j,k) - grav_8 + v2(i,j,k)
+         end do
+         end do
+         end do
+!$omp end do
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

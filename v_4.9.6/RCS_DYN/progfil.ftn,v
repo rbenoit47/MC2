@@ -1,0 +1,185 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r progfil
+*
+      integer function progfil (filein,ng,addip1,ros)
+      implicit none
+*
+      character* (*) filein
+      character*3 ros
+      integer ng,addip1
+**
+#include "lcldim.cdk"
+#include "grd.cdk"
+#include "rec.cdk"
+#include "rpndict.cdk"
+#include "consdyn_8.cdk"
+#include "sor.cdk"
+*
+      logical boot  
+      integer ier,fnom,fstouv,fstecr,fstapp,fstfrm,ip123(3),i,j
+      integer ig1,ig2,ig3,ig4,fortout,fortin,dimx,dimy,oi,oj,longueur
+      real*8 lonref,latref,c1,d2r,d60,v1,v2,v3
+      data fortin,fortout /23,24/
+      data boot /.true./
+      save boot
+*----------------------------------------------------------------------
+*
+      progfil = -1
+      open(fortin,file=filein,access='SEQUENTIAL',form='UNFORMATTED',
+     $                                         status='OLD',err=600)
+      goto 601
+ 600  continue
+      write (6,900) filein
+      goto 999
+ 601  continue
+      progfil = 0
+*
+      if (boot) ier=fnom(fortout,fileout,'STD+'//ros,0)
+      ier=fstouv(fortout,ros)
+      if (ier.lt.0) then
+         write (6,902) fileout(1:longueur(fileout))
+         stop
+      endif
+      ier=fstapp(fortout,' ')
+*     
+*     * lecture de la date et des parametres descripteurs de la grille
+* 
+      rewind (fortin) 
+      read (fortin) gni,gnj,gnk
+      ng = gni*gnj
+      g_id = min(gni,max(1,g_id))
+      g_jd = min(gnj,max(1,g_jd))
+      if (g_if.lt.0) g_if = gni
+      if (g_jf.lt.0) g_jf = gnj
+      g_if = min(gni,max(g_id,g_if))
+      g_jf = min(gnj,max(g_jd,g_jf))
+      dimx = g_if - g_id + 1
+      dimy = g_jf - g_jd + 1
+*
+      call hpalloc (paxpq ,gni,ier,1)
+      call hpalloc (paypq ,gnj,ier,1)
+*
+      call rdidrec (fortin,gni,gnj,gnk)
+*
+      if (Grd_dx.lt.100.) then
+         v1 = 20. * Grd_dx
+      else if (Grd_dx.lt.10000.) then
+         v1 = .2  * Grd_dx
+      else
+         v1 =  0.0004 * Grd_dx - 4.
+      endif
+      if (Grd_ni.lt.1000) then
+         v2 = 2. * Grd_ni
+      else if (Grd_ni.lt.10000.) then
+         v2 = .2  * Grd_ni
+      else
+         v2 = .02 * Grd_ni
+      endif
+      if (Grd_nj.lt.1000) then
+         v3 = 2. * Grd_nj
+      else if (Grd_ni.lt.10000.) then
+         v3 = .2  * Grd_nj
+      else
+         v3 = .02 * Grd_nj
+      endif
+      v1 = min(2040.d0,max(0.d0,v1))
+      v2 = min(2040.d0,max(0.d0,v2))
+      v3 = min(2040.d0,max(0.d0,v3))
+*
+*     * Positional parameters
+*     
+      d60 = Grd_dx
+      lonref = xpq(1)
+      latref = ypq(1)
+      oi     = g_id - 1 
+      oj     = g_jd - 1
+*
+      if (Grd_proj_S.eq.'P') then
+         gtgrtyp = 'N'
+         call xpyp_n (xpq,ypq,lonref,latref,oi,oj,d60,dimx,dimy)
+         call cxgaig (gtgrtyp,ig1,ig2,ig3,ig4,0.,0.,1000.,Grd_dgrw)
+*
+      elseif (Grd_proj_S.eq.'M') then
+         gtgrtyp = 'E'
+         d2r = dble(pi_8) / 180.
+         c1  = (d60/1000.)/((rayt_8/1000.)*cos(dble(Grd_phir)*d2r)*d2r)
+         call xpyp_m (xpq,ypq,lonref,latref,oi,oj,c1,dimx,dimy)
+         call cxgaig (gtgrtyp,ig1,ig2,ig3,ig4,Grd_xlat1,Grd_xlon1,
+     $                                        Grd_xlat2,Grd_xlon2)
+      elseif (Grd_proj_S.eq.'L') then
+         gtgrtyp = 'E'
+         c1  = Grd_dx
+         call xpyp_l (xpq,ypq,lonref,latref,oi,oj,c1,dimx,dimy)
+         call cxgaig (gtgrtyp,ig1,ig2,ig3,ig4,Grd_xlat1,Grd_xlon1,
+     $                                        Grd_xlat2,Grd_xlon2)
+      else
+         print *,' Wrong grid projection.  Grd_proj=[',Grd_proj_S,']'
+         stop
+      endif
+*
+      if (gnip1.lt.0) gnip1 = (v1 + v2 + v3 ) / 3.
+      gnip1 = gnip1 + addip1
+      ip123(1) = gnip1
+      ip123(2) = ((ig1+ig2+ig3/321.+ig4/321.)/4. + v1 + v2) / 3.
+      ip123(3) = (2700. +2.*v1 +2.*v3) / 3.
+*
+      if (ros.eq.'RND') then
+         ier= fstecr(xpq,xpq, -32, fortout, 0, 0, 0, dimx, 1, 1,
+     $                ip123(1),ip123(2),ip123(3),'X', '>>', 
+     $                'POS_X',gtgrtyp,ig1, ig2, ig3, ig4, 5, .true.)
+         ier= fstecr(ypq,ypq, -32, fortout, 0, 0, 0, 1, dimy, 1,
+     $                ip123(1),ip123(2),ip123(3),'X', '^^', 
+     $                'POS_Y',gtgrtyp,ig1, ig2, ig3, ig4, 5, .true.)
+      else
+         ier=fnom(30,'posiparam','RND',0)
+         ier=fstouv(30,'RND')
+         ier= fstecr(xpq,xpq, -32, 30, 0, 0, 0, dimx, 1, 1,
+     $               ip123(1),ip123(2),ip123(3),'X', '>>', 
+     $               'POS_X',gtgrtyp,ig1, ig2, ig3, ig4, 5, .true.)
+         ier= fstecr(ypq,ypq, -32, 30, 0, 0, 0, 1, dimy, 1,
+     $               ip123(1),ip123(2),ip123(3),'X', '^^', 
+     $               'POS_Y',gtgrtyp,ig1, ig2, ig3, ig4, 5, .true.)
+         ier= fstfrm(30)
+      endif
+*
+*     * initialisation des descripteurs des fichiers standards
+*
+      gtgrtyp='Z'
+      gttpvar='P'
+      Grd_ig1  = ip123(1)
+      Grd_ig2  = ip123(2)
+      Grd_ig3  = ip123(3)
+      Grd_ig4  = 0
+*
+      boot = .false.
+ 999  continue
+*
+ 900  format (/'COULD NOT OPEN FILE: ',a/)
+ 902  format (/,1X,'CANNOT OPEN OUTPUT FILE ',a,/,10X,'--- ABORT ---'/)
+*----------------------------------------------------------------------
+      return
+      end
+
+@

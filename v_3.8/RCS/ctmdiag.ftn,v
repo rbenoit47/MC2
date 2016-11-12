@@ -1,0 +1,189 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+      subroutine ctmdiag (d, f, v, dsiz, fsiz, vsiz, ni, nk)
+*
+#include "impnone.cdk"
+*
+      integer dsiz, fsiz, vsiz, ni, nk
+      real d(dsiz), f(fsiz), v(vsiz)
+*
+*Author
+*          B. Bilodeau (March 2000)
+*
+*Revisions
+* 001      B. Dugas (Feb 2002) - Modify phit0 when mol=0.
+*
+*
+*Object
+*          to calculate special diagnostics for the CTM (CHRONOS)
+*
+*Arguments
+*
+*          - Input/Output -
+* D        dynamic             bus
+* F        permanent variables bus
+* V        volatile (output)   bus
+*
+*          - Input -
+* DSIZ     dimension of D
+* FSIZ     dimension of F
+* VSIZ     dimension of V
+*
+*          - Input -
+* NI       number of elements processed in the horizontal
+* NK       vertical dimension
+*
+*Notes
+*
+*Implicites
+*
+#include "indx_sfc.cdk"
+#include "consphy.cdk"
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+*
+      real dthetav, rho, thetas, thetavs
+#include "ribcom.cdk"
+#include "vamin.cdk"
+      save n0rib, vamin
+*
+**
+*
+      real fcv, fc_agg, fv_agg, hu, ps, sig
+      real tt, uu, vv, surft, surfq
+      pointer ( fc_agg_, fc_agg(1))
+      pointer ( fv_agg_, fv_agg(1))
+      pointer ( hu    _, hu    (1))
+      pointer ( tt    _, tt    (1))
+      pointer ( uu    _, uu    (1))
+      pointer ( vv    _, vv    (1))
+      pointer ( ps    _, ps    (1))
+      pointer ( sig   _, sig   (1))
+      pointer ( surft _, surft (1))
+      pointer ( surfq _, surfq (1))
+*
+*
+      integer i, j, jk, k
+*     fonction-formule
+      jk(j,k) = (k-1)*ni + j - 1
+*
+*
+      fc_agg_ = loc(v(fc     + jk(1,indx_agrege)))
+      fv_agg_ = loc(v(fv     + jk(1,indx_agrege)))
+      hu    _ = loc(d(humoins+ jk(1,nk-1       )))
+      tt    _ = loc(d(tmoins + jk(1,nk-1       )))
+      uu    _ = loc(d(umoins + jk(1,nk-1       )))
+      vv    _ = loc(d(vmoins + jk(1,nk-1       )))
+      sig   _ = loc(d(sigm   + jk(1,nk-1       )))
+      ps    _ = loc(d(pmoins                    ))
+      surft _ = loc(f(tsurf                     ))
+      surfq _ = loc(f(qsurf  + jk(1,indx_agrege)))
+*
+*VDIR NODEP
+      do i=1,ni
+*
+*        densite
+         rho     = ps(i)/(rgasd*tt(i) * (1.0+delta*hu(i)))
+*
+*        coefficient de transfert (non necessaire pour CTM)
+*        note : en mode "agregation", la formule suivante donne
+*        des valeurs negatives pour CTUE
+
+c        v(ctue+i-1) = v(fc+jk(i,indx_agrege)) / 
+c    +                 (cpd*rho*(surft(i)-v(thetaa+i-1)))
+         v(ctue+i-1) = 0.0
+*
+*        vitesse de frottement (fq est calcule dans difver5)
+         v(ue+i-1) = sqrt(f(fq+i-1)/rho)
+*
+*        temperature potentielle a la surface
+         thetas  = surft(i)
+*
+*        temperature potentielle virtuelle a la surface
+         thetavs = thetas * (1.+delta*surfq(i))
+*
+         dthetav = v(thetaa+i-1)* (1.+delta*hu(i)) - thetavs
+*
+*        _____________
+*        (w' thetav')s
+         fcv = (1.+ delta*surfq(i)) * fc_agg(i)/(cpd *rho)   +
+     $              delta*thetas    * fv_agg(i)/(chlc*rho)         
+*
+*
+*        longueur de monin-obukhov
+         v(mol+i-1) = -v(ue+i-1)**3 * thetavs / (karman*grav*fcv)
+*
+*        bornes pour MOL
+         v(mol+i-1) = min(1000.,max(-1000.,v(mol+i-1)))
+c        if (v(mol+i-1).gt.0.0) v(mol+i-1)=min(v(mol+i-1), 1000.0)
+c        if (v(mol+i-1).lt.0.0) v(mol+i-1)=max(v(mol+i-1),-1000.0)
+*
+*        nombre de richardson "bulk"
+         v(rib+i-1) = grav * (v(thetaa+i-1) - thetavs) * v(za+i-1) /
+     $      ( (thetavs+0.5*dthetav) * max(vamin,(uu(i)**2+vv(i)**2)) )
+*
+*        valeurs limites pour RIB
+         if      (v(rib+i-1).ge.0.0) then
+            v(rib+i-1) = max(min(v(rib+i-1),  5.0), n0rib)
+         else if (v(rib+i-1).lt.0.0) then
+            v(rib+i-1) = min(max(v(rib+i-1),-10.0),-n0rib)
+         endif
+*
+*        coherence entre RIB et MOL
+         if (v(rib+i-1)*v(mol+i-1).lt.0.0) v(mol+i-1) = sign(1000.,v(rib+i-1))
+*
+*        fonctions de stabilite
+         if (v(mol+i-1).lt.0.0) then
+            v(phit0+i-1)=1.0/sqrt(1.0-20.0*v(rib+i-1))
+         else
+            v(phit0+i-1)=1.0 + 5.0*v(rib+i-1)
+         end if
+*
+*        coefficients de diffusion pour la temperature : niveau du bas
+         v(kt+jk(i,nk+1))=karman*f(z0t+jk(i,indx_agrege))*v(ue+i-1) /  v(phit0+i-1)
+*
+      end do 
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

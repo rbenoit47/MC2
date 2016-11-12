@@ -1,0 +1,103 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***fonction sgamatd - pente de TD lors de VV non-sature
+*
+      function sgamatd(td, tt, ti, pr, typv, swph)
+*
+#include "impnone.cdk"
+*
+      real sgamatd
+      real td, tt, ti, pr
+*
+      integer typv
+*
+      logical swph
+*
+*author
+*       N. Brunet (septembre 2000)
+*
+*object
+*       to compute the TD lapse rate during an adiabatic
+*       and unsaturated ascent
+*       2 derivatives are offered: dtd/dp and dtd/dz; the choice is
+*       controlled via "typv"
+*     
+*       dtd/dp is > 0 and in K/pa
+*       dtd/dz is < 0 and in K/m
+*
+*arguments
+*       td - dew point temperature (K)
+*       tt - temperature (K)
+*       ti - temperature (K) at which we start calculating
+*            latent heat of sublimation
+*            if swph=false, ti is n/a
+*            ti must be .LE. trpl
+*       pr  - pressure (pa)
+*       typv - if = 1; compute dtd/dp
+*                 = 2: compute dtd/dz
+*       swph - if .true.: phase ice and water are considered
+*                 .false.: phase water for all temperatures with
+*                          computation of saturation
+*implicites
+#include "consphy.cdk"
+*modules
+      external inctphy, schal
+*
+**
+*----------------------------------------------------------------
+*
+      real schal, latheat
+*
+#include "initcph.cdk"
+*----------------------------------------------------------------
+*
+*      ---calcule chaleur latente
+      latheat = schal(td, ti, swph)
+*
+      if(typv .eq. 1) sgamatd = (rgasd*(td**2))/(eps1*latheat*pr)
+*
+      if(typv .eq. 2) sgamatd = -grav*(td**2)/(eps1*latheat*tt)
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,52 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      character*8 surface(nmlmax),profil(nmlmax),endseric
+      integer statij(2,nmlmax),lcl_sta(nmlmax),nstat,nstat_l,
+     $        nsurf,nprof,serint,dimsers,dimserp,endserii
+      real    statll(2,nmlmax),sers,serp,sersx,serpx,endserir
+      pointer (pasers, sers(*)), (paserp, serp(*)),
+     $        (pasersx, sersx(*)), (paserpx, serpx(*))
+      common /seri_pnt/ pasers,paserp,pasersx,paserpx
+*
+      common /seri_c/ surface,profil,endseric
+      common /seri_i/ statij,lcl_sta,nstat,nstat_l,
+     $                nsurf,nprof,serint,dimsers,dimserp,endserii
+      common /seri_r/ statll,endserir
+*
+      namelist /series_cfg/ surface,profil,statij,nstat,nsurf,nprof,
+     $                      serint,statll
+*
+*     nstat      : number of surface station
+*                  series are inactive if nstat = 0 (max = 256)
+*     statij(?,1): grid coor. along x-axis of the station
+*     statij(?,2): grid coor. along y-axis of the station
+*     statll(?,1): latitude of the station
+*     statll(?,2): longitude of the station
+*     nsurf      : number of surface fields to extract
+*     nprof      : number of profil fields to extract
+*     surface    : comma separated list of surface fields to extract
+*     profil     : comma separated list of profil fields to extract
+*     serint     : extract fields each 'serint' timesteps
+
+@

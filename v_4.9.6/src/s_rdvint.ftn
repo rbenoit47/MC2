@@ -1,0 +1,420 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r s_rdvint
+*
+      subroutine s_rdvint ( u,v,sw,tp,hm,qp,cl,trname,ntrname,datev,
+     $                      lminx,lmaxx,lminy,lmaxy,lnk,
+     $                      nia,nja,nka,mode)
+      implicit none
+*
+      integer ntrname,lminx,lmaxx,lminy,lmaxy,lnk,nia,nja,nka,mode
+      character*8 trname(ntrname)
+      character* (*) datev
+      real u  (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     v  (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     sw (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     tp (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     hm (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     qp (lminx:lmaxx,lminy:lmaxy,0:lnk),
+     $     cl (lminx:lmaxx,lminy:lmaxy,lnk,*)
+*
+*OBJECT
+*     Reads 3D meteorological data and performs vertical interpolcation
+*
+**
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "halo.cdk"
+#include "levels.cdk"
+#include "tracers.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+*
+**
+      integer  bmf_get,get_bmf
+      external bmf_get,get_bmf
+      integer i,j,k,n,ng,lka,err,i0,in,j0,jn,nest,
+     $        l_i0,l_in,l_j0,l_jn,suv,km1,kp1
+      real td,trpl,eps1,eps2,delta,knams
+      real , dimension (:  ), allocatable :: p_ref
+      real , dimension (:,:), allocatable :: topo_anal,gotsr,ortsr,
+     $     qtsr,ntsr2,hgeow,hgeot,hgeom,t_anal,hgeow_anal,hgeot_anal,
+     $     hgeom_anal,q_anal,tv_anal,tt,qv,tv,qq
+      real*8 one,pt5,epsvir,dzi,beta
+      parameter(one=1.d0,pt5=.5d0)
+*
+#include "dtherfct2.cdk"
+#include "ftherfct2.cdk"
+*
+*-----------------------------------------------------------------------
+*
+      if (gngalsig.eq.1) then
+         call s_rdvint_c (u,v,sw,tp,hm,qp,cl,trname,ntrname,datev,
+     $                    minx,maxx,miny,maxy,gnk,nia,nja,nka,mode)
+         return
+      endif
+*
+      trpl  = trpl_8
+      eps1  = eps1_8
+      eps2  = eps2_8
+      delta = delta_8
+      knams = knams_8
+      epsvir = rgasv_8/rgasd_8-one
+*
+      suv  = 0
+      if (staguv) suv = 1
+*
+      nest = -1 
+      i0   = 1
+      j0   = 1
+      in   = nia
+      jn   = nja
+      l_i0 = 1    - west *hx
+      l_j0 = 1    - south*hx
+      l_in = ldni + east *hx
+      l_jn = ldnj + north*hx
+      if ((mode.eq.1).or.(mode.eq.2)) then
+         i0 = gc_ld(1,myproc) - hx*max(0,1-myrow) + hx
+         in = gc_ld(1,myproc) + ldni - 1
+     $                        + hx*max(0,myrow-npex+2) + hx + 1
+         j0 = 1
+         jn = halo + 1
+         nest = halo - hx - 1
+         l_i0 = 1    - west*hx
+         l_in = ldni + east*hx
+         l_j0 = 1 - hx
+         l_jn = 1 + nest
+         if (mode.eq.2) then
+            l_j0 = ldnj - nest
+            l_jn = ldnj + hx
+         endif
+      endif
+      if ((mode.eq.3).or.(mode.eq.4)) then
+         i0 = 1
+         in = halo + 1
+         j0 = gc_ld(3,myproc) + (halo-hx)*(max(0,1-mycol)-1)
+         jn = gc_ld(3,myproc) + ldnj 
+     $                        - (halo-hx)*(max(0,mycol-npey+2)+1)
+         nest = halo - hx - 1
+         l_j0 = 1    + south*(1+nest)
+         l_jn = ldnj - north*(1+nest)
+         l_i0 = 1 - hx
+         l_in = 1 + nest
+         if (mode.eq.4) then
+            l_i0 = ldni - nest
+            l_in = ldni + hx
+         endif
+      endif
+*
+      ng  = (in-i0+1)*(jn-j0+1)
+*
+      call hpalloc (paposit,ng*gnk*6   , err,1)  
+      call hpalloc (pahuv  ,ng*(nka+3) , err,1)
+      call hpalloc (pahtt  ,ng*(nka+3) , err,1)
+      call hpalloc (pahww  ,ng*(nka+3) , err,1)
+      allocate (topo_anal(ng,3),gotsr(ng,gnk),ortsr(ng,0:gnk),
+     $          qtsr(ng,0:gnk),ntsr2(ng,gnk),
+     $          hgeow(ng,gnk),hgeot(ng,gnk),hgeom(ng,0:gnk),
+     $          hgeot_anal(ng,nka),t_anal(ng,nka),q_anal(ng,nka),
+     $          tv_anal(ng,nka),
+     $          tt(ng,gnk),qv(ng,gnk),tv(ng,gnk),qq(ng,0:gnk))
+*
+      err = get_bmf ('MX  ',0,0,topo_anal,i0,in,j0,jn,2,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+*
+      call hauteur (hgeow     ,'HW',topo_anal,ng,1,gnk)
+      call hauteur (hgeot     ,'HT',topo_anal,ng,1,gnk)
+      call hauteur (hgeom(1,1),'HM',topo_anal,ng,1,gnk)
+      do i=1,ng
+         hgeom(i,0) = topo_anal(i,1)
+      enddo
+*
+      call qntstar (qtsr,ntsr2,gotsr,ortsr,hgeot,hgeom,ng,0,gnk)
+*
+      err = get_bmf ('GZ  ',0,0,hgeot_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+      do k=1,nka
+      do i=1,ng
+         hgeot_anal(i,k) = hgeot_anal(i,k)*10.
+      end do      
+      end do      
+*
+      call findvpo2 ( hgeow_anal,hgeot_anal,hgeom_anal,
+     $                hgeow,hgeot,hgeom(1,1),ng,gnk,nka )
+*
+***   getting horizontal wind components,
+***   converting them to m/s and interpolating them
+*
+      err = get_bmf ('UU  ',0,0,t_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+      err = get_bmf ('VV  ',0,0,tv_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+      do k=1,nka
+      do i=1,ng
+          t_anal(i,k) =  t_anal(i,k) * knams
+         tv_anal(i,k) = tv_anal(i,k) * knams
+      end do
+      end do   
+      call vertint3 (tt,t_anal,posit,huv,ng,gnk,nka)
+      call a2m (u,tt,suv,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+      call vertint3 (tv,tv_anal,posit,huv,ng,gnk,nka)
+      call a2m (v,tv,0,suv,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+***   getting moisture variable in the form of specific humidity (HU)
+***   or dew point depression (ES), in which case converting ES to HU
+*
+      err = get_bmf ('HU  ',0,0,q_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) then
+         allocate (p_ref(nka))
+         err = get_bmf ('ES  ',0,0, q_anal,i0,in,j0,jn,nka,nia,nja)
+         if (err.ne.0) call mc2stop(-1)
+         err = get_bmf ('TT  ',0,0, t_anal,i0,in,j0,jn,nka,nia,nja)
+         if (err.ne.0) call mc2stop(-1)
+         err = get_bmf ('PREF',0,0, p_ref ,1,1,1,1,nka,1,1)
+         if (err.ne.0) call mc2stop(-1)
+         do k=1,nka
+         do i=1,ng
+            td = (t_anal(i,k) - q_anal(i,k)) + tcdk_8
+            q_anal(i,k)  = foqst(td,p_ref(k)*100.)
+         end do
+         end do
+         deallocate (p_ref)
+      endif
+      call vertint3 (qv,q_anal,posit(ng*gnk*2+1),htt,ng,gnk,nka)
+      call a2m (hm,qv,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+***   getting temperature or virtual temperature in Celsius
+***   converting to Kelvin and calculating the other from the one
+*
+      err = get_bmf ('TT  ',0,0, t_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) then
+         write(6,2000)
+         err = get_bmf ('VT  ',0,0, tv_anal,i0,in,j0,jn,nka,nia,nja)
+         if (err.ne.0) call mc2stop(-1)
+         do k=1,nka
+         do i=1,ng
+            tv_anal(i,k) = tv_anal(i,k) + tcdk_8
+             t_anal(i,k) = tv_anal(i,k)/(1.+q_anal(i,k)*epsvir)
+         end do
+         end do 
+      else
+         do k=1,nka
+         do i=1,ng
+             t_anal(i,k) = t_anal(i,k) + tcdk_8
+            tv_anal(i,k) = t_anal(i,k)*(1.+q_anal(i,k)*epsvir)
+         end do
+         end do   
+      endif
+      call vertint3 (tt,t_anal,posit(ng*gnk*2+1),htt,ng,gnk,nka)
+*
+      do k=1,gnk
+      do i=1,ng
+         tt(i,k) = tt(i,k)+(0.0065*max(0.,(hgeot_anal(i,1)-hgeot(i,k))))
+         tv(i,k) = tt(i,k)*(1.+qv(i,k)*epsvir)
+         tt(i,k) = (gotsr(i,k)*tt(i,k) - grav_8)
+         tv(i,k) = (gotsr(i,k)*tv(i,k) - grav_8)
+      end do
+      end do
+      call a2m (tp,tt,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+***   getting surface pressure directly or by interpolation and
+***   computing log of pressure hydrostatically
+*
+      if (gngalsig.eq.0) then
+         allocate (p_ref(nka))
+         err = get_bmf ('PREF',0,0,p_ref,1,1,1,1,nka,1,1)
+         if (err.ne.0) call mc2stop(-1)
+         call psoln2 (q_anal,hgeot_anal,tv_anal,topo_anal,p_ref,ng,nka)
+         deallocate (p_ref)
+      else
+         err = get_bmf ('P0  ',0,0,q_anal,i0,in,j0,jn,1,nia,nja)
+         if (err.ne.0) call mc2stop(-1)
+         do i=1,ng
+            q_anal(i,1) = q_anal(i,1)*100.
+         end do
+      endif
+      do i=1,ng
+         qq(i,0)=(alog(q_anal(i,1))-qtsr(i,0))/ortsr(i,0)
+      end do   
+*
+      do k=1,gnk
+         km1=max(k-1,1)
+         kp1=min(k+1,gnk)
+         do i=1,ng
+            dzi=one/((hgeow(i,kp1)-hgeow(i,km1))*pt5)
+            beta=(ntsr2(i,k)/grav_8-gotsr(i,k)/cpd_8)*pt5
+            qq(i,k) = ( (dzi+beta) * qq(i,k-1)
+     $                 + grav_8*tv(i,k) / (grav_8+tv(i,k)) )
+     $                / (dzi-beta)
+         end do
+      end do   
+*
+      call a2m (qp,qq,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,
+     $                                                       gnk+1)
+*
+      do k=1,gnk
+      do j=l_j0,l_jn
+      do i=l_i0,l_in
+         u (i,j,k) = u (i,j,k) / sqrt(sby(i,j))
+         v (i,j,k) = v (i,j,k) / sqrt(sbx(i,j))
+         sw(i,j,k) = 0.0
+      end do
+      end do
+      end do
+*
+      do j=l_j0,l_jn
+      do i=l_i0,l_in
+         u(i,j,gnk) = u(i,j,gnk-1)
+         v(i,j,gnk) = v(i,j,gnk-1)
+      end do
+      end do
+*
+***   getting and interpolating vertical motion if available
+*
+      err = get_bmf ('WZ  ',0,0,t_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.eq.0) then
+         call vertint3 (tt,t_anal,posit(ng*gnk*4+1),hww,ng,gnk,nka)
+         call a2m(sw,tt,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+      endif
+*
+***   getting or initializing and interpolating requested tracers
+*
+      do n = 1, ntr
+         do k=1,gnk
+         do j=l_j0,l_jn
+         do i=l_i0,l_in
+            cl(i,j,k,n) = 0.
+         end do
+         end do
+         end do
+      end do
+*
+      if ((glconta).and.(iconta.ne.0)) then
+         if (mode.gt.0) then
+            do k=1,gnk
+            do j=l_j0,l_jn
+            do i=l_i0,l_in
+               cl(i,j,k,iconta) = 1.
+            end do
+            end do
+            end do
+         else
+            do k=1,gnk
+               do j=l_j0,0
+               do i=l_i0,l_in
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+               do j=ldnj+1,l_jn
+               do i=l_i0,l_in
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+               do j=l_j0,l_jn
+               do i=l_i0,0
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+               do j=l_j0,l_jn
+               do i=ldni+1,l_in
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+            end do
+         endif
+      endif
+*
+      do n=1,n_tracers
+         j=0
+         do i=1,ntr
+            if (trpil(n).eq.trname(i)) j=i
+         end do
+         if (j.gt.0) then
+            err = get_bmf (trpil(n),0,0,t_anal,i0,in,j0,jn,nka,nia,nja)
+            call vertint3 (tt,t_anal,posit(ng*gnk*2+1),htt,ng,gnk,nka)
+            call a2m (cl(1-hx,1-hy,1,j),tt,0,0,minx,maxx,miny,maxy,
+     $                                     l_i0,l_in,l_j0,l_jn,gnk)
+         endif
+      end do
+*
+      call hpdeallc (paposit,err,1)
+      call hpdeallc (pahuv  ,err,1)
+      call hpdeallc (pahtt  ,err,1)
+      call hpdeallc (pahww  ,err,1)
+      paposit = 0
+      pahuv   = 0
+      pahtt   = 0
+      pahww   = 0
+*
+      deallocate (topo_anal,gotsr,ortsr,qtsr,ntsr2,hgeow,hgeot,hgeom,
+     $            hgeot_anal,t_anal,q_anal,tv_anal,tt,qv,tv,qq)
+*
+      call bmf_clear 
+*
+      if ((myproc.eq.0).and.(mode.le.1)) then
+         write(6,100)
+         write(6,101) datev
+         write(6,100)
+      endif
+*
+ 100  format (' ',65('*'))
+ 101  format (' (S_RDVINT) JUST READ INPUT DATA FOR DATE: ',a15)
+ 2000 format (' TT not available. Trying VT ...')
+*-----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine a2m (m,a,stagx,stagy,lminx,lmaxx,lminy,lmaxy,
+     $                                        i0,in,j0,jn,nk)
+      implicit none
+      integer stagx,stagy,lminx,lmaxx,lminy,lmaxy,i0,j0,in,jn,nk
+      real m(lminx:lmaxx,lminy:lmaxy,nk),a(i0-1:in,j0-1:jn,nk)
+*
+      integer i,j,k
+
+      if ((stagx.gt.0).and.(stagy.gt.0)) then
+         write (6,1000)
+         stop
+      else if (stagx.gt.0) then
+         do k=1,nk
+            do j=j0,jn
+            do i=i0,in
+               m(i,j,k) = (a(i,j,k)+a(i-1,j,k))*0.5
+            end do
+            end do
+         end do
+      else if (stagy.gt.0) then
+         do k=1,nk
+            do j=j0,jn
+            do i=i0,in
+               m(i,j,k) = (a(i,j,k)+a(i,j-1,k))*0.5
+            end do
+            end do
+         end do
+      else
+         do k=1,nk
+            do j=j0,jn
+            do i=i0,in
+               m(i,j,k) = a(i,j,k)
+            end do
+            end do
+         end do
+      endif
+*
+ 1000 format (/' SUBROUTINE A2M NOT ADAPTED TO PERFORM DOUBLE STAGGERING  --- ABORT --'/)
+*
+      return
+      end
+*
+
+
+
+
+
+
+
+
+
+

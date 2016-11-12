@@ -1,0 +1,85 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine diagini (geobus, geosize, sigdez, etiket, noutzon,
+     $                                                 fni,fnj,fnk)
+      implicit none
+*
+      character *8 etiket
+      integer geosize, noutzon, fni, fnj, fnk
+      real sigdez (fnk), geobus(geosize)
+*
+#include "dynmem.cdk"
+#include "maxdim.cdk"
+#include "diagnml.cdk"
+#include "rec.cdk"
+#include "yomdyn1.cdk"
+#include "consdyn_8.cdk"
+*
+      integer izsrf(dzmxsrf),izprf(dzmxprf)
+      integer i, j, ierr, fclos, fstfrm
+      integer ila,ilo,length,mul
+      real lat,latmin,latmax,dlat,c1
+*
+      integer rg
+      real    pds,th
+      pointer (parg,rg(*)),(papds,pds(*)),(path,th(*))
+*
+*--------------------------------------------------------------------
+      call hpalloc (parg ,fni*fnj,ierr,1)
+      call hpalloc (papds,fni*fnj,ierr,1)
+      call hpalloc (path ,fni*fnj,ierr,1)
+*
+      call getindx2 ('DLATEN'  ,  'G', ila,   length,mul) 
+      call getindx2 ('DLONEN'  ,  'G', ilo,   length,mul)
+*
+      c1 = 180. / pi_8
+      latmin = geobus (ila) * c1
+      latmax = latmin
+      do j = 1, gnj
+         do i = 1, gni
+            lat    = geobus(ila + (j-1)*gni +i-1) * c1
+            latmin = min   (latmin,lat)
+            latmax = max   (latmax,lat)
+         end do
+      end do
+*     
+      if (divzon.eq.0) then
+         latmin = jinf
+         dlat   = (Jsup-Jinf)/nbbande
+      endif
+      if (divzon.eq.1) dlat = (latmax-latmin)/nbbande     
+      if (divzon.eq.2) dlat = 1.0
+*     
+      do i=1,fni
+         do j=1,fnj
+            pds(i+(j-1)*fni) =0.
+            th (i+(j-1)*fni) =0.
+            rg (i+(j-1)*fni) =0
+         enddo
+      enddo
+      
+*     calcul des poids et rangs
+      call mc2pds (geobus(ila),geobus(ilo),latmin,dlat,rg,pds,th,
+     $                                                   gni,gnj)
+
+*     Converting zonal var-list to integer list
+      do i=1,dznsrf
+         read(zsurfac(i),'(A4)') izsrf(i)
+      enddo
+      do i=1,dznprf
+         read(zprofil(i),'(A4)') izprf(i)
+      enddo
+*     
+      call inzono(pds,rg,th,
+     $     nptemps,int(grdt),mode,dznsrf,izsrf,dznprf,izprf,
+     $     int(latmin),0,noutzon,sigdez,etiket,gnidate,fni,fnj,fnk)
+      ierr = fstfrm(noutzon)
+      ierr = fclos (noutzon)
+      call mzonopr(1,noutzon)
+*
+      call hpdeallc (parg,ierr,1)
+      call hpdeallc (papds,ierr,1)
+      call hpdeallc (path,ierr,1)
+*--------------------------------------------------------------------
+      return
+      end

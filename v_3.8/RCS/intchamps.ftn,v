@@ -1,0 +1,106 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***s/r intchamps
+      subroutine intchamps( ch, chrd, s, srd, n, nk, nkrd)
+#include "impnone.cdk"
+
+      integer n, nk, nkrd
+      real chrd(n,nkrd), ch(n,nk), s(n,nk), srd(n,nkrd)
+*
+*Author:
+*          Marc Gagnon
+*
+*Arguments:
+*          - output -
+* ch       Interpolated field.
+*
+*          - input -
+* chrd     Reduced field.
+* s        Full field sigma levels.
+* srd      Reduced field sigma levels.
+* n        Number of points.
+* nk       Number of levels in ch and s.
+* nkrd     Number of reduced levels in chrd and srd.
+*
+*Object:
+*          Interpolate a work field from a reduced set of sigma
+*          levels to a full set of sigma levels.
+**
+
+      integer nimax
+      parameter (nimax=1000)
+
+      integer i, k, kk(nimax)
+      real delt(nimax)
+
+c     La position courante dans les niveaux reduits en dans kk.
+c     Chaque point est independant, comme dans s et srd.
+
+      do i=1,n
+        kk(i)=1
+        delt(i)=(chrd(i,2)-chrd(i,1))/(srd(i,2)-srd(i,1))
+      enddo
+
+c     Interpoler les points a tous les niveaux a partir des niveaux
+c     reduits.  Quand le niveau courant depasse le niveau reduit en
+c     direction du sol, on avance au prochain niveau reduit.  Rendu
+c     au sol, on avance pas mais la valeur est calculee correctement
+c     car le dernier niveau est le meme pour ch et chrd.
+
+      do k=1,nk
+        do i=1,n
+
+          if( s(i,k) .ge. srd(i,kk(i)+1) .and. kk(i) .lt. nkrd-1 ) then
+            kk(i)=kk(i)+1
+            delt(i)=(chrd(i,kk(i)+1)-chrd(i,kk(i)))/
+     x              (srd(i,kk(i)+1)-srd(i,kk(i)))
+          endif
+
+c         La valeur est proportionnelle a la difference de niveau.
+
+          ch(i,k)=chrd(i,kk(i))+delt(i)*(s(i,k)-srd(i,kk(i)))
+        enddo
+      enddo
+
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

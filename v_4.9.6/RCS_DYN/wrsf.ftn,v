@@ -1,0 +1,50 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine wrsf (iun1)
+      implicit none
+*
+      integer iun1
+*
+#include "dynmem.cdk"
+#include "sor.cdk"
+#include "partopo.cdk"
+*
+      integer ztmp
+      real wk1(g_if-g_id+1,g_jf-g_jd+1)
+      data ztmp /1/
+*--------------------------------------------------------------------
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,fcor,minx,maxx,miny,maxy,1,
+     $                                                          ztmp,1)
+      if (myproc.eq.0) write (iun1) wk1
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,smap,minx,maxx,miny,maxy,1,
+     $                                                          ztmp,1)
+      if (myproc.eq.0) write (iun1) wk1
+*
+*--------------------------------------------------------------------
+      return
+      end
+@

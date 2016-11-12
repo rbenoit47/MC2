@@ -1,0 +1,66 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.17.20.50.09;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+       subroutine classt
+       print *,'CLASS cannot be run from this version of the physics'
+       call qqexit(1)
+       return
+       end
+@
+
+
+3.8
+log
+@La version 3.8 de la physique a ete creee le 12 mars 2003
+
+Principaux changements par rapport a la version 3.72 :
+----------------------------------------------------
+
+	* contenu de la rustine r2 de la version 3.72
+	* code developpe pour le modele regional a 15 km
+		- MOISTKE (refonte)
+		- MIXPHASE (avec BLG)
+		- KTRSNT
+		- proprietes optiques des nuages
+	* option ADVECTKE reactivee
+	* BOUJO disponible dans eturbl
+	* ajouts importants au code de physique linearisee
+	* nouvelles cles : AS,BETA,KKL,KFCPCP,SHLCVT(2),QCO2
+	* nombreux diagnostics supplementaires
+	* optimisation des series temporelles
+	* diagnostics supplementaires pour CHRONOS et AURAMS
+	* correction d'une multitude de bogues mineurs
+@
+text
+@@

@@ -1,0 +1,66 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+* 
+      subroutine seriini (noutser, ldni, ni, nj, nk) 
+* 
+      implicit none
+      integer noutser,ldni,ni,nj,nk
+* 
+#include "maxdim.cdk"
+#include "serinml.cdk"
+#include "partopo.cdk"
+*
+      integer i,il,jl,pos,serdim,ierr
+      integer stcori (nstatmx),stcorj (nstatmx),
+     $        stcorix(nstatmx),stcorjx(nstatmx)
+**
+*--------------------------------------------------------------------
+*
+*----------
+*     mapping des vecteur de points a extraire
+*     in the folded space
+*----------   
+*
+      nstat_l = 0
+      do i = 1, nstat
+         stcorix(i) = statij(1,i)
+         stcorjx(i) = statij(2,i)
+         if (  (statij(1,i).ge.gc_ld(1,myproc)).and.
+     $         (statij(1,i).le.gc_ld(2,myproc)).and. 
+     $         (statij(2,i).ge.gc_ld(3,myproc)).and.
+     $         (statij(2,i).le.gc_ld(4,myproc))      ) then
+            nstat_l = nstat_l + 1
+            lcl_sta(nstat_l) = i
+            il = statij(1,i) - gc_ld(1,myproc) + 1
+            jl = statij(2,i) - gc_ld(3,myproc) + 1
+            pos = (jl - 1)*ldni + il
+            stcorj(nstat_l) = pos/ni
+            if (mod(pos,ni).ne.0) stcorj(nstat_l) = stcorj(nstat_l) + 1
+            stcori(nstat_l) = pos - (stcorj(nstat_l) - 1)*ni
+         endif
+      end do
+*
+      dimsers = serdim (nstatmx,nsurfmx,1)    
+      dimserp = serdim (nstatmx,nprofmx,nk)
+      call hpalloc  (pasers,  max(1,dimsers),  ierr,1)
+      call hpalloc  (pasersx, max(1,dimsers),  ierr,1)
+      call hpalloc  (paserp,  max(1,dimserp),  ierr,1)
+      call hpalloc  (paserpx, max(1,dimserp),  ierr,1)
+      call serallc2 (sers,serp,ni,nj,nk)
+*
+      call serset  ('ISTAT'  ,stcori ,nstat_l,ierr)
+      call serset  ('JSTAT'  ,stcorj ,nstat_l,ierr)
+      call serset  ('STATION',lcl_sta,nstat_l,ierr)
+      call serset  ('ISTAT_G',stcorix,nstat  ,ierr)
+      call serset  ('JSTAT_G',stcorjx,nstat  ,ierr)
+*
+      call serset  ('NOUTSER',noutser,1    ,ierr)
+      call serset  ('HEURE'  ,0.0    ,1    ,ierr)
+      call serset  ('SERINT' ,serint ,1    ,ierr)
+      call sersetc ('SURFACE',surface,nsurf,ierr)
+      call sersetc ('PROFILS',profil ,nprof,ierr)
+*
+      call serdbu ()
+*
+*--------------------------------------------------------------------
+      return
+      end 

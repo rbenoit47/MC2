@@ -1,0 +1,148 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_eshw
+*
+      subroutine out_eshw ( swmod,tmod,hmmod,prw,prt,rf,ng,lnk,nksor,
+     $                                                      ip2,unf )
+      implicit none
+*
+      integer ng,lnk,nksor,ip2,unf
+      real swmod(ng,lnk),tmod(ng,lnk),hmmod(ng,lnk),prw(ng,lnk),
+     $     prt(ng,lnk),rf(nksor)
+*
+**
+#include "lcldim.cdk"
+#include "consdyn_8.cdk"
+#include "levels.cdk"
+#include "sor.cdk"
+#include "physnml.cdk"
+#include "vinterpo.cdk"
+#include "partopo.cdk"
+*
+      integer gltd,glhu,glhr,glwz,glww
+      integer i,j,k,nkref,err
+      real, dimension (:,:), allocatable :: w1,w2
+      real posv
+      pointer (paposv, posv(ng,nksor,2,3))
+*----------------------------------------------------------------------
+*
+      if (myproc.eq.0) print*, '=====> OUT_ESHW'
+      paposv = papositd
+*
+      gltd=-1
+      glhu=-1
+      glhr=-1
+      glwz=-1
+      glww=-1
+      do i=1,nvardyn
+         if (udolist(i).eq.'TD') gltd=i
+         if (udolist(i).eq.'HU') glhu=i
+         if (udolist(i).eq.'HR') glhr=i
+         if (udolist(i).eq.'WZ') glwz=i
+         if (udolist(i).eq.'WW') glww=i
+      end do
+*
+      nkref= nksor
+      if (levtyp.eq.'G') nkref= lnk
+      if (nkref.lt.1) return
+*     
+      allocate (w1(ng,max(lnk,nkref)),w2(ng,nkref))
+*
+      if (gltd.gt.0) call hrores (w1,hmmod,tmod,prt,ng,lnk,satuco,'TD')
+*
+      if (levtyp.ne.'G') then
+*        
+         if (gltd.gt.0) then
+            call inv_vertint (w2,w1,posv(1,1,1,3),htt_od,ng,nksor,lnk)
+            call ecris_fst (w2,minx,maxx,miny,maxy,rf,'TD  ',1.0,ip2,
+     $                    out_kind,nkref,table_out(1,gltd),'DYN',unf)
+         endif
+         if (glhu.gt.0) then
+            call inv_vertint(w1,hmmod,posv(1,1,1,3),htt_od,ng,nksor,lnk)
+            call ecris_fst (w1,minx,maxx,miny,maxy,rf,'HU  ',1.0,ip2,
+     $                    out_kind,nkref,table_out(1,glhu),'DYN',unf)
+         endif
+*
+      else
+*
+         if (gltd.gt.0)
+     $        call ecris_fst (w1,minx,maxx,miny,maxy,ztr,'TD  ',1.0,
+     $               ip2,out_kind,nkref,table_out(1,gltd),'DYN',unf)
+         if (glhu.gt.0)
+     $        call ecris_fst (hmmod,minx,maxx,miny,maxy,ztr,'HU  ',
+     $          1.0,ip2,out_kind,nkref,table_out(1,glhu),'DYN',unf)
+*
+      endif
+*
+*     conversion de l'humidite specifique a l'humidite relative
+*
+      if (glhr.gt.0) then
+*
+         call hrores (w1,hmmod,tmod,prt,ng,lnk,satuco,'HR')
+*
+         if (levtyp.ne.'G') then
+            call inv_vertint (w2,w1,posv(1,1,1,3),htt_od,ng,nksor,lnk)
+            call ecris_fst (w2,minx,maxx,miny,maxy,rf,'HR  ',1.0,ip2,
+     $                    out_kind,nkref,table_out(1,glhr),'DYN',unf)
+         else
+            call ecris_fst (w1,minx,maxx,miny,maxy,ztr,'HR  ',1.0,ip2,
+     $                     out_kind,nkref,table_out(1,glhr),'DYN',unf)
+         endif
+*
+      endif
+*
+*   * Mouvement vertical
+*
+      if (glww.gt.0) then
+         do k=1,lnk
+         do i=1,ng
+            w1(i,k)= -prw(i,k)*swmod(i,k)*grav_8/(rgasd_8*tmod(i,k))
+         end do
+         end do
+         if (levtyp.eq.'G') then
+            call ecris_fst (w1,minx,maxx,miny,maxy,zt,'WW  ',1.0,ip2,
+     $                    out_kind,nkref,table_out(1,glww),'DYN',unf)
+         else
+            call inv_vertint (w2,w1,posv(1,1,1,1),hww_od,ng,nksor,lnk)
+            call ecris_fst (w2,minx,maxx,miny,maxy,rf,'WW  ',1.0,ip2,
+     $                    out_kind,nkref,table_out(1,glww),'DYN',unf)
+         endif
+      endif
+*
+      if (glwz.gt.0) then
+         if (levtyp.eq.'G') then
+            call ecris_fst (swmod,minx,maxx,miny,maxy,zt,'WZ  ',1.0,
+     $               ip2,out_kind,nkref,table_out(1,glwz),'DYN',unf)
+         else
+            call inv_vertint(w1,swmod,posv(1,1,1,1),hww_od,ng,nksor,lnk)
+            call ecris_fst (w1,minx,maxx,miny,maxy,rf,'WZ  ',1.0,ip2,
+     $                    out_kind,nkref,table_out(1,glwz),'DYN',unf)
+         endif
+      endif
+*
+      deallocate (w1,w2)
+*----------------------------------------------------------------------
+      return
+      end
+@

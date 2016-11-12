@@ -1,0 +1,39 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+*
+#include "levels.cdk"
+*
+      integer ih0,jh0,kho
+      real h_geopw,h_geopt,h_geopm,zzgg
+*
+      h_geopw(ih0,jh0,kho)=
+     $         zt(kho) +b0w(kho,1)*(hh0(ih0,jh0,1)-hh0(ih0,jh0,2))
+     $                 +b0w(kho,2)* hh0(ih0,jh0,2)
+      h_geopt(ih0,jh0,kho)=
+     $         ztr(kho)+b0t(kho,1)*(hh0(ih0,jh0,1)-hh0(ih0,jh0,2))
+     $                 +b0t(kho,2)* hh0(ih0,jh0,2)
+      h_geopm(ih0,jh0,kho)=
+     $         zm(kho) +b0m(kho,1)*(hh0(ih0,jh0,1)-hh0(ih0,jh0,2))
+     $                 +b0m(kho,2)* hh0(ih0,jh0,2)
+@

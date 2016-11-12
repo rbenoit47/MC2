@@ -1,0 +1,175 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  WETCON2
+#include "phy_macros_f.h"
+      SUBROUTINE WETCON2 (STAWS, S, DELWET, n, NK , LEVEZA)
+*
+#include "impnone.cdk"
+      INTEGER n, nk
+      REAL STAWS(n,NK-1,6),S(n,NK),DELWET(n,NK)
+      LOGICAL LEVEZA
+*
+*Author
+*          R. Benoit (Aug 93) adapted from wetcon for local sigma
+*
+*Revision
+* 001      G. Pellerin (Jun 2003) IBM Conversion.
+*                  - calls to vslog routine (from massvp4 library)
+*
+*Object
+*          to prepare (staws and delwet) (2D) used in
+*          the moist convective adjustment (MANABE)
+*
+*Arguments
+*
+*          - Output -
+* STAWS    stabilization matrix (n,NK-1,6)
+*
+*          - Input -
+* S        sigma levels (n,nk)
+*
+*          - Output -
+* DELWET   half thicknesses of layers (n,nk)
+*
+*          - Input -
+* N        1st horizontal dimension
+* NK       vertical dimension
+* LEVEZA   .TRUE. means to remove the anemometer level S(NK)< 1
+*
+*Notes
+*          We must use the compatible versions of MPRECIP and
+*          MCONADJ. This routine computes the stabilization matrix
+*          such that:
+*          TT = STAWS1+T(lower) + STAWS2*T(upper)
+*          GAM = TT + STAWS3*(T(lower) - T(upper))
+*          DT(upper) = STAWS4*(GAC=GAM)
+*          DT(lower) = STAWS5*DT(upper)
+*          Refer to "Parametrisation des Effets Physiques dans
+*          les Modeles de Prevision du Temps", R.Benoit,RPN,June80
+*
+*
+*IMPLICITES
+*
+#include "consphy.cdk"
+**
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC (ZDSIG , REAL   , (N,NK-1))
+*
+************************************************************************
+*
+      INTEGER K, j, nkm1
+      real temp1
+*
+      nkm1=nk-1
+      do 10 j=1,n
+         DELWET(j,1) = ( S(j,2) - S(j,1) ) * 0.5
+          ZDSIG(j,1) = S(j,2)/S(j,1)
+ 10   continue
+      DO 20 K=2,nkm1
+         do 20 j=1,n
+            DELWET(j,K) = ( S(j,K+1) - S(j,K-1) ) * 0.5
+            ZDSIG(j,K) = S(j,K+1)/S(j,K)
+ 20   continue
+        call vslog(ZDSIG, ZDSIG, nkm1*n)
+*
+*     DEUX FACONS DE CALCULER DELWET(NK) SELON QUE DERNIER
+*     NIVEAU (NK) EST A SIGMA = 1 OU SIGMA < 1
+*           (LEVEZA=           .F.          .T.  )
+      IF (.NOT.LEVEZA) THEN
+         do 30 j=1,n
+            DELWET(j,NK) = ( 1.0 - S(j,NK-1) ) * 0.5
+ 30      continue
+      ELSE
+         do 40 j=1,n
+            DELWET(j,NK) = 1.0 - (S(j,NK-1) + S(j,NK)) * 0.5
+ 40      continue
+      ENDIF
+      DO 2 K = 1,nkm1
+         do 2 j=1,n
+         STAWS(j,K,1) = 0.5
+         STAWS(j,K,2) = 0.5
+         STAWS(j,K,3) = 1.0/( CAPPA * ZDSIG(j,K) )
+         STAWS(j,K,5) = -DELWET(j,K+1)/DELWET(j,K)
+         STAWS(j,K,6) = SQRT( S(j,K)/S(j,K+1) )
+ 2    continue
+*
+      DO 3 K=1,nkm1
+         do 3 j=1,n
+            STAWS(j,K,4) = 1.0/(STAWS(j,K,2) - STAWS(j,K,3) +
+     X                  STAWS(j,K,5) * (STAWS(j,K,1) + STAWS(j,K,3)) )
+ 3    continue
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d3 1
+a9 3
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+d14 4
+a51 1
+*
+d55 5
+a59 1
+      INTEGER K, j
+d61 6
+d69 1
+d71 1
+a71 1
+      DO 20 K=2,NK-1
+d74 1
+d76 2
+d90 1
+a90 1
+      DO 2 K = 1,NK-1
+d94 1
+a94 1
+         STAWS(j,K,3) = 1.0/( CAPPA * ALOG( S(j,K+1)/S(j,K) ) )
+d99 1
+a99 1
+      DO 3 K=1,NK-1
+@

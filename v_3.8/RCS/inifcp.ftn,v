@@ -1,0 +1,198 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P INIFCP
+      SUBROUTINE INIFCP ( PSB,PS,PSM,RAINCV,RC,
+     +                    FCPFLG,NCA,SCR3,OMEGAP,
+     +                    AVERT,SIGMA,S,
+     +                    PTOP,NI,NK,DT)
+#include "impnone.cdk"
+C 
+      INTEGER NI,NK
+      INTEGER NCA(NI)
+      REAL PSB(NI),PS(NI),PSM(NI)
+      REAL RAINCV(NI),RC(NI),FCPFLG(NI)
+      REAL SCR3(NI,NK),OMEGAP(NI,NK)
+      REAL AVERT(NI,NK)
+      REAL SIGMA(NI,NK+1),S(NI,NK)
+      REAL PTOP,DT
+* 
+*Author
+*          Stephane Belair (July 5,1991)
+*
+*Revision
+*
+*Object
+*          inteface between the RFE model and the 
+*          Fritsch-Chappell scheme (FCPARA) 
+*          and the Kain-Fritsch scheme (KFCP)
+*
+*Arguments
+*
+*          - Input -
+* NI       X dimension of the model grid
+* NJ       Y dimension of the model grid
+* NK       Z dimension of the model grid
+*
+*          - Output -
+* PSB      pressure at the bottom of the atmosphere
+*
+*          - Input -
+* PS       surface pressure at time (T+1)
+* PSM      surface pressure at time (T-1) (not used)
+
+*          - Output -
+* RAINCV   accumulated convective precip. during last timestep
+* RC       rate of convective precipitation for previous timestep
+*
+*          - Input -
+* FCPFLG   flag for Fritsch-Chappell scheme (real    value)
+*
+*          - Output -
+* NCA      flag for Fritsch-Chappell scheme (integer value)
+* SCR3     dp/dt (vertical velocity) (kPa/s)
+*
+*          - Input -
+* OMEGAP   dp/dt (vertical velocity) (Pa/s)
+*
+*          - Output -
+* AVERT    a subset of the model's sigma levels
+* SIGMA    staggered sigma levels
+*
+*          - Input -
+* S        sigma levels of the model
+*
+*          - Output -
+* PTOP     pressure at the top of the atmosphere
+* DT       length of timestep
+*
+*
+*Notes
+*
+**
+      INTEGER I,K,KZ
+* 
+* 
+*     SIGMA COORDINATES
+*     -----------------
+*
+*     THE TWO VERTICAL ARRAYS ARE :  
+* 
+*     AVERT(K)  : WHERE ALL THE VARIABLES ARE DEFINED
+*     SIGMA (K) : STAGGERED LEVELS
+* 
+*     AT THE BOTTOM
+*
+*VDIR NODEP
+      DO I=1,NI
+         SIGMA(I,NK+1) = S(I,NK)
+         AVERT(I,NK  ) = S(I,NK-1)+0.75*(S(I,NK)-S(I,NK-1)) 
+      END DO
+*
+*
+*     IN BETWEEN
+*
+      DO K=1,NK-1
+*VDIR NODEP
+         DO I=1,NI
+            AVERT(I,K) = S(I,K)
+         END DO
+      END DO
+*
+      DO K=1,NK-1
+         KZ = NK-K+1 
+*VDIR NODEP
+         DO I=1,NI
+            SIGMA(I,KZ) = 2.0*AVERT(I,KZ)-SIGMA(I,KZ+1)
+            IF (SIGMA(I,KZ).LT.AVERT(I,KZ-1))                    THEN
+               SIGMA(I,KZ) = (AVERT(I,KZ) + AVERT(I,KZ-1)) * 0.5
+            ENDIF
+         END DO
+      END DO
+*
+*
+*     AT THE TOP
+*
+*VDIR NODEP
+      DO I=1,NI
+         SIGMA(I,1) = 2.0*AVERT(I,1)-SIGMA(I,2)
+         IF (SIGMA(I,1).LT.0.0 ) SIGMA(I,1)= AVERT(I,1) * 0.5
+      END DO
+* 
+* 
+*     PRESSURE AT THE TOP OF THE ATMOSPHERE 
+*     -------------------------------------
+* 
+      PTOP=0.0 
+*
+*
+*     UNIT CONVERSIONS
+*     ----------------
+*
+*VDIR NODEP
+      DO I=1,NI
+         PSB   (I) = PS(I)*1.E-3
+         RAINCV(I) = RC(I)*DT*100.
+         NCA   (I) = INT(FCPFLG(I))
+      END DO
+* 
+*
+      DO K=1,NK
+*VDIR NODEP
+         DO I=1,NI
+*           CONVERSION D'UNITES (VOIR S/P FCPARA ET KFCP)
+            SCR3(I,K) = OMEGAP(I,K)*1.E-3
+         END DO
+      END DO
+*
+*
+*VDIR NODEP
+      DO I=1,NI
+        SCR3(I,NK) = SCR3(I,NK-1) + 0.75*
+     +              ( SCR3(I,NK) - SCR3(I,NK-1) )
+      END DO
+*
+*
+*
+      RETURN
+      END 
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,23 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      integer
+     $        umoins,vmoins,tmoins,humoins,qcmoins,qrmoins,
+     $        qimoins,qgmoins,pmoins,
+     $        qgplus,uplus,vplus,tplus,huplus,qcplus,qrplus,qiplus,
+     $        enplus,pplus,omegap,sigm,dxdy,
+     $        ugwd,vgwd,tcond,hucond,qccond,qrcond,qicond,qgcond,fice,
+     $        trad,udifv,vdifv,wdifv,tdifv,qdifv,edifv,
+     $        alc,als,asc,ass,tlc,tls,tsc,tss,fq,tsoil,z0,
+     $        mg,ue2,ftemp,fvap,ilmo,hst,dlat,eponmod,za,z0t,
+     $        qsurf,tsurf,ufcp,vfcp
+      common /dynbusid/
+     $        umoins,vmoins,tmoins,humoins,qcmoins,qrmoins,
+     $        qimoins,qgmoins,pmoins,
+     $        uplus,vplus,tplus,huplus,qcplus,qrplus,qiplus,
+     $        qgplus,enplus,pplus,omegap,sigm,dxdy,
+     $        ugwd,vgwd,tcond,hucond,qccond,qrcond,qicond,qgcond,fice,
+     $        trad,udifv,vdifv,wdifv,tdifv,qdifv,edifv,
+     $        alc,als,asc,ass,tlc,tls,tsc,tss,fq,tsoil,z0,
+     $        mg,ue2,ftemp,fvap,ilmo,hst,dlat,eponmod,za,z0t,
+     $        qsurf,tsurf,ufcp,vfcp
+

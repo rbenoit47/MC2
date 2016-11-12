@@ -1,0 +1,203 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@      subroutine lonmel
+      write(6,'(A)') "SUBROUTINE LONMEL IS OBSOLETE"
+      call qqexit(1)
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d1 5
+a5 154
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P LONMEL  -  CALCUL DES ECHELLES DE LONGUEUR
+*
+      SUBROUTINE LONMEL(ZN,ZE,EN,BWT,THV,Z,H,ALPHA,CEPS,
+     X                  B,C,X,IH,IB,N,M,NK)
+*
+#include "impnone.cdk"
+      INTEGER N,M,NK
+      REAL ZN(N,NK),ZE(N,NK),EN(N,NK),BWT(N,NK),H(N)
+      REAL THV(N,NK),Z(N,NK)
+      REAL ALPHA,CEPS
+      REAL C(N,NK),B(N,NK),X(N,NK)
+      INTEGER IH(N),IB(N)
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+*
+*Author
+*          J. Mailhot RPN(Sept 1985)
+*
+*Revision
+* 001      J.Mailhot-G.Pellerin(Apr88)
+*                Return to the old stable case formula
+*                Remove the constraint DELTAZ
+* 002      N. Brunet  (May91)
+*                New version of thermodynamic functions
+*                and file of constants
+* 003      B. Bilodeau  (August 1991)- Adaptation to UNIX
+*
+*Object
+*          to calculate the scale length of turbulent layer, mixing
+*          length of the turbulence and scale length for dissipation
+*
+*Arguments
+*
+*          - Output -
+* ZN       mixing length of turbulence
+* ZE       inverse of dissipation length
+*
+*          - Input -
+* EN       turbulent energy
+* BWT      BETA * (FLUX of sensitive virtual heat)
+* THV      virtual potential temperature
+* Z        height of sigma level
+* H        height of boundary layer
+* ALPHA    general Crank-Nicholson parameter
+* CEPS     1.0/SQRT(3.75**3)
+* B        work space
+* C        work space
+* X        work space
+* IH       work space
+* IB       work space
+* N        horizontal dimension
+* M        1st dimension of T,Q,Z
+* NK       vertical dimension
+*
+*Notes
+*          ZE, THV and C can share same space.  Refer to P. Bougeault
+*          JAS (1985) for ZN.  Refer to G. Therry et P. Lacarrere BLM
+*          (1983) 25 63-88 for ZE.
+*
+*IMPLICITES
+*
+#include "clefcon.cdk"
+*
+#include "consphy.cdk"
+*
+**
+*
+*
+      INTEGER J,K,KK,KP,KKP
+      REAL PETIT
+      SAVE PETIT
+*
+      DATA PETIT / 1.0E-10 /
+*
+***   1.  LONGUEUR DE MELANGE DE LA TURBULENCE
+*
+      DO 101 J=1,N
+  101    ZN(J,5)=THV(J,NK)/(ALPHA*GRAV)
+*
+      DO 120 KP=2,NK-1
+         KKP=NK-KP+1
+         DO 112 J=1,N
+            IH(J)=KKP-1
+            IB(J)=KP
+            ZN(J,3)=ZN(J,5)*EN(J,KKP)
+  112       ZN(J,4)=ZN(J,5)*EN(J,KP)
+*
+         DO 113 K=KP,NK-1
+            KK=NK-K
+            DO 113 J=1,N
+               ZN(J,1)=0.5*(THV(J,KK+1)+THV(J,KK))-THV(J,KKP)
+               IF (ZN(J,3).GE.0.) IH(J) = KK
+               ZN(J,3)=CVMGP(ZN(J,3)-ZN(J,1)*(Z(J,KK)-Z(J,KK+1))
+     X                       ,ZN(J,3),ZN(J,3))
+               ZN(J,2)=0.5*(THV(J,K+1)+THV(J,K))-THV(J,KP)
+               IF (ZN(J,4).GE.0.) IB(J) = K
+  113          ZN(J,4)=CVMGP(ZN(J,4)+ZN(J,2)*(Z(J,K)-Z(J,K+1))
+     X                       ,ZN(J,4),ZN(J,4))
+*
+         DO 115 J=1,N
+            ZN(J,6)=CVMGP( (THV(J,IH(J))-THV(J,IH(J)+1))
+     X              /((Z(J,IH(J))-Z(J,IH(J)+1))
+     Y              *(THV(J,IH(J))-THV(J,KKP)+PETIT))
+     Z              , 1. , -ZN(J,3) )
+            ZN(J,7)=CVMGP( -ZN(J,3)/
+     X                    (THV(J,IH(J))-THV(J,KKP)+PETIT) ,
+     Y                    0. , -ZN(J,3) )
+            ZN(J,1)=1.-2.*ZN(J,6)*ZN(J,7)
+            ZN(J,1)=CVMGP( ZN(J,1) , 0. , ZN(J,1) )
+            ZN(J,7)=CVMGP( (1.-SQRT(ZN(J,1)))/(ZN(J,6)+PETIT),
+     X                     ZN(J,7) , ABS(ZN(J,6))-PETIT )
+            X(J,KKP)=Z(J,IH(J))-Z(J,KKP)-ZN(J,7)
+            ZN(J,6)=CVMGP( (THV(J,IB(J)+1)-THV(J,IB(J)))
+     X              /((Z(J,IB(J))-Z(J,IB(J)+1))
+     Y              *(THV(J,IB(J)+1)-THV(J,KP)+PETIT))
+     Z              , 1. , -ZN(J,4) )
+            ZN(J,7)=CVMGP( ZN(J,4)/
+     X                    (THV(J,IB(J)+1)-THV(J,KP)+PETIT) ,
+     Y                    0. , -ZN(J,4) )
+            ZN(J,2)=1.-2.*ZN(J,6)*ZN(J,7)
+            ZN(J,2)=CVMGP( ZN(J,2) , 0. , ZN(J,2) )
+            ZN(J,7)=CVMGP( (1.-SQRT(ZN(J,2)))/(ZN(J,6)+PETIT),
+     X                     ZN(J,7) , ABS(ZN(J,6))-PETIT )
+* 115       B(J,KP)=MIN( 0.5*KARMAN*Z(J,KP),
+  115       B(J,KP)=MIN( Z(J,KP),
+     X                   Z(J,KP)-Z(J,IB(J)+1)-ZN(J,7) )
+*
+  120 CONTINUE
+*
+      DO 130 J=1,N
+  130    ZN(J,1)=0.1*H(J)
+*
+      DO 133 K=2,NK-1
+         DO 133 J=1,N
+* 133       ZN(J,K)=2.0*B(J,K)*X(J,K)/(B(J,K)+X(J,K))
+  133       ZN(J,K)=CVMGP( 0.1*H(J) ,
+     X   2.0 *B(J,K) *X(J,K)/(B(J,K)+X(J,K)),
+     A              Z(J,K)-H(J)  )
+*
+      DO 135 J=1,N
+  135    ZN(J,NK)=KARMAN*Z(J,NK)
+*
+*
+***   2.  ECHELLE DE LONGUEUR DE LA DISSIPATION (INVERSE DE L')
+*
+      DO 200 K=1,NK
+         DO 200 J=1,N
+            C(J,K)=MIN(Z(J,K)/H(J),1.0)
+ 200    ZE(J,K)=(1.0+2.5*C(J,K))/(0.35*C(J,K)*H(J))
+*
+      RETURN
+      END
+@

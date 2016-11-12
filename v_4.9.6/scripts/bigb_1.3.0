@@ -1,0 +1,65 @@
+#!/bin/ksh
+# ---------------------------------------------------------------------------#
+#                                                                            #
+#                                 BIGB V1.2                                  #
+#                                                                            #
+# ---------------------------------------------------------------------------#
+#
+#                               MODE D'EMPLOI
+#  
+#   Ce script permet de generer des champs geophysiques sur n'importe quel
+#   type de grille a n'importe quelle resolution.  Les champs produits 
+#   avec BIGB sont : ME (topographie), MG (masque terre-mer), VG (vegetation
+#   definie par type), VF (fraction de vegetation), GA (fraction de glace),
+#   J1 (pourcentage de sable) et J2 (pourcentage d'argile).  Pour obtenir 
+#   les champs desirees, il ne suffit que de passer les banques de donnees
+#   en argument aux cles appropriees.  Si ces fichiers sont manquants, le
+#   champ ne sera tout simplement pas produit.
+#
+eval `cclargs $0 -ni          "30"                                          \
+                 -nj          "30"                                          \
+                 -tictac      "tictactest.std"                              \
+                 -fileout     "champs_geo.std"                            ++ $*`
+#
+#____ Repertoire ou se trouve les donnees sources.  Pour l'instant, elles
+#____ resident sur morgane
+#
+rep=/data/cmda/genesis/donnees/topo
+repn=/data/cmdax3/afsd/jud/topo_usgs
+rep2=/data/cmda/genesis/donnees/masque
+rep2n=/data/cmdax3/afsd/jud/masque_usgs
+rep3=/data/cmda/genesis/donnees/vege
+rep3n=/data/cmdax3/afsd/jud/veg_usgs_bats
+repa=/data/cmda/genesis/donnees/sols/argile
+reps=/data/cmda/genesis/donnees/sols/sable
+#
+$EDITFST -s $tictac -d $fileout <<EOF
+ desire(-1,['^^','>>'])
+EOF
+#
+/users/dor/afsd/jud/geo/v_1.3.0/bigb/bin/pollux/bigb_pollux \
+-ixy ${tictac} -i $ni -j $nj -gtyp E -ip1 0 \
+-infich ${repn}/topo_usgs_0_10.fst    ${repn}/topo_usgs_11_35.fst   \
+        ${repn}/topo_usgs_36_60.fst   ${repn}/topo_usgs_61_85.fst   \
+        ${repn}/topo_usgs_86_110.fst  ${repn}/topo_usgs_111_133.fst \
+        ${repn}/topo_usgs_134_150.fst ${repn}/topo_usgs_151_165.fst \
+        ${repn}/topo_usgs_166_180.fst ${rep}/top_us                 \
+-infmas ${rep2n}/masq_usgs_0_10.fst    ${rep2n}/masq_usgs_11_60.fst   \
+        ${rep2n}/masq_usgs_61_100.fst  ${rep2n}/masq_usgs_101_125.fst \
+        ${rep2n}/masq_usgs_126_144.fst ${rep2n}/masq_usgs_145_155.fst \
+        ${rep2n}/masq_usgs_156_180.fst ${rep2}/masq_us                \
+-infveg ${rep3n}/veg_usgs_0_10.fst    ${rep3n}/veg_usgs_11_60.fst   \
+        ${rep3n}/veg_usgs_61_100.fst  ${rep3n}/veg_usgs_101_125.fst \
+        ${rep3n}/veg_usgs_126_144.fst ${rep3n}/veg_usgs_145_155.fst \
+        ${rep3n}/veg_usgs_156_180.fst ${rep3}/veg_ccrn               \
+-infag1 $repa/arg1_usda $repa/arg1_fao $repa/arg1_agrc \
+-infag2 $repa/arg2_usda $repa/arg2_fao $repa/arg2_agrc \
+-infag3 $repa/arg3_usda $repa/arg3_fao $repa/arg3_agrc \
+-infag4 $repa/arg4_usda $repa/arg4_fao $repa/arg4_agrc \
+-infag5 $repa/arg5_usda $repa/arg5_fao $repa/arg5_agrc \
+-infsb1 $reps/sab1_usda $reps/sab1_fao $reps/sab1_agrc \
+-infsb2 $reps/sab2_usda $reps/sab2_fao $reps/sab2_agrc \
+-infsb3 $reps/sab3_usda $reps/sab3_fao $reps/sab3_agrc \
+-infsb4 $reps/sab4_usda $reps/sab4_fao $reps/sab4_agrc \
+-infsb5 $reps/sab5_usda $reps/sab5_fao $reps/sab5_agrc \
+-out $fileout > mess.p

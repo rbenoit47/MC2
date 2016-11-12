@@ -1,0 +1,202 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P QOZON3
+*
+      SUBROUTINE QOZON3 (OZ, ozotoit,OZZX, PRESS, S,LEV,NK,NP,NMAX,
+     %                   LREF,PREF, X, XM, Y, YM, IS,ISM)
+#include "impnone.cdk"
+      INTEGER I,K,L,II
+      INTEGER INT,LEV,LEVM1,LP1,LREF,LSTART,NK,NMAX,NP
+      REAL OZ(NMAX,LEV),OZZX(NMAX,LREF),PRESS(NP),S(np,NK)
+      LOGICAL LO1
+      REAL AC1, AC2, AC3, PL, SLOPE, TERCEP, ZZ
+      REAL X(NP), XM(NP), Y(NP), YM(NP),PTOP
+      INTEGER IS(NP), ISM(NP)
+      REAL PREF(LREF)
+      REAL ozotoit(NMAX)
+*
+#include "consphy.cdk"
+*
+*Author
+*          L.Garand (June 1989)
+*                   revised september 1997 (QOZON3 to use with OZOREF2)
+*Revision
+* 001      G.Pellerin(Mar90)Standard documentation
+* 002      N. Brunet  (May91)
+*                New version of thermodynamic functions
+*                and file of constants
+* 003      B. Bilodeau  (August 1991)- Adaptation to UNIX
+* 004      R. Benoit (Aug 93) Local sigma
+* 005      B. Bilodeau (November 1993) - Store ozone (cm stp)
+*          above model roof in ozotoit for sun2 -
+*          Change name from QOZON to QOZON2
+* 006      L. Garand (Sept 97) New algorithm for ozone calculation
+*          Change name from QOZON2 to QOZON3
+* 007      M. Lepine (March 2003) -  CVMG... Replacements
+*
+*Object
+*          to vertically interpolate the climatological fields
+*          OZZX from OZOREF2 to give the ozone mixing ratio (kg/kg)
+*          at the centre of each layer.
+*
+*Arguments
+*
+*          - Output -
+* OZ       ozone mixing ratio in kg/kg at the center of each
+*          layer
+* ozotoit   total ozone (cm stp) above model roof
+*
+*          - Input -
+* OZZX     ozone mixing ratio (kg/kg) at
+*          the 37 levels of climatological files
+* PRESS    surface pressure (N/M**2)
+* S        sigma levels at the centre of which OZ will be produced
+* LEV      number of sigma levels
+* NK       number of layers (NK=LEV-1)
+* NP       number of points to calculate
+* NMAX     maximum number of points
+* LREF     number of climatological levels
+* PREF     ozone climatological pressures
+* X        work field
+* XM       work field
+* Y        work field
+* YM       work field
+* IS       work field
+* ISM      work field
+*
+*Notes
+*          Original code provided by J.P. Blanchet, CCRN
+*      interpolation in mixing ratio now done; originally
+*      interpolation made on integrated ozone amount
+**
+*
+      REAL FACT
+*
+C----------------------------------------------------------------------
+C                       >>> INTERPOLATION <<<
+*
+C
+C........ LOCATE INDICES FOR INTERPOLATION AT FULL PRESSURE LEVELS.
+
+      LSTART = 2
+      DO 180 L = 1, LEV
+          DO 120 I = 1,NP
+              IS(I) = 2
+  120     CONTINUE
+
+          DO 140 K = LSTART, LREF
+              DO 130 I = 1,NP
+              AC1=FLOAT(K)
+              AC2=FLOAT(IS(I))
+              PL=S(i,L)*PRESS(I)
+              LO1=PREF(K).GE.PL.AND.IS(I).LE.2
+              if (LO1) then
+                 AC3=AC1
+              else
+                 AC3=AC2
+              endif
+              IS(I)=INT(AC3)
+              AC1=FLOAT(LREF)
+              LO1=(K.EQ.LREF.AND.PL.GT.PREF(2)).AND.IS(I).EQ.2
+              if (LO1) then
+                 AC2=AC1
+              else
+                 AC2=AC3
+              endif
+              IS(I)=AC2
+  130         CONTINUE
+  140     CONTINUE
+
+          LSTART = LREF
+          DO 150 I = 1,NP
+              ISM(I) = IS(I) - 1
+              LSTART = MIN0 (LSTART, IS(I))
+  150     CONTINUE
+
+c
+      DO 350 I=1,NP
+      X(I)=PREF(IS(I))
+      XM(I)=PREF(ISM(I))
+      Y(I)=OZZX(I,IS(I))
+      YM(I)=OZZX(I,ISM(I))
+ 350  CONTINUE
+
+          DO 170 I = 1,NP
+              SLOPE   = (Y(I) - YM(I)) / (X(I) - XM(I))
+              TERCEP  = YM(I) - SLOPE * XM(I)
+              ZZ=AMAX1(S(i,L)*PRESS(I), PREF(ISM(I)))
+              OZ(I,L) = SLOPE * ZZ + TERCEP
+  170     CONTINUE
+  180 CONTINUE
+*
+*     approximate ozone (cm stp) above model roof for solar code 
+      FACT = 1./2.144E-2
+      II=lref-1
+      DO 185 I = 1,NP
+         ptop=s(i,1)*press(i)
+         ozotoit(I) = 0.
+         DO 186 L=1,II
+            ZZ= (pref(L+1)-pref(L))/GRAV*
+     x          0.5* (OZZX(I,L)+OZZX(I,L+1)) * FACT
+            if (pref(L+1).lt.ptop) ozotoit(i)=ozotoit(i)+ZZ
+ 186     CONTINUE
+ 185   CONTINUE
+c
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@a16 3
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+d34 1
+d92 5
+a96 1
+              AC3=CVMGT(AC1,AC2,LO1)
+d100 5
+a104 1
+              AC2=CVMGT(AC1,AC3,LO1)
+d140 1
+a140 2
+            ozotoit(i)=cvmgt(ozotoit(i)+ZZ, ozotoit(i),
+     x                       pref(L+1).lt.ptop)
+@

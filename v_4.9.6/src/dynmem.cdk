@@ -1,0 +1,90 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+#include "lcldim.cdk"
+      real qpm, um, vm, swm, tpm, hmm, clm
+      pointer
+     $        (paqpm, qpm(minx:maxx,miny:maxy,0:gnk)),
+     $        (paum , um (minx:maxx,miny:maxy,1:gnk)),
+     $        (pavm , vm (minx:maxx,miny:maxy,1:gnk)),
+     $        (paswm, swm(minx:maxx,miny:maxy,1:gnk)),
+     $        (patpm, tpm(minx:maxx,miny:maxy,1:gnk)),
+     $        (pahmm, hmm(minx:maxx,miny:maxy,1:gnk)),
+     $        (paclm, clm(minx:maxx,miny:maxy,1:gnk,1:ntr))
+      real qp0, u0, v0, sw0, tp0, hm0, cl0
+      pointer
+     $        (paqp0, qp0(minx:maxx,miny:maxy,0:gnk)),
+     $        (pau0 , u0 (minx:maxx,miny:maxy,1:gnk)),
+     $        (pav0 , v0 (minx:maxx,miny:maxy,1:gnk)),
+     $        (pasw0, sw0(minx:maxx,miny:maxy,1:gnk)),
+     $        (patp0, tp0(minx:maxx,miny:maxy,1:gnk)),
+     $        (pahm0, hm0(minx:maxx,miny:maxy,1:gnk)),
+     $        (pacl0, cl0(minx:maxx,miny:maxy,1:gnk,1:ntr))
+      real qpp, up, vp, swp, tpp, hmp, clp
+      pointer
+     $        (paqpp, qpp(minx:maxx,miny:maxy,0:gnk)),
+     $        (paup , up (minx:maxx,miny:maxy,1:gnk)),
+     $        (pavp , vp (minx:maxx,miny:maxy,1:gnk)),
+     $        (paswp, swp(minx:maxx,miny:maxy,1:gnk)),
+     $        (patpp, tpp(minx:maxx,miny:maxy,1:gnk)),
+     $        (pahmp, hmp(minx:maxx,miny:maxy,1:gnk)),
+     $        (paclp, clp(minx:maxx,miny:maxy,1:gnk,1:ntr))
+      common /dynmem1/ paum , pavm , paswm, paqpm,
+     $                 patpm, pahmm, paclm,
+     $                 pau0 , pav0 , pasw0, paqp0,
+     $                 patp0, pahm0, pacl0,
+     $                 paup , pavp , paswp, paqpp,
+     $                 patpp, pahmp, paclp
+*
+      real qpnestt, unestt, vnestt, swnestt, tpnestt, hmnestt, clnestt
+      pointer
+     $        (paqpnt, qpnestt(minx:maxx,miny:maxy,0:gnk)),
+     $        (paunt , unestt (minx:maxx,miny:maxy,1:gnk)),
+     $        (pavnt , vnestt (minx:maxx,miny:maxy,1:gnk)),
+     $        (paswnt, swnestt(minx:maxx,miny:maxy,1:gnk)),
+     $        (patpnt, tpnestt(minx:maxx,miny:maxy,1:gnk)),
+     $        (pahmnt, hmnestt(minx:maxx,miny:maxy,1:gnk)),
+     $        (paclnt, clnestt(minx:maxx,miny:maxy,1:gnk,1:ntr))
+      real qpnesta, unesta, vnesta, swnesta, tpnesta, hmnesta, clnesta
+      pointer
+     $        (paqpna, qpnesta(minx:maxx,miny:maxy,0:gnk)),
+     $        (pauna , unesta (minx:maxx,miny:maxy,1:gnk)),
+     $        (pavna , vnesta (minx:maxx,miny:maxy,1:gnk)),
+     $        (paswna, swnesta(minx:maxx,miny:maxy,1:gnk)),
+     $        (patpna, tpnesta(minx:maxx,miny:maxy,1:gnk)),
+     $        (pahmna, hmnesta(minx:maxx,miny:maxy,1:gnk)),
+     $        (paclna, clnesta(minx:maxx,miny:maxy,1:gnk,1:ntr))
+      common /dynmem2/ paunt , pavnt , paswnt, paqpnt,
+     $                 patpnt, pahmnt, paclnt,
+     $                 pauna , pavna , paswna, paqpna,
+     $                 patpna, pahmna, paclna
+*
+      real fcor, smap, sbxy, sbx , sby
+      pointer (pafcor , fcor(minx:maxx,miny:maxy)),
+     $        (pasmap , smap(minx:maxx,miny:maxy)),
+     $        (pasbxy , sbxy(minx:maxx,miny:maxy)),
+     $        (pasbx  , sbx (minx:maxx,miny:maxy)),
+     $        (pasby  , sby (minx:maxx,miny:maxy))
+      common /dynmem3/ pafcor, pasmap, pasbxy,  pasbx, pasby
+*
+      real gg1, gg2, gg0r, gg0wr, g0ur, g0vr, dhdt
+      pointer (pagg1  , gg1 (minx:maxx,miny:maxy,1:gnk)),
+     $        (pagg2  , gg2 (minx:maxx,miny:maxy,1:gnk)),
+     $        (pagg0r , gg0r(minx:maxx,miny:maxy,1:gnk)),
+     $        (pagg0wr,gg0wr(minx:maxx,miny:maxy,1:gnk)),
+     $        (pag0ur , g0ur(minx:maxx,miny:maxy,1:gnk)),
+     $        (pag0vr , g0vr(minx:maxx,miny:maxy,1:gnk)),
+     $        (padhdt , dhdt(minx:maxx,miny:maxy,1:gnk))
+      common /dynmem4/ pagg1 , pagg2 , pagg0r,pagg0wr, pag0ur,
+     $                 pag0vr, padhdt
+*
+      real gots, orts, qstr, nssq
+      pointer (pagots , gots(minx:maxx,miny:maxy,1:gnk)),
+     $        (paorts , orts(minx:maxx,miny:maxy,0:gnk)),
+     $        (paqstr , qstr(minx:maxx,miny:maxy,0:gnk)),
+     $        (panssq , nssq(minx:maxx,miny:maxy,1:gnk))
+      common /dynmem5/ pagots, paorts, paqstr, panssq
+*
+      real*8 odx, odxu, ody, odyv, laty, latyv
+      pointer (paodx , odx  (1))        , (paodxu , odxu(1)),
+     $        (paody , ody  (miny:maxy)), (paodyv , odyv (miny:maxy)),
+     $        (palaty, laty (miny:maxy)), (palatyv, latyv(miny:maxy))
+      common /dynmem6/ paodx, paodxu, paody, paodyv, palaty, palatyv

@@ -1,0 +1,243 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine rhs3_pm ( dimphy, q3 , lminx, lmaxx, lminy, lmaxy )
+      implicit none
+*
+      integer dimphy,lminx,lmaxx,lminy,lmaxy
+      real*8 q3 (lminx:lmaxx,lminy:lmaxy,*)
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *     CALCULATES                                                  *
+*    *                right-hand-side LINEAR Pm-terms:                 *
+*    *                Pu, Pv, Psw, Ptp, Pqp                            *
+*    *       FROM                                                      *
+*    *                time-level t-Dt variables:                       *
+*    *                um, vm, swm, tpm, qpm                            *
+*    *      STORES                                                     *
+*    *                results in                                       *
+*    *                up=Pu, vp=Pv, swp=Psw, tpp=Ptp, qpp=Pqp          *
+*    *                                                                 *
+*    *     PERFORMS   essentially the following calculations:          *
+*    *                                                                 *
+*    *                              ~                                  *
+*    *    up =      um        -dtm* d(qpm)/dX                          *
+*    *                                                                 *
+*    *                              ~                                  *
+*    *    vp =      vm        -dtm* d(qpm)/dY                          *
+*    *                                                                 *
+*    *                              ~                             ___Z *
+*    *   swp = c03*swm+dtm*tpm-dtm*[d(qpm)/dZ-(c04*nssq-c05*gots)*qpm ]*
+*    *                                                                 *
+*    *                                 ___Z                            *
+*    *   tpp =     tpm - c05 * gots *  qpm - dtm*c06*nssq*swm          *
+*    *                                                                 *
+*    *                                 ___Z                            *
+*    *   qpp = [ - c00*qpm + dtm*2*c01*swm ]*orts - dtm*div(um,vm,swm) *
+*    *                                                                 *
+*    *                                                                 *
+*    *         *******************************************             *
+*    *         *                              ________Z  *             *
+*    *         *    ~                             _X     *             *
+*    *         *    dq/dX =      dq/dX + G0ur*G1*dq/dZ   *             *
+*    *         *                                         *             *
+*    *         *                              ________Z  *             *
+*    *         *    ~                             _Y     *             *
+*    *         *    dq/dY =      dq/dY + G0vr*G2*dq/dZ   *             *
+*    *         *                                         *             *
+*    *         *    ~                                    *             *
+*    *         *    dq/dZ = G0wr*dq/dZ                   *             *
+*    *         *                                         *             *
+*    *         *******************************************             *
+*    *                                                                 *
+*    *                           ~       ~       ~                     *
+*    *           div(u,v,sw)  =  du/dX + dv/dY + dsw/dZ                *
+*    *                                           ~                     *
+*    *           div(u,v,sw)  =     hdiv(u,v)  + dsw/dZ                *
+*    *                                                                 *
+*    *                                                                 *
+*    *         *******************************************             *
+*    *         *    ~                        ________XZ  *             *
+*    *         *    du/dX =      du/dX + G0r*G1*du/dZ    *             *
+*    *         *                                         *             *
+*    *         *    ~                        ________YZ  *             *
+*    *         *    dv/dY =      dv/dY + G0r*G2*dv/dZ    *             *
+*    *         *                                         *             *
+*    *         *   ~                                     *             *
+*    *         *   dsw/dZ = G0r*dsw/dZ                   *             *
+*    *         *                                         *             *
+*    *         *******************************************             *
+*    *                                                                 *
+*    *                                                                 *
+*    *         see cxxpar for definitions of parameters cXX            *
+*    *                                                                 *
+*    *******************************************************************
+*
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "phymem.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+#include "dtmdtp.cdk"
+*
+      integer i, j, k, n, id, jd, iff, jf, km1, kp1
+      real*8  p25, pt5, one, fulltp, div
+      real    s, d
+      pointer (pas ,s(*)), (pad ,d(*))
+      parameter (p25=0.25d0, pt5=0.5d0, one=1.0d0)
+*----------------------------------------------------------------------
+*
+      id =1-hx*west
+      jd =1-hy*south
+      iff=ldni+(hx-1)*east
+      jf =ldnj+(hy-1)*north
+*
+!$omp do
+      do k = gnk, 1, -1
+         if (k.eq.gnk) then
+            do j = jd, jf
+            do i = id, iff
+               q3(i,j,gnk) = 0.0
+            end do
+            end do
+         else
+            km1 = max( k-1 , 1 )
+            do j = jd, jf
+            do i = id, iff
+               q3(i,j,k) = sbxy(i,j) * pt5 *
+     $                ( gg1(i+1,j,k) * ( um(i+1,j,k) - um(i+1,j,km1) )
+     $                + gg1(i  ,j,k) * ( um(i  ,j,k) - um(i  ,j,km1) )
+     $                + gg2(i,j+1,k) * ( vm(i,j+1,k) - vm(i,j+1,km1) )
+     $                + gg2(i,j  ,k) * ( vm(i,j  ,k) - vm(i,j  ,km1) ) )
+            end do
+            end do
+         endif
+      end do
+!$omp enddo
+*
+!$omp do
+      do k = gnk, 1, -1
+         if (k.eq.gnk) then
+            do j = jd, jf
+            do i = id, iff
+               swp(i,j,k) = c03*swm(i,j,k) + dtm *tpm(i,j,k)
+     $                    - dtm*(qpm(i,j,k)-qpm(i,j,k-1))*gg0wr(i,j,k)
+     $                    + dtm*(qpm(i,j,k)+qpm(i,j,k-1))*pt5
+     $                                *(c04*nssq(i,j,k)-c05*gots(i,j,k))
+               tpp(i,j,k) = tpm(i,j,k)
+     $                   - c05*pt5*gots(i,j,k)*(qpm(i,j,k)+qpm(i,j,k-1))
+     $                    - dtm*c06*nssq(i,j,k)*swm(i,j,k)
+               qpp(i,j,k) = ( - c00t*qpm(i,j,k)
+     $                    + dtm*c01t*swm(i,j,k) ) * orts(i,j,k)
+            end do
+            end do
+         else
+            km1 = max( k-1 , 1 )
+            kp1 = min( k+1 , gnk-1 )
+            do j = jd, jf
+            do i = id+west, iff
+                up(i,j,k) = um(i,j,k) - dtm * (
+     $                       ( qpm(i,j,k  ) - qpm(i-1,j,k) ) * odxu(1) +
+     $              g0ur(i,j,k) * p25 * ( gg1(i,j,k+1) *
+     $                       ( qpm(i,j,kp1) + qpm(i-1,j,kp1)
+     $                       - qpm(i,j,k  ) - qpm(i-1,j,k  ) ) +
+     $                                    gg1(i,j,k  ) *
+     $                       ( qpm(i,j,k  ) + qpm(i-1,j,k  )
+     $                       - qpm(i,j,km1) - qpm(i-1,j,km1) )) )
+            end do
+            end do
+            do j = jd+south, jf
+            do i = id, iff
+                vp(i,j,k) = vm(i,j,k)  - dtm * (
+     $                       ( qpm(i,j,k  ) - qpm(i,j-1,k) ) * odyv(j) +
+     $              g0vr(i,j,k) * p25 * ( gg2(i,j,k+1) *
+     $                       ( qpm(i,j,kp1) + qpm(i,j-1,kp1)
+     $                       - qpm(i,j,k  ) - qpm(i,j-1,k  ) ) +
+     $                                    gg2(i,j,k  ) *
+     $                       ( qpm(i,j,k  ) + qpm(i,j-1,k  )
+     $                       - qpm(i,j,km1) - qpm(i,j-1,km1) )) )
+            end do
+            end do
+            do j = jd, jf
+            do i = id, iff
+               div = sbxy(i,j) * (( um(i+1,j,k) - um(i,j,k) ) * odx(1) +
+     $                            ( vm(i,j+1,k) - vm(i,j,k) ) * ody(j) )
+     $               + gg0r(i,j,k) * (swm(i,j,k+1) -swm(i,j,k) +
+     $                               ( q3(i,j,k+1) + q3(i,j,k) ) * pt5)
+               swp(i,j,k) = c03 * swm(i,j,k) + dtm * tpm(i,j,k)
+     $                    - dtm*(qpm(i,j,k)-qpm(i,j,k-1))*gg0wr(i,j,k)
+     $                    + dtm*(qpm(i,j,k)+qpm(i,j,k-1))*pt5
+     $                                *(c04*nssq(i,j,k)-c05*gots(i,j,k))
+               tpp(i,j,k) = tpm(i,j,k)
+     $                   - pt5*c05*gots(i,j,k)*(qpm(i,j,k)+qpm(i,j,k-1))
+     $                   - dtm*c06*nssq(i,j,k)* swm(i,j,k)
+               qpp(i,j,k) = ( - c00* qpm(i,j,k)
+     $                  + dtm*c01*(swm(i,j,k)+swm(i,j,k+1)))*orts(i,j,k)
+     $                  - dtm * div
+            end do
+            end do
+         end if
+      end do
+!$omp enddo
+*
+      if ((dimphy.gt.0).and.(gnpfb.gt.1)) then
+!$omp do
+      do k = 1, gnk-1
+         do j = jd, jf
+         do i = id+west, iff
+            up (i,j,k)  = up (i,j,k) + utdp2 (i,j,k)
+         end do
+         end do
+         do j = jd+south, jf
+         do i = id, iff
+            vp (i,j,k)  = vp (i,j,k) + vtdp2 (i,j,k)
+         end do
+         end do
+         do j = jd, jf
+         do i = id, iff
+            fulltp = tpm(i,j,k)+grav_8
+            qpp(i,j,k)  = qpp(i,j,k) + ttdp2 (i,j,k)/fulltp
+            tpp(i,j,k)  = tpp(i,j,k) + ttdp2 (i,j,k)
+     $                    * (1 + c11*tpm(i,j,k)/fulltp)
+            hmp(i,j,k)  = hmp(i,j,k) + hutdp2(i,j,k)
+         end do
+         end do
+         if (diffuw) then
+            do j = jd, jf
+            do i = id, iff
+               swp (i,j,k) = swp (i,j,k) + swtdp2 (i,j,k)
+            end do
+            end do
+         endif
+         do n = bghyd, edhyd
+            do j = jd, jf
+            do i = id, iff
+               clp(i,j,k,n) = clp(i,j,k,n) + cltdp2(i,j,k,n)
+            end do
+            end do
+         end do
+      end do
+!$omp enddo
+*
+      pas = pautp1
+      pad = pautp2
+!$omp do
+      do i=1,dimphy/2
+         d(i) = s(i)
+      end do
+!$omp enddo
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end

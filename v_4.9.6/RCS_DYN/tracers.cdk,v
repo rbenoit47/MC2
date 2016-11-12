@@ -1,0 +1,32 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer iconta,itheoc,ismphys,ntrdyn,n_tracers
+      integer maxntrpil
+      parameter (maxntrpil = 500)
+      character*4 trpil (maxntrpil)
+*
+      common /traceri/ iconta,itheoc,ismphys,ntrdyn,n_tracers
+      common /tracerc/ trpil
+*
+@

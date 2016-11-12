@@ -1,0 +1,106 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P BLWEIGHT
+*
+      SUBROUTINE BLWEIGHT (W, S, N, NK)
+*
+#include "impnone.cdk"
+*
+*
+      INTEGER N, NK
+      REAL W(N,NK), S(N,NK)
+*
+*Author
+*          J. Mailhot and B. Bilodeau (Dec 2001)
+*
+*
+*Object
+*          Compute a weighting profile to be used with the moist 
+*          turbulence scheme.
+*
+*Arguments
+*
+*          - Output -
+* W        weighting profile
+*
+*          - Input -
+* S        sigma levels
+* N        horizontal dimension
+* NK       vertical dimension
+*
+*
+*Notes
+*          The profile is set to:
+*            1 in the lower part of the atmosphere (S .ge. SMAX)
+*            0 in the upper part of the atmosphere (S .le. SMIN)
+*            (with a linear interpolation in-between)
+*
+*
+*
+      INTEGER J, K
+*
+      REAL SMIN, SMAX
+      SAVE SMIN, SMAX
+*
+************************************************************
+*
+      DATA SMIN , SMAX / 0.45 , 0.55 /
+*
+*
+      DO K=1,NK
+      DO J=1,N
+        W(J,K) = 1.0
+*
+        IF (S(J,K).LE.SMIN) THEN
+           W(J,K) = 0.0
+        ELSE IF (S(J,K).LE.SMAX.AND.S(J,K).GT.SMIN) THEN
+           W(J,K) = (1. - (SMAX - S(J,K)) / (SMAX-SMIN) )
+        ENDIF
+
+      END DO
+      END DO
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

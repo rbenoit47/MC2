@@ -1,0 +1,57 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+*REVISION
+*
+* v4_96 - Yu W.      - Introduce Eole
+*
+      subroutine theo_cfg (prout,status)
+      implicit none
+*
+      logical prout
+      integer status
+*
+#include "yomdyn.cdk"
+#include "lcldim.cdk"
+#include "partopo.cdk"
+*
+      integer longueur
+*
+*---------------------------------------------------------------------
+*
+      if (theocase.eq.'BUBBLE') then
+         call bulle_cfg (prout,status)
+*
+      else if (theocase.eq.'MTN_PINTY1'
+     $     .or.theocase.eq.'MTN_PINTY2'
+     $     .or.theocase.eq.'MTN_SHAER') then
+         call mtn_cfg (prout,status)
+         call geopini (gni,gnj)
+*
+      else if (theocase.eq.'BROOK') then
+         call brook_cfg (prout,status)
+         call geopini (gni,gnj)
+*
+      else if ( theocase .eq. 'EOLE' ) then
+         call eole_cfg ( prout, status )
+*
+      else
+         print*, " Wrong choice of theo case: ",theocase
+         stop
+*
+      endif
+*
+#if ! defined (NEC)
+      if (numproc.eq.1) then
+         write (6,1000) theocase(1:longueur(theocase))
+c        read*
+      endif
+#endif
+*
+ 1000 format (/' **************** CONFIRMATION NOTICE *****************'
+     $       //' YOUR INTENTION IS TO RUN THE ',a,' THEORETICAL CASE'/
+     $          ' PLEASE CONFIRM THE CONFIGURATION ABOVE AND TYPE'
+     $          ' <RETURN> TO CONTINUE')
+*
+*---------------------------------------------------------------------
+      return
+      end

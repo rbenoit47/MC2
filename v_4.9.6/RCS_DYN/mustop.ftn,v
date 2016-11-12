@@ -1,0 +1,88 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      logical function mustop (trig_rstrt, time2stop)
+      implicit none
+*
+      logical trig_rstrt
+      integer time2stop
+*
+      integer err,date2,date3,hh,mm,ss,iopdatm,newdate
+      real*8 time1,time2,time3,dtmax
+      logical boot,lms
+*
+      data time1,time2,dtmax /0.,0.,0./
+      data boot /.true./
+      save time1,time2,dtmax,boot
+*
+#include "partopo.cdk"
+      include 'mpif.h'
+*--------------------------------------------------------------------
+*
+      if (myproc.eq.0) then
+*
+         lms = .false.
+         if (.not.trig_rstrt)                           goto 9988
+         if ((time2stop.lt.0).or.(time2stop.gt.235959)) goto 9988
+*
+         if (boot) then
+            time2 = MPI_wtime()
+            err   = newdate(iopdatm('NOW'),date2,date3,-3)
+            hh    = date3/1000000
+            mm    = date3/10000 - hh*100
+            ss    = date3/100 - (hh*10000 + mm*100)
+            time1 = float( (hh*60+mm) * 60 + ss )
+*     
+            hh    = time2stop/10000
+            mm    = time2stop/100 - hh*100
+            ss    = time2stop - (hh*100 + mm) * 100
+            time3 = float( (hh*60+mm) * 60 + ss )
+*     
+            if (time3.lt.time1) then
+               time1 = 86400. - time1 + time3
+            else
+               time1 = time3 - time1
+            endif
+         endif
+*     
+         time3 = time2
+         time2 = MPI_wtime()
+         time3 = time2 - time3
+         dtmax = max(dtmax,time3)
+c         write(6,41) 'mustop: ',time1,time3,time1-time3,dtmax
+         time1 = time1-time3
+         if (time1 .le. dtmax) lms = .true.
+*
+         boot=.false.
+*
+      endif
+*
+ 9988 call MPI_bcast (lms,1,MPI_LOGICAL ,0,MPI_COMM_WORLD,err)
+      mustop = lms
+*
+*--------------------------------------------------------------------
+ 41   format (a,2(f18.8,f13.8))
+*
+      return
+      end
+@

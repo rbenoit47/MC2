@@ -1,0 +1,307 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P BLG
+      SUBROUTINE BLG (RO,RT,DZ,WW,NI,NK,DT,COMPLIM,KF,WMAX,PHASE,IDIR)
+
+#include "impnone.cdk"
+
+      REAL RO(NI,NK),RT(NI),DZ(NI,NK),WW(NI,NK),DT,WMAX
+
+      INTEGER NI,NK,KF,IDIR,PHASE
+
+      LOGICAL COMPLIM
+
+c
+*Author
+*          C. Girard and A. Plante (2001)
+c
+*Revision
+*
+* 001	   A. Glazer and A. Plante (Oct 2001) - Introduce complim,  
+*          and ind_limit in computation of precipitation 
+*
+*Object
+c
+*
+*   Version 1.0
+*                                                                 
+*   CALCULATES                                                   
+*                sedimentation of a quantity of matter ro(kg/m3) 
+*                                                                 
+*                falling with negative downward velocity ww(m/s) 
+*                                                               
+*   ACCORDING TO                                               
+*                the BOX-LAGRANGIAN SCHEME                    
+*                         (Kato,1995:JMSJ,73,241-245)        
+*                                                           
+*             OR                                           
+*                the ADJACENT-LAGRANGIAN SCHEME           
+*                Girard and Plante                       
+*                                                       
+*   PLUS                                               
+*                a conservative two-grid-length filter
+*                in order to control noise if needed 
+*
+*Arguments
+*
+*          - Input/Output -
+*
+* RO       density in cell before and after sedimentation.
+*
+*          - Output -
+* 
+* RT       precipitation reaching the surface.
+*
+*          - Input -
+*
+* DZ       cell thickness
+* WW       vertical velocity (negative downward)
+* NI       number of profiles
+* NK       number of grid point in profiles
+* DT       timestep
+* COMPLIM  logical switch to force recomputing the table ind_limit
+* KF       number of filtering pass
+* WMAX     maximum vertical velocity (negative downward).
+*          This is used to save computation time. For each
+*          level, the index of the heighest level from which
+*          mass can be received will be computed (once at first call)
+*          There is two index table, one for each phase.
+* PHASE    integer value (1 or 2)
+* IDIR     direction of index:
+*          idir=0 if index one is at top of model
+*          idir=1 if index one is at surface of model
+*                           
+#include "maxlev.cdk"
+*
+**
+*
+      character*6 scheme
+
+      integer i,k,l,km1,kp1,ks,ke,kw,control(2)
+
+      real vp(ni,nk),zt(ni,nk),zb(ni,nk),dzi(ni,nk),one
+      real zz(ni,idir:nk+idir)
+
+      real zmax,tempo,epsilon
+      
+      parameter(one=1.,epsilon=1e-2)
+
+
+      integer ind_limit(levmax,2),idzmin
+
+      save ind_limit,control
+
+      data control /0,0/
+
+c     scheme='kato'
+      scheme='girard'
+
+*
+*
+c     Check the phase argument
+
+      if(phase.ne.1.and.phase.ne.2)then
+*
+         print*,'argument phase in BLG must be equal to 1 or 2'
+         print*,'argument passed is ',phase
+         call qqexit(1)
+*
+      endif
+
+c===========================================================================
+c     Set parametres related to index direction.
+
+      ks=1
+      ke=nk
+      kw=1
+
+      if(idir.eq.0)then
+         ks=nk
+         ke=1
+         kw=-1
+      endif
+
+c===========================================================================
+c     Compute cell height,
+c         and final position of the top (zt) and bottom (zb) of moving boxes.
+c     Initialise rt and vp.
+
+      do i=1,ni
+         rt(i)=0.
+      enddo
+         
+      do i=1,ni
+         zz(i,ks)=0.
+      enddo
+      do k=ks,ke,kw
+         do i=1,ni           
+            zz (i,k+kw)=zz(i,k)+dz(i,k)
+            dzi(i,k)=one/dz(i,k)
+            vp (i,k)=0.
+         enddo
+      enddo
+
+      do k=1,nk
+         do i=1,ni           
+            zb(i,k)=zz(i,k)+ww(i,k)*dt
+         enddo
+      enddo
+      
+      if(scheme.eq.'kato')then
+         print*,'Kato'
+c        Note that this scheme reproduce the Eulerians scheme if CFL<1.
+         do k=1,nk
+            do i=1,ni           
+               zt(i,k)=zb(i,k)+dz(i,k)
+            enddo
+         enddo
+      endif
+
+      if(scheme.eq.'girard')then
+c        Note that this scheme DOES NOT reproduce the Eulerians scheme.
+         do i=1,ni
+            zt(i,ke)=zb(i,ke)+dz(i,ke)
+         enddo
+         do k=ks,ke-kw,kw
+            do i=1,ni
+               zb(i,k)=min(zb(i,k+kw)-epsilon*dz(i,k),
+     $                     zz(i,k)+ww(i,k)*dt)
+               zt(i,k)=zb(i,k+kw)
+            enddo
+         enddo         
+      endif
+
+c===========================================================================
+*
+c     Compute limit index where to look for mass.
+      
+      if(control(phase).ne.1.or.complim)then
+
+         control(phase)=1
+
+         idzmin=1
+         tempo=dz(1,ks)
+         do i=2,ni
+            if(dz(i,ks).lt.tempo)then
+               tempo=dz(i,ks)
+               idzmin=i
+            endif
+         enddo
+
+         zmax=abs(wmax*dt)
+
+         do l=ks,ke,kw
+            ind_limit(l,phase)=l
+            do k=l,ke,kw
+               if(zmax.ge.zz(idzmin,k)-zz(idzmin,l+kw))
+     $              ind_limit(l,phase)=k
+            enddo
+         enddo	
+         
+      endif
+ 
+*
+c===========================================================================
+c     Compute sedimentation, store in vp.
+
+      do l=1,nk
+         do k=l,ind_limit(l,phase),kw
+            do i=1,ni
+
+               vp(i,l)=vp(i,l) + ro(i,k)*(dz(i,k)/(zt(i,k)-zb(i,k)))*
+     $              max( 0. , 
+     $              min(zz(i,l+kw),zt(i,k)) - max(zz(i,l),zb(i,k)) )
+
+            enddo
+         enddo
+      enddo
+
+c===========================================================================
+c     Compute precipitation.
+
+      do k=ks,ind_limit(ks,phase),kw
+         do i=1,ni               
+            rt(i)=rt(i)+ro(i,k)* 
+     $           max( 0. , min(zz(i,ks),zt(i,k)) - (zt(i,k)-dz(i,k)) )
+         enddo
+      enddo
+      
+c===========================================================================
+c     Update density.
+
+      do k=1,nk
+         do i=1,ni
+            ro(i,k)=vp(i,k)*dzi(i,k)
+         enddo
+      enddo
+      
+c===========================================================================
+c     Apply conservative two-grid-length filter
+
+c     Loop on filter pass
+      do l=1,kf
+
+         do k=1,nk
+            kp1=min(k+1,nk)
+            km1=max(k-1,1)
+            do i=1,ni
+               vp(i,k) = ro(i,k) +
+     $              0.25*((ro(i,kp1)-ro(i,k))-
+     $              (ro(i,k)-ro(i,km1))*(dz(i,km1)*dzi(i,k)))
+            enddo
+         enddo
+        
+         do k=1,nk
+            do i=1,ni
+               ro(i,k)=vp(i,k)
+            enddo
+         enddo
+        
+      enddo
+      
+c===========================================================================
+*
+      return
+*
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

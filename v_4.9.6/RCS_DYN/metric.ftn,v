@@ -1,0 +1,339 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r metric
+*
+      subroutine metric (w1, w2_8)
+      implicit none
+*
+      real   w1  (*)
+      real*8 w2_8(*)
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *                                                                 *
+*    *                            CALCULATES                           *
+*    *                                                                 *
+*    *                   metric terms related to the                   *
+*    *                                                                 *
+*    *                GENERALIZED VERTICAL COORDINATE                  *
+*    *                                                                 *
+*    *                              Zeta                               *
+*    *                                                                 *
+*    *                                                                 *
+*    *                          G0  =   d(hh)/dZ                       *
+*    *                                                                 *
+*    *                          G1  = - d(hh)/dX                       *
+*    *                                                                 *
+*    *                          G2  = - d(hh)/dY                       *
+*    *                                                                 *
+*    *                                                                 *
+*    *      hh = Zeta + b01(Zeta)*h01 + b02(Zeta)*h02 + bt(Zeta)*ht    *
+*    *                                                                 *
+*    *                                                                 *
+*    *                                                                 *
+*    *                gg0r = 1/G0                                      *
+*    *                                                                 *
+*    *                         __X                                     *
+*    *                g0ur = 1/G0                gg1 = G1              *
+*    *                                                                 *
+*    *                         __Y                                     *
+*    *                g0ur = 1/G0                                      *
+*    *                                           gg2 = G2              *
+*    *                         __Z                                     *
+*    *                g0wr = 1/G0                                      *
+*    *                                                                 *
+*    *                                                                 *
+*    *         dhdt = b01*d(h01)/dt + b02*d(h02)/dt + bt*d(ht)/dt      *
+*    *                                                                 *
+*    *                                                                 *
+*    *                                                                 *
+*    *******************************************************************
+
+
+**
+#include "rec.cdk"
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "consdyn_8.cdk"
+#include "partopo.cdk"
+#include "levels.cdk"
+      include 'mpif.h'
+*
+      logical done
+      integer i, j, k, km1, id, jd, iff, jf, dim, dim_h
+      real qstar,gotstar,hh1,hh2,dum1(gnk),dum2(gnk),
+     $     s1,s2,vdecay_stb_l,vdecay_stb_h
+      pointer (paqs, qstar(*)), (pago, gotstar(*)),
+     $        (pah1, hh1(minx:maxx,miny:maxy,*)),
+     $        (pah2, hh2(minx:maxx,miny:maxy,1:gnk))
+      real*8 hh,gg0,h0_tmp,dh0dt1,dh0dt2,dhtdt,b0,bt
+      pointer (pahh,  hh(minx-1:maxx,miny-1:maxy,*)),
+     $        (pagg, gg0(minx-1:maxx,miny-1:maxy,*)),
+     $        (pah0, h0_tmp(minx-1:maxx,miny-1:maxy,*)),
+     $        (pad1, dh0dt1(minx:maxx,miny:maxy)),
+     $        (pad2, dh0dt2(minx:maxx,miny:maxy)),
+     $        (padt, dhtdt(minx:maxx,miny:maxy)),
+     $        (pab0, b0(gnk,*)), (pabt, bt(*))
+      real*8 atime, atimep, lt, f, pis2, con, zero, one, 
+     $       two, pt5, dadt, fp
+      parameter (zero = 0.0d0 , one = 1.0d0 , two = 2.0d0, pt5 = 0.5d0)
+      save done
+      data done /.false./
+*
+*---------------------------------------------------------------------
+*
+      varmtn = (gnstepno.ge.vmh_stime) .and.
+     $         (gnstepno.le.vmh_stime+vmh_ndt+1)
+*
+      if ( .not.done .or. varmtn .or.flextop ) then
+*
+         dim_h= (maxx-minx+2)*(maxy-miny+2)
+         dim  = dim_h*gnk
+         pahh = loc(w2_8(      1))
+         pagg = loc(w2_8(  dim+1))
+         pah0 = loc(w2_8(2*dim+1))
+         pad1 = loc(w2_8(2*dim+2*dim_h        +1))
+         pad2 = loc(w2_8(2*dim+2*dim_h  +dim2d+1))
+         padt = loc(w2_8(2*dim+2*dim_h+2*dim2d+1))
+         pab0 = loc(w2_8(2*dim+2*dim_h+3*dim2d+1))
+         pabt = loc(w2_8(2*dim+2*dim_h+3*dim2d+2*gnk+1))
+         paqs = loc(w1(1))
+         pago = loc(w1(gnk+1))
+         pah1 = loc(w1(2*gnk+1))
+         pah2 = loc(w1(2*gnk+dim3d+1))
+         con = 0.
+         if(flextop) con = one
+         dadt= 0.0
+         lt  = vmh_ndt
+         pis2= pi_8 / two
+*
+         f  = min(max(0,gnstepno-1-vmh_stime),vmh_ndt)
+         fp = min(max(0,gnstepno  -vmh_stime),vmh_ndt)
+         atime  = one - (cos(pis2 * f  / lt))**two
+         atimep = one - (cos(pis2 * fp / lt))**two
+         dadt   = max((atimep-atime)/dble(grdt), zero)
+*
+*   for all possible upwind grid points
+*
+         id=1-hx
+         jd=1-hy
+         iff=ldni+hx-1
+         jf =ldnj+hy-1
+*
+*     * calcule de h0 et des coefficients metriques 
+*
+!$omp do
+         do j = jd-1, jf+1
+         do i = id-1, iff+1
+            h0_tmp(i,j,1) = hh0i(i,j,1) + 
+     $                      ( hh0f(i,j,1) - hh0i(i,j,1) ) * atime
+            h0_tmp(i,j,2) = hh0i(i,j,2) +
+     $                      ( hh0f(i,j,2) - hh0i(i,j,2) ) * atime
+         end do
+         end do
+!$omp enddo
+!$omp do
+         do j = jd, jf+1
+         do i = id, iff+1
+            hh0 (i,j,1) = h0_tmp(i,j,1)
+            hh0 (i,j,2) = h0_tmp(i,j,2)
+         end do
+         end do
+!$omp enddo
+!$omp single
+         do j = jd, jf+1
+         do i = iff+2, maxx
+            hh0 (i,j,1) = hh0 (iff+1,j,1)
+            hh0 (i,j,2) = hh0 (iff+1,j,2)
+         end do
+         end do
+         do j = jf+2 , maxy
+         do i = id, maxx
+            hh0 (i,j,1) =  hh0 (i,jf+1,1)
+            hh0 (i,j,2) =  hh0 (i,jf+1,2)
+         end do
+         end do
+!$omp end single
+*
+!$omp do
+         do k=1,gnk
+            b0(k,1)= max(0.,sinh((htop-zt(k))/(iscal(1)))/
+     $                              sinh(htop/(iscal(1))))
+            b0(k,2)= max(0.,sinh((htop-zt(k))/(iscal(2)))/
+     $                              sinh(htop/(iscal(2))))
+*           n.b. the following line is to be checked for flextop
+            bt(k)  = zt(k)/htop
+            do j = jd-1, jf+1
+            do i = id-1, iff+1
+               hh(i,j,k)= zt(k) + b0(k,1) *(h0_tmp(i,j,1)-h0_tmp(i,j,2))
+     $                          + b0(k,2) * h0_tmp(i,j,2)
+     $                          + bt(k)   * qp0(i,j,gnk) * con / grav_8
+            end do
+            end do
+         end do
+!$omp enddo
+*
+*        write the values of b0
+*
+         call qntstar_omp (qstar,dum1,gotstar,dum2,zt,zt,1,1,gnk)
+*
+!$omp single
+         if(myproc.eq.0.and.gnstepno.eq.1.and..not.done) then
+            print *, 'Output of the Vertical Decay Functions b01 and b02
+     $            plus       tstar   and   pstar'
+            write(*,650) 'k','zt(k)','b0(k,1)','b0(k,2)'
+     $                      ,'tstar(k)','pstar(k)'
+            do k=gnk,1,-1
+               write(*,651) k, zt(k), b0(k,1), b0(k,2)
+     $                       , grav_8/gotstar(k), exp(qstar(k))
+            end do
+ 650     format (a3,4x,a14,  4x,a14  ,4x,a14  ,4x,a14  ,4x,a14)
+ 651     format (i3,4x,f14.6,4x,f14.6,4x,f14.6,4x,f14.6,4x,f14.6)
+         endif
+!$omp end single
+*
+!$omp do
+         do j = jd, jf+1
+         do i = id, iff+1
+            gg1(i,j,gnk) = - ( hh(i,j,gnk) - hh(i-1,j,gnk) ) * odxu(1)
+            gg2(i,j,gnk) = - ( hh(i,j,gnk) - hh(i,j-1,gnk) ) * odyv(j)
+         end do
+         end do
+!$omp enddo
+*
+!$omp do
+         do j = jd, jf
+         do i = id, iff
+           dh0dt1(i,j) = (dble(hh0f(i,j,1))-dble(hh0i(i,j,1)))*dadt
+           dh0dt2(i,j) = (dble(hh0f(i,j,2))-dble(hh0i(i,j,2)))*dadt
+           dhtdt (i,j) = sw0(i,j,gnk) * con
+     $                 + ( u0(i,j,gnk-1) + u0(i+1,j,gnk-1) ) * pt5 *
+     $                   (gg1(i,j,gnk  ) +gg1(i+1,j,gnk  ) ) * pt5
+     $                 + ( v0(i,j,gnk-1) + v0(i,j+1,gnk-1) ) * pt5 *
+     $                   (gg2(i,j,gnk  ) +gg2(i,j+1,gnk  ) ) * pt5
+         end do
+         end do
+!$omp enddo
+*     
+!$omp do
+         do k =  1, gnk-1
+            do j = jd-1, jf+1
+            do i = id-1, iff+1
+               gg0 (i,j,k) = hh(i,j,k+1) - hh(i,j,k)
+            end do
+            end do
+            do j = jd, jf+1
+            do i = id, iff+1
+               gg1(i,j,k) = - ( hh(i,j,k) - hh(i-1,j,k) ) * odxu(1)
+               gg2(i,j,k) = - ( hh(i,j,k) - hh(i,j-1,k) ) * odyv(j)
+            end do
+            end do
+            do j = jd, jf
+            do i = id, iff
+               g0ur(i,j,k) = two / ( gg0(i,j,k) + gg0(i-1,j,k) )
+               g0vr(i,j,k) = two / ( gg0(i,j,k) + gg0(i,j-1,k) )
+            end do
+            end do
+            km1 = max(k-1, 1)
+            do j = jd, jf
+            do i = id, iff
+               dhdt(i,j,k) =(dh0dt1(i,j)-dh0dt2(i,j))*b0(k,1)
+     $                     + dh0dt2(i,j) *b0(k,2) + dhtdt (i,j) *bt(k)
+            end do
+            end do
+         end do
+!$omp enddo
+!$omp do
+         do k =  1, gnk-1
+            km1 = max(k-1, 1)
+            do j = jd, jf+1
+            do i = id, iff+1
+               gg0r(i,j,k) = one/gg0(i,j,k)
+               gg0wr(i,j,k)= two/(gg0(i,j,k)+gg0(i,j,km1))
+            end do
+            end do
+            if (k.eq.1) then
+               do j = jd, jf
+               do i = id, iff
+                  gg0wr(i,j,1)   = two/gg0(i,j,1)
+                  gg0r (i,j,gnk) = 0.
+                  gg0wr(i,j,gnk) = two/gg0(i,j,gnk-1)
+                  dhdt (i,j,gnk) =(dh0dt1(i,j)
+     $                            -dh0dt2(i,j))*b0(gnk,1)
+     $                            + dh0dt2(i,j) *b0(gnk,2)
+     $                            + dhtdt (i,j) *bt(gnk)
+               enddo
+               enddo
+            endif
+         end do
+!$omp enddo
+*
+         call hauteur_omp (hh1,'HT',hh0,maxx-minx+1,maxy-miny+1,gnk )
+         call hauteur_omp (hh2(minx,miny,1),'HM',hh0,
+     $                     maxx-minx+1,maxy-miny+1,gnk )
+*
+         do j = miny, maxy
+         do i = minx, maxx
+            hh2(i,j,0) = hh0(i,j,1)
+         end do
+         end do
+
+         call qntstar_omp ( qstr,nssq,gots,orts,hh1,hh2,
+     $                     (maxx-minx+1)*(maxy-miny+1),0,gnk )
+*
+!$omp single
+         if (.not.done.and.gnstepno.eq.1) then
+            s1 = iscal(1)
+            s2 = iscal(2)
+            vdecay_stb_l =  maxhh01_l/s1/tanh(htop/s1) 
+     $                    + maxhh02_l/s2/tanh(htop/s2)
+            vdecay_stb_h =  maxhh01_h/s1/tanh(htop/s1) 
+     $                    + maxhh02_h/s2/tanh(htop/s2)
+            if (myproc.eq.0) write (6,1000) vdecay_stb_l,vdecay_stb_h
+            if ((vdecay_stb_l.ge.1).or.(vdecay_stb_l.ge.1))
+     $           call mc2stop(-1)
+         endif
+!$omp end single
+
+      end if
+*
+      done = .true.
+*
+ 1000 format (/x,'VERTICAL DECAY FUNCTION STABILITY CRITERIA: ',2f10.5/)
+*---------------------------------------------------------------------
+*
+      return
+      end
+
+
+
+
+
+@

@@ -1,0 +1,77 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine seri_out (head,etiket)
+      implicit none
+*
+      character* (*) etiket
+      logical head
+*
+#include "maxdim.cdk"
+#include "lcldim.cdk"
+#include "serinml.cdk"
+#include "grd.cdk"
+#include "consdyn_8.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "phymem.cdk"
+#include "partopo.cdk"
+*
+      include 'mpif.h'
+*
+      logical wr
+      integer i,ig(4),ierr
+      data ig /4*0/
+*
+*----------------------------------------------------------------------
+*
+      call MPI_REDUCE (sers,sersx,dimsers,
+     $                 MPI_INTEGER,MPI_BOR,0,MPI_COMM_WORLD,ierr)
+      call MPI_REDUCE (serp,serpx,dimserp,
+     $                 MPI_INTEGER,MPI_BOR,0,MPI_COMM_WORLD,ierr)
+      wr=.false.
+      if (myproc.eq.0) then
+         do i=1,dimsers
+            sers(i) = sersx(i)
+         end do
+         do i=1,dimserp
+            serp(i) = serpx(i)
+         end do
+         wr=.true.
+      endif
+      call serwrit2 (idatim, etiket, sigdez, 0., 0., ig, Grd_dgrw,
+     $                   rgasd_8, grav_8, satuco, satuco, head, wr)
+      if (myproc.eq.0) then
+         do i=1,dimsers
+            sers(i) = 0.
+         end do
+         do i=1,dimserp
+            serp(i) = 0.
+         end do
+      endif
+*
+*----------------------------------------------------------------------
+*      
+      return
+      end
+@

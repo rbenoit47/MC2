@@ -1,0 +1,95 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r lhs3_uv
+      subroutine lhs3_uv
+      implicit none
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*******************************************************************
+*                                                                 *
+*    CALCULATES                                                   *
+*                time-level t+Dt UPDATED variables                *
+*                up, vp                                           *
+*       FROM                                                      *
+*                right-hand sides                                 *
+*                Qu, Qv                                           *
+*                themselves stored in                             *
+*                up, up                                           *
+*        and                                                      *
+*                already updated variable                         *
+*                qpp                                              *
+*                                                                 *
+*     PERFORMS   essentially the following calculations:          *
+*                                                                 *
+*                            ~                                    *
+*          up  =  up - dtp * d(qpp)/dX                            *
+*                                                                 *
+*                            ~                                    *
+*          vp  =  vp - dtp * d(qpp)/dY                            *
+*                                                                 *
+*                                            ~     ~              *
+*        SEE     rhs3_pm  for definitions of d/dX, d/dY           *
+*                                                                 *
+*                                                                 *
+*                cxxpar  for definitions of parameters cXX        *
+*                                                                 *
+*******************************************************************
+*
+#include "nbcpu.cdk"
+#include "dynmem.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dtmdtp.cdk"
+*
+      integer i,j,k,km1,kp1
+      real*8  p25,one
+      parameter (p25 = 0.25d0, one = 1.0d0)
+*
+*---------------------------------------------------------------
+*
+!$omp do
+      do k = 1, gnk-1
+*
+         km1 = max( k-1 , 1 )
+         kp1 = min( k+1 , gnk-1 )
+*
+         do j=1,ldnj-north
+         do i=1+west,ldni-east+(1-east)
+            up(i,j,k) = up(i,j,k) - dtp * ( (qpp(i,j,k) - qpp(i-1,j,k))
+     $                 * odxu(1) + g0ur(i,j,k) * p25 * (
+     $             gg1(i,j,k+1) * ( qpp(i,j,kp1) + qpp(i-1,j,kp1)
+     $                            - qpp(i,j,k  ) - qpp(i-1,j,k  ) ) +
+     $             gg1(i,j,k  ) * ( qpp(i,j,k  ) + qpp(i-1,j,k  )
+     $                            - qpp(i,j,km1) - qpp(i-1,j,km1) ) ) )
+         end do
+         end do
+
+         do j=1+south,ldnj-north+(1-north)
+         do i=1,ldni-east
+            vp(i,j,k) = vp(i,j,k) - dtp * ( (qpp(i,j,k) - qpp(i,j-1,k))
+     $                 * odyv(j) + g0vr(i,j,k) * p25 * ( 
+     $             gg2(i,j,k+1) * ( qpp(i,j,kp1) + qpp(i,j-1,kp1)
+     $                            - qpp(i,j,k  ) - qpp(i,j-1,k  ) ) +
+     $             gg2(i,j,k  ) * ( qpp(i,j,k  ) + qpp(i,j-1,k  )
+     $                            - qpp(i,j,km1) - qpp(i,j-1,km1) ) ) )
+         end do
+         end do
+*
+         if(k.eq.gnk-1) then
+            do j=1,ldnj
+            do i=1,ldni
+               up(i,j,gnk)=up(i,j,gnk-1)
+               vp(i,j,gnk)=vp(i,j,gnk-1)
+            end do
+            end do
+         endif
+*
+      end do
+!$omp enddo
+*---------------------------------------------------------------
+      return
+      end

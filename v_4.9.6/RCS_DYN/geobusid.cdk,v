@@ -1,0 +1,41 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+     $        al,dlat,dlon,glsea,glacier,wsoil,lhtg,me,mf,mt,mx,mg,ne,
+     $        snodp,tglacier,tmice,twater,tsoil,vegindx,z0,icedp,
+     $        dhdx,dhdy,dhdxdy,
+*
+* for both ISBA and CLASS
+     $        vegf, sand, clay, snoag, snoro, snoal, 
+*
+* for ISBA
+     $        wveg, isoil, wsnow,
+*
+* for CLASS
+     $        tveg,vegro,iveg,tsno,
+     $        gc,laimax,laimin,vegma,
+     $        alnir,color,drain
+     $        
+*
+@

@@ -1,0 +1,113 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+      REAL FUNCTION JULIAND( DEET,NPAS,IDATIM )
+*
+#include "impnone.cdk"
+*
+      INTEGER IDATIM(14),NPAS
+      REAL DEET
+*
+*Author
+*            B. Bilodeau - may 1993
+*
+*Revision
+* 001        B. Bilodeau - June 1998 - Newdate
+* 002        B. Dugas    - June 2000 - Calculate NDAYS in REAL*8
+*
+*Object
+*            This function calculates the number of days
+*            since the beginning of the current year,
+*            using the analysis date, the number of time
+*            steps since that date and the length of
+*            the time step.
+*
+*Arguments
+*
+*            - Input -
+* DEET       Length of the time step in seconds
+* NPAS       Number of time steps since the beginning of the
+*            time integration.
+* IDATIM     Valid CMC date time group
+*
+*Notes
+*            This function will be replaced eventually by
+*            the function JJULIEN from RMNLIB, written
+*            by B. Dugas. Note that the last argument
+*            of the function will be replaced by the date
+*            time stamp.
+*
+**
+*
+*
+      INTEGER DAY,MONTH,YEAR
+      INTEGER JDBEGIN,JDNOW,JD1JAN,NDAYS
+      integer is1,is2
+*
+      EXTERNAL DATEC, JDATEC, NEWDATE
+*
+*     JULIAN DAY AT THE BEGINNING OF THE TIME INTEGRATION
+*
+      call newdate(idatim(14),is1,is2,-3)
+*
+      year  = is1/10000
+*
+      CALL JDATEC(JDBEGIN,YEAR,IDATIM(2),IDATIM(3))
+*
+*     NUMBER OF DAYS SPENT SINCE JDBEGIN
+      NDAYS = NINT( (DEET*DBLE( NPAS ))/(24*3600) )
+*
+*     ACTUAL JULIAN DAY
+      JDNOW = JDBEGIN + NDAYS
+*
+*     ACTUAL YEAR, MONTH AND DAY
+      CALL DATEC(JDNOW,YEAR,MONTH,DAY)
+*
+*     JULIAN DAY OF THE FIRST OF JANUARY OF THE SAME YEAR
+      CALL JDATEC(JD1JAN,YEAR,1,1)
+*
+*     ACTUAL DAY OF THE YEAR
+      JULIAND = JDNOW - JD1JAN + 1
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

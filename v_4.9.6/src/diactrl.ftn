@@ -1,0 +1,244 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine diactrl (prout,fni)
+      implicit none
+*
+      logical prout
+      integer fni
+*
+#include "dynmem.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "maxdim.cdk"
+#include "diagnml.cdk"
+#include "partopo.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+*
+      character*10 nmlname
+      integer k, nbint, inbint, pnflag1, pnflag2, status, longueur
+      integer stcori(nstatmx), stcorj(nstatmx), unnml, pnerrdirf
+      real    nbmxint,xposi,yposi
+*
+      data unnml /11/
+*
+*---------------------------------------------------------------------
+*
+      status = -1
+      nmlname = 'diag_cfg'
+*
+      if (.not.modrstrt) then
+         diagzon = .false.
+         divzon  = 0
+         nbbande = gnj
+         Iinf    = 2
+         Jinf    = 2
+         Isup    = gni-1
+         Jsup    = gnj-1
+         dimi    = 1
+         dimj    = 1
+         mode    = 1
+         dznsrf  = 0
+         dznprf  = 0
+         nptemps = 0
+         heurfin = ((gnnt-1)*grdt)/3600.0
+         do 2 k=1,nmlmax
+            statijd(1,k) = 0
+            statijd(2,k) = 0
+            statlld(1,k) = -999.   !latitude
+            statlld(2,k) = -999.   !longitude
+            zsurfac(k) ='        '
+            zprofil(k) ='        '
+ 2       continue
+*
+* *** Updating configuration with namelist 'series' (if present)
+*
+         open(unnml,file=nml,access='SEQUENTIAL',
+     $        form='FORMATTED',status='OLD',iostat=pnerrdirf)
+*
+         if (pnerrdirf.eq.0) then
+            call checnml (unnml,'&'//nmlname,pnflag1)
+            if (pnflag1.eq.0) then
+
+#if defined (NEC)
+               read (unnml,diag_cfg,iostat=pnflag2)
+#else
+               read (unnml,nml=diag_cfg,iostat=pnflag2)
+#endif
+               if (pnflag2.ne.0) then
+                  print '(/,2x,a/2x,4a/)', '==> ABORT -- ABORT <==',
+     $                  'PROBLEM WITH NAMELIST ',nmlname,' ON FILE ',
+     $                   nml(1:longueur(nml))
+                  goto 9991
+               else
+                print *, ' CONFIGURATION UPDATED WITH NAMELIST ',nmlname
+               endif
+            else
+               print '(1x,2a/1x,a)',
+     $              'NAMELIST diagz_cfg IS NOT FOUND ON FILE ',
+     $               nml(1:longueur(nml)),
+     $              '  ==> REVERTING TO DEFAULT CONFIGURATION <=='
+            endif
+            close(unnml)
+         else
+            print '(1x,a)', 'DIACTRL --- USING DEFAULT CONFIGURATION'
+         endif
+      else
+         print '(1x,a/1x,a)', 'ATTENTION --  RESTART MODE',
+     $        'USING DIAGZ CONFIGURATION OF PREVIOUS RUN'
+         call rdiacfg (un_rstrt)
+      endif
+*
+*     Diagz not yet implemented for distributed memory
+*
+      if (numproc.gt.1) diagzon = .false.
+*
+      if (statlld(1,1).ne.-999.) then
+         do k=1,nstatd
+            call xyfll(xposi,yposi,statlld(1,k),statlld(2,k),
+     $                                Grd_dx,Grd_dgrw,1)
+            statijd(1,k)= int(xposi+0.5-(grpi*1000./Grd_dx-1.))
+            statijd(2,k)= int(yposi+0.5-(grpj*1000./Grd_dx-1.))
+         enddo
+      endif
+*
+*     Print diagnosis configuration
+*
+      if (prout) then
+      print *, '----------------------------------------------------'
+      if (numproc.gt.1) write (6,990)
+      print *,'diagzon=',diagzon
+      if (diagzon) then
+         print*, 'divzon   =',divzon
+         print*, 'dznsrf   =',dznsrf
+         print*, 'dznprf   =',dznprf
+         print*, 'Iinf     =',Iinf
+         print*, 'Jinf     =',Jinf
+         print*, 'Isup     =',Isup
+         print*, 'Jsup     =',Jsup
+         print*, 'dimi     =',dimi
+         print*, 'dimj     =',dimj
+         print*, 'mode     =',mode
+         print *,'heurfin  =',heurfin
+         print *,'nptemps  =',nptemps
+         print *,'nbbande  =',nbbande
+         print '(1x,a/(1x,9a))', 'surface diag= ',
+     $           (zsurfac(k),k=1,dznsrf)
+         print '(1x,a/(1x,9a))', 'profile diag= ',
+     $           (zprofil(k),k=1,dznprf)
+         if (nstatd.gt.0) then
+          print *,'station #    i    j'
+          print '(i10,2i5)', (k,statijd(1,k),statijd(2,k),k=1,nstatd)
+          print '(i10,2f10.5)', (k,statlld(1,k),statlld(2,k),k=1,nstatd)
+         endif
+      endif
+      print *, '----------------------------------------------------'
+      print*
+      endif
+*
+      do k=1,nstatd
+         stcori(k)=max(1,min(statijd(1,k),gni))
+         stcorj(k)=max(1,min(statijd(2,k),gnj))
+      end do
+*
+      if (diagzon) then
+        if ((dznsrf.gt.dzmxsrf).or.(dznprf.gt.dzmxprf)) then
+           print *,
+     $          's/r DIACTRL limits exceeded on one of the followings:'
+           print *,' dznsrf=',dznsrf,'(dzmxsrf)',
+     $          ' dznprf=',dznprf,'(dzmxprf)'
+           print *,'ABORT -- ABORT -- ABORT'
+           goto 9991
+        endif
+
+        if ((divzon.lt.0).or.(divzon.gt.3)) then
+           print *,'DIVZON=',divzon,' INVALID.'
+           print *,'ABORT -- ABORT -- ABORT'
+           goto 9991
+        endif
+
+        if ((divzon.eq.3).and.((dimi.ge.gni/2).or.(dimj.ge.gnj/2).or.
+     $        (dimi.lt.1).or.(dimj.lt.1))) then
+           print *,'Invalid station surface (dimi,dimj)'
+           print *,'ABORT -- ABORT -- ABORT'
+           goto 9991
+        endif
+
+        nbbande = min(nbbande,gnj)
+        if (divzon.eq.3) nbbande = nstatd
+
+        mode = max(1,min(mode,3))
+
+*     * nombre d'interval nptemps complet
+        nbmxint = int((gnnt-1)/nptemps)
+        nbint   = (((heurfin*3600.0)/grdt)-1)/nptemps
+        inbint  = int(nbint)
+        if ((heurfin.gt.((nbmxint*nptemps+1)*grdt)/3600.0)
+     $     .or.((nbint-inbint).ne.0.0))
+     $      heurfin=(((nbmxint*nptemps+1)*grdt)/3600.0)
+*
+        if ((Iinf.lt.1).or.(Iinf.gt.gni)) then
+           Iinf=2
+           print *,'IINF=',IINF,'INVALID -- ADJUSTED'
+        endif
+        if ((Jinf.lt.1).or.(Jinf.gt.gnj)) then
+           Jinf=2
+           print *,'JINF=',JINF,'INVALID -- ADJUSTED'
+        endif
+        if ((Isup.lt.1).or.(Isup.gt.gni)) then
+           Isup=gni-1
+           print *,'ISUP=',ISUP,'INVALID -- ADJUSTED'
+        endif
+        if ((Jsup.lt.1).or.(Jsup.gt.gnj)) then
+           Isup=gnj-1
+           print *,'JSUP=',JSUP,'INVALID -- ADJUSTED'
+        endif
+                  
+      endif 
+*     
+      status = 1
+ 9991 continue
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+      if (status.ne.1) stop 
+*
+ 990  format (' DIAGZ NOT YET IMPLEMENTED FOR DISTRIBUTED MEMORY')
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine rdiacfg (fnrstrt)
+      implicit none
+      integer fnrstrt
+*
+#include "maxdim.cdk"
+#include"diagnml.cdk"
+**
+*----------------------------------------------------------------------
+*
+      read  (fnrstrt)  diagzon,divzon,nbbande,iinf,jinf,isup,jsup,
+     $                 dimi,dimj,mode,dznsrf,dznprf,nptemps,heurfin,
+     $                 zsurfac,zprofil
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine wdiacfg (fnrstrt)
+      implicit none
+      integer fnrstrt
+*
+#include "maxdim.cdk"
+#include"diagnml.cdk"
+**
+*----------------------------------------------------------------------
+*
+      write  (fnrstrt) diagzon,divzon,nbbande,iinf,jinf,isup,jsup,
+     $                 dimi,dimj,mode,dznsrf,dznprf,nptemps,heurfin,
+     $                 zsurfac,zprofil
+*
+*----------------------------------------------------------------------
+      return
+      end

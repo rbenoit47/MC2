@@ -1,0 +1,374 @@
+#!/bin/ksh
+#
+if [ ! ${MODEL} -o ! ${MODEL_VERSION} ] ;then
+  echo "\n Shadow script Um_launch could NOT establish environment"
+  echo " Model environment not set properly --- ABORT ---\n" ; exit 1
+fi
+arguments=$*
+#
+ici=${PWD} ; REPCFG=${PWD}
+if [ $1 ] ; then
+  cd $1 2> /dev/null
+  if [ $? -eq 0 ] ; then
+    REPCFG=${PWD}
+  else
+    echo "\n Directory $1 is unavailable --- ABORT ---\n"
+    exit
+  fi
+  cd ${ici}
+fi
+export REPCFG=${REPCFG}
+export config_file=configexp.dot
+ledotfile=${REPCFG}/${config_file}
+if [ -f ${ledotfile}.cfg ] ; then
+  . ${ledotfile}.cfg
+fi
+#
+exp=${exp:-dbg1}
+mach=${mach:-`hostname`}
+#
+. r.entry.dot
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite -D  $0 \
+ -t          "${t:-600}"         "1800"       "[Cpu time on the SX (sec)]" \
+ -cm         "${cm:-400}"        "800"        "[Memory size on the SX (megs)]" \
+ -restart    "${restart:-0}"     "1"          "[Restart mode]" \
+ -xfer       "${xfer}"           ""           "[WS:full-path-dir on which to rcp results]" \
+ -xferl      "${xferl:-0}"       "1"          "[transfer the listing file along with model output]" \
+ -fst89      "${fst89:-0}"       "1"          "[produce older 89 FST files]" \
+ -d2z        "${d2z:-0}"         "1"          "[re-assemble output if -gt 0]" \
+ -d2z_dplusp "${d2z_dplusp:-0}"  "1"          "[assemble dynamics and physics output if -gt 0]" \
+ -prefix     "${prefix}"         ""           "[prefix to add to output filenames]" \
+ -f          "${f:-0}"           "1"          "[Compile local .f]" \
+ -objexp     "${objexp:-0}"      "1"          "[make compexp instead of make compil]" \
+ -abs        "${abs:-0}"         "1"          "[Forces a load of main executable]" \
+ -absaddres  "${absaddres}"      ""           "[Use a pre-loaded executable]" \
+ -exp        "$exp"              "$exp"       "[A name for the experiment]" \
+ -prevjob    "$prevjob"          ""           "[Previous experiment from which to restart]" \
+ -execdir    "$execdir"          ""           "[Execution directory under $HOME/$model/hostname]" \
+ -xchgdir    "$xchgdir"          ""           "[Exchange directory for coupling]" \
+ -inrep      "$inrep"            ""           "[Input directory for LAMs]" \
+ -anal       "$anal"             ""           "[Analysis for none-LAMs]]"\
+ -climato    "$climato"          ""           "[Climatology for none-LAMs]" \
+ -geophy     "$geophy"           ""           "[Geophysical fields]" \
+ -anclim     "$anclim"           ""           "[Analyzed climatology for none-LAMs]" \
+ -_job       "${_job}"           ""           "[User defined jobname]" \
+ -tailscript "${tailscript}"     ""           "[Tail job to be executed after Um_maindriver.sh]" \
+ -tailjob    "${tailjob}"        ""           "[Tail job to be qsubbed after Um_xfer.sh]" \
+ -cl         ""                  ""           "[Specific NQS class to be used by soumet]"\
+ -batch_sys  "${batch_sys:-sge}" "nqs"        "[Batch system to launch with]"\
+ -mach       "${mach}"           "${mach}"    "[Execution machine]" \
+ -npeOMP     "${npeOMP:-1}"      "1"          "[# of OpenMP threads]" \
+ -maxstep    "${maxstep:-1000000}" "100"      "[Maximum # of timesteps to perform in the job]"\
+ -debug      "${debug:-0}"       "1"          "[Debug mode flag]"\
+ -ppid       "${ppid}"           ""           "[Optional process ID value passed on to soumet]" \
+ -_listing   "${_listing}"       "$CRAYOUT"   "[Listing directory]" \
+ -delayed    "0"                 "1"          "[Use delayed job mechamism]" \
+ -nosubmit   "${nosubmit:-0}"    "1"          "[Create but do not submit job]" \
+ -_npex      "0"                 "0"          "[# of cpus along x ]"  \
+ -_npey      "0"                 "0"          "[# of cpus along y ]"  \
+ -climat     "${climat:-0}"      "1"          "[CLIMAT:Climate mode flag]" \
+ -continue   "$continue"         ""           "[CLIMAT:Internal - prevjob for climatic mode]"\
+ -startdate  "${startdate}"      ""           "[CLIMAT:Date of step zero, YYYY MM DD HH]"\
+ -enddate    "${enddate}"        ""           "[CLIMAT:Ending date of climate study, idem ]"\
+ -interval   "${interval}"       ""           "[CLIMAT:Lengh of study block in months]"\
+ -newdate    "${newdate}"        ""           "[CLIMAT:New startdate when using prevjob]"\
+ -step_total "${step_total:-0}"  "0"          "[CLIMAT:total number of timesteps for run]"\
+ -deltat     "${deltat:-0}"      "0"          "[CLIMAT:timestep length in seconds]"\
+ -stepout    "${stepout}"        ""           "[CLIMAT:begin output at this step]"\
+ -fularch    "${fularch}"        "${exp}"     "[CLIMAT:Name of archive for restart]"\
+ -archdir    "${archdir:-.}"     ""           "[CLIMAT:Directory where to put archive]"\
+ -arch_mach  "${arch_mach:-pollux}" ""        "[CLIMAT:Achive destination]"\
+ -clean      "${clean:-0}"       "1"          "[CLIMAT:Clean after archiving]"\
+ -strip_phy  "${strip_phy:-0}"   "1"          "[CLIMAT:Convert multi-level outputs in physics to pressure]"\
+ -diagnos    "${diagnos:-0}"     "1"          "[CLIMAT:Run script Climat_lancer_diag]"\
+ -prntdiag   "${prntdiag}"       ""           "[CLIMAT:Printer for metacode. Archive diag if set]"\
+ -gaussout   "${gaussout:-1}"    "0"          "[CLIMAT:Interpoler les sorties sur des grilles gaussiennes ?]"\
+ -zoncal     "${zoncal:-1}"      "0"          "[CLIMAT:Calcul des moyennes zonales en sus]"\
+ -pilout     "${pilout:-0}"      "1"          "[CLIMAT:Save original files to drive a LAM?]"\
+ -splitout   "${splitout:-0}"    "1"          "[CLIMAT:Coarse and core outputs requested from bemol]"\
+  ++ $arguments`
+#
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+_listing=${_listing:-${HOME}/listings}
+mkdir -p ${HOME}/delayed_jobs/${TRUE_HOST} 2> /dev/null
+#
+export MACH=$mach
+ARCH=""
+export ARCH=`r.get_arch $MACH`
+if [ ! "$ARCH" ] ; then
+  echo ${ECHOARG} "\n Target machine $MACH not available"
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n" ; exit 1
+fi
+#
+#====> Prepare climate mode
+#
+logext=""
+if [ "${climat}" -gt 0 ] ; then
+ #
+ LAUNCH_COMMAND="`basename $0 `"
+ . Climat_prepare_job
+ logext=_${objstep}
+ maxstep=1000000
+ #
+fi
+export EXECDIR_P=${execdir:-${MODEL}/${MACH}/${exp}}
+lehome_mach=`rsh ${MACH} pwd`
+export EXECDIR=${execdir:-${lehome_mach}/${MODEL}/${MACH}/${exp}}
+## plus tard ==> export EXECDIR=${execdir:-${HOME}/${MODEL}/${MACH}/${exp}}
+export XCHGDIR=${xchgdir}
+#
+if [ "$prevjob" ] ; then export PREXECDIR=${MODEL}/${MACH}/${prevjob} ; fi
+#
+#====> Launching message
+#
+echo ${ECHOARG} "\n#############################################################"
+echo             " LAUNCHING ${MODEL} MODEL v_${MODEL_VERSION} on $MACH:$EXECDIR_P type=$ARCH"
+echo ${ECHOARG} "############################################################# \n"
+if [ "$climat" -gt 0 ] ; then
+ echo ${ECHOARG} "\n                  ####################"
+ echo             "                  #   CLIMATE MODE   #"
+ echo ${ECHOARG} "                  ####################\n" 
+fi
+#
+#====> Preparing $EXECDIR on target machine $MACH
+#
+_status=ABORT
+_cpus=1
+. r.call.dot Um_preprep
+if test "$_status" = "ABORT" ; then
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n" ; exit 5
+fi
+#
+#====> Compiling and loading if necessary
+#
+. r.call.dot Um_loadbin -f $f -abs $abs -objexp $objexp -bin $absaddres
+if test "$_status" = "ABORT" ; then
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n" ; exit 6
+fi
+#
+#====> Shipping in $EXECDIR on target machine $MACH
+#
+export V4DOBS=${v4dobs} # file for sensitivity analysis, handled by Um_shipstuff
+analysis=`echo $anal | sed 's/\:/ /'`
+if [ `echo $analysis | wc -w` -gt 1 ] ; then
+  src_mach_anal=${analysis%% *}
+  src_file_anal=${analysis##* }
+  echo "Transfering Analysis: ${src_mach_anal}:${src_file_anal} ===> ${MACH}:${EXECDIR_P}"
+  nrcp ${src_mach_anal}:${src_file_anal} ${MACH}:${EXECDIR}
+  anal=${EXECDIR}/${src_file_anal##*/}
+fi
+export CMC_LOGFILE=${CMC_LOGFILE:-${EXECDIR}/${REPRUN:-process}/cmclog}
+export config_file_temp=${TMPDIR}/.config_file.dot
+if [ -s ${ledotfile}.cfg ] ; then
+  . r.dump_updated_config.dot ${ledotfile}.cfg > ${config_file_temp}.cfg
+fi
+. r.dump_keys.dot --= >> ${config_file_temp}.cfg
+_status=ABORT
+. r.call.dot Um_shipstuff -exp $exp -prevjob $prevjob -restart $restart
+if test "$_status" = "ABORT" ; then
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n" ; exit 7
+fi
+/bin/rm -f ${config_file_temp}.cfg
+#
+#====> Establishing a jobname
+#
+LISTING=$_listing
+if [ -d $_listing/$mach -o -L $_listing/$mach ] ; then
+  LISTING=$_listing/$mach
+fi
+#
+if ! [ "${ppid}" ]; then  ppid=$$ ; fi
+#
+lajob=`echo ${MODEL} | tr "[a-z]" "[A-Z]"`_${exp}
+if [ "$_job" ] ; then
+  lajob=${_job}_${exp}
+fi
+jobname=${ici}/${lajob}
+jobname_e=${jobname}_E
+jobname_m=${jobname}_M
+/bin/rm -f ${jobname}_E ${jobname}_M
+LISTING_NM=${lajob}_M_$ppid
+#
+cat > ${jobname}_E << EOF01
+#!/bin/ksh
+set +x
+#
+echo "\n############## USER'S JOB STARTS HERE ##############\n"
+#
+. r.sm.dot ${MODEL} ${MODEL_VERSION}
+#
+set -x
+export EXECDIR=$EXECDIR
+export REPCFG=$REPCFG
+export LISTING=$LISTING
+export LISTING_NM=$LISTING_NM
+cd $EXECDIR 2> /dev/null
+#
+export CMC_LOGFILE_ORIG=${CMC_LOGFILE}
+export CMC_LOGFILE=${EXECDIR}/${REPRUN:-process}/cmclog
+export XCHGDIR=${xchgdir}
+if [ -f \${CMC_LOGFILE_ORIG} ] ;then
+  if test "\${CMC_LOGFILE_ORIG}" != "\${CMC_LOGFILE}" ; then
+    echo cp \${CMC_LOGFILE_ORIG} \${CMC_LOGFILE}
+    cp \${CMC_LOGFILE_ORIG} \${CMC_LOGFILE}
+  fi
+fi
+set +x
+#
+. r.call.dot Um_maindriver.sh $exp -runent
+#
+if test "\${CMC_LOGFILE_ORIG}" != "\${CMC_LOGFILE}" ; then
+   echo mv \${CMC_LOGFILE} \${CMC_LOGFILE_ORIG}
+   mv \${CMC_LOGFILE} \${CMC_LOGFILE_ORIG}
+fi
+nrcp \${CMC_LOGFILE_ORIG} \${TRUE_HOST}:\${CMC_LOGFILE_ORIG} 2> /dev/null
+#
+set -x
+#
+if test "\$_status" = "ED" ; then
+  . soumet_la_job
+#  /bin/rm -f soumet_la_job ${jobname}_M
+  /bin/rm -f soumet_la_job
+fi
+#
+/bin/rm -f boot
+EOF01
+#
+cat > ${jobname}_M << EOF02
+#!/bin/ksh
+set +x
+#
+echo "\n############## USER'S JOB STARTS HERE ##############\n"
+#
+. r.sm.dot ${MODEL} ${MODEL_VERSION}
+#
+set -x
+export EXECDIR=$EXECDIR
+export REPCFG=$REPCFG
+export LISTING=$LISTING
+export LISTING_NM=$LISTING_NM
+cd $EXECDIR 2> /dev/null
+#
+export CMC_LOGFILE_ORIG=${CMC_LOGFILE}
+export CMC_LOGFILE=${EXECDIR}/${REPRUN:-process}/cmclog
+export XCHGDIR=${xchgdir}
+if [ -f \${CMC_LOGFILE_ORIG} ] ;then
+  if test "\${CMC_LOGFILE_ORIG}" != "\${CMC_LOGFILE}" ; then
+    echo cp \${CMC_LOGFILE_ORIG} \${CMC_LOGFILE}
+    cp \${CMC_LOGFILE_ORIG} \${CMC_LOGFILE}
+  fi
+fi
+set +x
+#
+. r.call.dot Um_maindriver.sh $exp -runmod
+#
+set -x
+#
+if test "\${CMC_LOGFILE_ORIG}" != "\${CMC_LOGFILE}" ; then
+   echo mv \${CMC_LOGFILE} \${CMC_LOGFILE_ORIG}
+   mv \${CMC_LOGFILE} \${CMC_LOGFILE_ORIG}
+fi
+nrcp \${CMC_LOGFILE_ORIG} \${TRUE_HOST}:\${CMC_LOGFILE_ORIG} 2> /dev/null
+#
+if test "\$_status" = "ABORT" ; then
+  if [[ -n \$XCHGDIR ]] ; then
+     \${ARMNLIB}/modeles/ANAL/bin/\${ARCH}/k4dv -shared ${xchgdir} -npex ${npex} -npey ${npey}
+  fi
+  echo "\n ----------- ABORT ---------\n" ; exit 9
+fi
+#
+if [ ${climat} -eq 0 ] ; then
+  if [ "${tailscript}" ] ; then 
+    echo "\n Running ${tailscript}\n"
+    ${tailscript} 
+  fi
+elif [ "\$_status" = "ED" -a "${nextname}" ] ; then
+  . Climat_launch_next_interval.sh ${exp} ${HOST} ${nextname} \
+       ${nextstep} ${LAUNCH_COMMAND} ${HOME}/listings/${HOST}
+fi
+#
+# traiter les sorties
+#
+if [ "\$_status" != "ABORT" -a "\$V4DRS" != "OUI" ] ; then
+#  set +x
+  . r.call.dot Um_xfer.sh ${exp} -job ${lajob} -endstepno \$_endstep \
+               -continue "${nextname}" -xferl ${xferl}               \
+               -npe \$_npe -status \$_status -logext ${logext}       \
+               -ppid $ppid -pilout ${pilout} -listing ${_listings}
+  export LISTING_XFER_NM=\$_listing
+  echo LISTING_XFER_NM=\${LISTING_XFER_NM}
+#  set -x
+fi
+#
+# Cloning may be stopped if last timestep (_endstep) -ge maxstep
+#
+SOUMET=ls
+if test "\$_status" = "RS" ; then
+  if test \$_endstep -lt $maxstep ; then
+    SOUMET=qsub
+  fi
+else
+  if test "\$_status" = "ED" ; then
+    SOUMET=rm
+  fi
+fi
+/bin/rm -f boot
+echo \$_status \$SOUMET
+EOF02
+#
+clc=""
+ppidc=""
+psubmit=""
+if [ $nosubmit -gt 0 ]; then psubmit='-nosubmit' ; fi
+if [   "${ppid}"     ]; then ppidc="-ppid $ppid" ; fi
+if [   "${cl}"       ]; then clc="-cl $cl"       ; fi
+if [ "${mach}" = "yata" -o "${mach}" = "pollux" -o "${mach}" = "castor" ] ; then
+   batch_sys=sge
+fi
+if [ "${mach}" = "azur" ] ; then
+   batch_sys=llv
+fi
+#
+#====> Submitting job
+#
+if [ $nosubmit -gt 0 ] ; then
+  echo "Job ${jobname}_E will not be submitted\n"
+else 
+  echo "Submitting job: ${jobname}_E"
+  echo $USER ${MODEL} 'v_'${MODEL_VERSION} $mach `date` >> /users/dor/armn/mid/public/Um_driver.log 2> /dev/null
+fi
+#
+#r.use soumet_2.3 as soumet
+cat > soumet_la_job << EOF03
+soumet ${lajob}_M -t $t -cm $cm -cpus ${_cpus}x${npeOMP} $clc -mach $mach -clone -listing $_listing ${psubmit} -jn ${lajob}_M ${ppidc} -mpi
+#soumet ${jobname}_M -t $t -cm $cm -cpus ${_cpus}x${npeOMP} $clc -mach $mach -clone -listing $_listing ${psubmit} -jn ${lajob}_M ${ppidc} -mpi
+EOF03
+nrcp ${jobname}_M soumet_la_job ${MACH}:${EXECDIR}
+/bin/rm -f soumet_la_job
+#
+echo ${ECHOARG} "\nCommande effectuee:"
+echo \
+"soumet ${jobname}_E -t 3600 -cm 1G -cpus 1x1 $clc -mach $mach -clone -listing $_listing ${psubmit} -jn ${lajob}_E ${ppidc} -mpi"
+soumet ${jobname}_E -t 3600 -cm 1G -cpus 1x1 $clc -mach $mach -clone -listing $_listing ${psubmit} -jn ${lajob}_E ${ppidc} -mpi
+#
+if [ $climat -gt 0 ] ; then
+  if [ $nosubmit -gt 0 ] ; then
+    tar xvf lajob.tar lajob
+    jobnam=`basename \`grep "^[#][@][$][-]o" lajob | cut -f2 -d' ' \`  \.1 `
+    rcp lajob ${mach}:${EXECDIR}/${jobnam}
+    echo "Job copied to ${mach}:${EXECDIR}/${jobnam}"
+    /bin/rm -f lajob
+  else
+    fulljobname=`basename ${jobname}`
+    if [ "${ppid}" ] ; then fulljobname=${fulljobname}_${ppid} ; fi
+    rsh ${mach} -n "cp ${fulljobname}* ${EXECDIR}"
+    echo "${fulljobname} has been copied to ${mach}:${EXECDIR_P}"
+  fi
+fi
+_job=${jobname}_E
+_listing=${LISTING}/${LISTING_NM}
+#
+. r.return.dot

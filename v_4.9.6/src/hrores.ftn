@@ -1,0 +1,71 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r hrores
+*
+      subroutine hrores (hum,hu,tt,pr,ng,nk,satues,var)
+      implicit none
+*
+      character* (*) var
+      logical satues
+      integer ng,nk
+      real hum(ng,nk),hu(ng,nk),tt(ng,nk),pr(ng,nk)
+*
+*AUTHOR  
+*     Michel Desgagne:       May 2001
+*
+*OBJECT
+*
+*     Compute either relative humidity or dew point depression
+*     from specific humidity, temperature and pressure.
+**
+*
+      integer i,j,k
+      real petit,e,cte,td
+*
+#include "consdyn_8.cdk"
+#include "dtherfct2.cdk"
+#include "ftherfct2.cdk"
+*
+*-----------------------------------------------------------------
+*
+      if (var.eq.'HR') then
+*
+         if(.not.satues) then
+*
+            do k=1,nk
+            do i=1,ng
+               hum(i,k)=  fohra(hu(i,k),tt(i,k),pr(i,k))
+            end do
+            end do
+*
+         else
+*
+            do k=1,nk
+            do i=1,ng
+               hum(i,k)=  fohr(hu(i,k),tt(i,k),pr(i,k))
+            end do
+            end do
+*
+         endif
+*
+      endif
+*
+      if (var.eq.'TD') then
+*
+         petit = 0.0000000001
+*
+         do k=1,nk
+         do i=1,ng
+            e   = foefq(max(petit,hu(i,k)),pr(i,k))
+            cte = alog(e/610.78)
+            td = (35.86*cte - 17.269*trpl_8)/(cte - 17.269)
+            if(td.lt.trpl_8.and.satues)
+     $           td = (7.66*cte - 21.875*trpl_8)/(cte - 21.875)
+            hum(i,k) = td  - tcdk_8
+         end do
+         end do
+*
+      endif
+*
+*-----------------------------------------------------------------
+      return
+      end

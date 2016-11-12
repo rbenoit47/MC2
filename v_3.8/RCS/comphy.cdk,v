@@ -1,0 +1,63 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*
+      REAL CEVAP, CMELT, CCCTIM
+      COMMON/COMPHY/ CEVAP,   CMELT,   CCCTIM
+*
+#if defined(DOC)
+*COMMON BLOCK /COMPHY/
+*          contains some constants for physics calculation
+*          such as evaporation, melting, cumulus cloud
+*
+* CEVAP    is a constant for evaporation of total precipitation.
+*          It is initialized in PHYDEBU to 1.2E-4
+* CMELT    is a constant of the formula for the rate of change of
+*          the liquid water/ice composition of these
+*          precipitations. It is initialized in PHYDEBU to 2.4E+4
+* CCCTIM   is the cumulus life-time value to compute its cloud
+*          cover. It is initialized in PHYDEBU to 1800.0
+*
+#endif
+*
+*
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

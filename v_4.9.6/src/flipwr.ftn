@@ -1,0 +1,53 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r flipwr
+      subroutine flipwr (fa,nomvar,ip1,ip2,ip3,ng,nprefout)
+      implicit none
+*
+      character*2 nomvar
+      integer ip1,ip2,ip3,ng,nprefout
+      real fa(ng,nprefout)
+*
+**
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "sor.cdk"
+#include "grd.cdk"
+#include "lcldim.cdk"
+*
+      integer i,j,cnt,mdl,ier,idate
+      integer fstecr
+      external fstecr
+      real wk1(gni*nprefout),wk
+      pointer (pawk, wk(gni,gnj,nprefout))
+*
+*----------------------------------------------------------------------
+*
+      gtgrtyp = 'X'
+      pawk = loc(fa(1,1))
+*
+      do mdl=1,gnj
+*
+         cnt = 1
+         do j=1,nprefout
+         do i=1,gni
+
+c  to test symmetry of results, we may invert grid as follows
+c        wk1(cnt) = fa(ni+1-i,mdl,j)
+
+            wk1(cnt) = wk(i,mdl,j)
+            cnt = cnt + 1
+         end do
+         end do
+*
+         call datp2f (idate,gcrunstrt)
+         ier= fstecr ( wk1,wk1,-nbit,24,idate,gnlst,gnstepno,gni,
+     $            nprefout,1,ip1,ip2,ip3,gttpvar,nomvar,gtetikt,gtgrtyp,
+     $            Grd_ig1,Grd_ig2,Grd_ig3,Grd_ig4,datyp,.false.)
+      end do
+*     
+*----------------------------------------------------------------------
+*           
+      return
+      end
+
+

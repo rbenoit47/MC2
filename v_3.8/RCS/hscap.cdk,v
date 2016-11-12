@@ -1,0 +1,49 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.10;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*     W1 EST LA VALEUR DE WS AU-DELA DE LAQUELLE LA SURFACE 
+*     DU SOL EVAPORE COMME SI ELLE ETAIT SATUREE. NE PAS 
+*     OUBLIER DE MODIFIER LE S/P CLEFGET SI ON AUGMENTE LA 
+*     DIMENSION DE W1.
+      REAL W1
+      DATA W1  / 0.30     /
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,67 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r smth2d_pil
+*
+      subroutine smth2d_pil (sfd,rfd,ni,nj,nk,nu)
+      implicit none
+*
+      integer ni,nj,nk
+      real sfd(ni,nj,nk),rfd(ni,nj,nk),nu(nk)
+*
+      integer i,j,k
+      real c1,c2,c3,wk(ni,nj)
+*----------------------------------------------------------------------
+*
+      do k=1,nk
+         c1= (1.0-2.0*nu(k))*nu(k)
+         c2= nu(k)**2
+         c3= 4.0*(nu(k)-1.0)*nu(k)
+         do j=1,nj
+         do i=1,ni
+            sfd(i,j,k)= rfd(i,j,k) - sfd(i,j,k)
+         end do
+         end do
+         do j=2,nj-1
+         do i=2,ni-1
+            wk(i,j)  = c1*(sfd(i  ,j+1,k)+sfd(i+1,j  ,k) +
+     $                     sfd(i  ,j-1,k)+sfd(i-1,j  ,k))+
+     $                 c2*(sfd(i-1,j+1,k)+sfd(i+1,j+1,k) +
+     $                     sfd(i-1,j-1,k)+sfd(i+1,j-1,k))+
+     $                 c3* sfd(i  ,j  ,k)
+         end do
+         end do
+         do j=2,nj-1
+         do i=2,ni-1
+            sfd(i,j,k)= rfd(i,j,k) + wk(i,j)
+         end do
+         end do
+      end do
+*      
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+@

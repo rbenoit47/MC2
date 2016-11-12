@@ -1,0 +1,95 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  PRODEF
+      SUBROUTINE PRODEF(PU,U,SD,N,MAX)
+*
+#include "impnone.cdk"
+      INTEGER N,MAX
+      REAL PU(MAX,2),U(N),SD(N)
+*
+*Author
+*          J. Cote (RPN 1983)
+*
+*Revision
+* 001      J. Cote RPN(Nov 1984)SEF version documentation
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+*
+*Object
+*          to prepare product of finite-element operator by U
+*
+*Arguments
+*
+*          - Output -
+* PU       product of finite-element operator by U
+*          PU(*,1) sub-diagonal
+*          PU(*,2) diagonal
+*
+*          - Input -
+* U        multiplicative function
+* SD       intervals (N)
+* N        finite-element space dimension
+* MAX      1st dimension of PU
+*
+*
+**
+*
+      REAL T,D
+      INTEGER J
+*
+      SD(N)=0.0
+      T=3.0
+      D=1.0/12.0
+      PU(1,1)=0.0
+      PU(1,2)=D*SD(1)*(T*U(1)+U(2))
+*
+      DO 1 J=2,N-1
+*
+         PU(J,1)=D*SD(J-1)*(U(J-1)+U(J))
+    1    PU(J,2)=D*(SD(J-1)*(U(J-1)+T*U(J))+SD(J)*(T*U(J)+U(J+1)))
+*
+      PU(N,1)=D*SD(N-1)*(U(N-1)+U(N))
+      PU(N,2)=D*SD(N-1)*(U(N-1)+T*U(N))
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

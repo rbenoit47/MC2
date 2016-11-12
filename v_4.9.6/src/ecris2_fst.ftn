@@ -1,0 +1,72 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ecris2_fst
+      subroutine ecris2_fst (fa,rf,nomvar,ip1,ip2,ip3,con,ng,
+     $                                        nprefout,kdfi)
+      implicit none
+*
+      character* (*) nomvar
+      integer ip1,ip2,ip3,ng,nprefout,kdfi(3)
+      real fa(ng,nprefout),rf(nprefout),con
+*
+**
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "sor.cdk"
+#include "grd.cdk"
+#include "lcldim.cdk"
+*
+      integer i,j,n,ier,idate,pnip1,pnip2,pnip3,cnt,dimx,dimy
+      integer fstecr
+      external fstecr
+      real dum,wkij(ng),wk
+      pointer (pawk, wk(gni,gnj))
+*
+*----------------------------------------------------------------------
+*
+*     Writing nprefout fields in a FST file
+*
+      pnip1 = ip1
+      pnip2 = ip2
+      pnip3 = ip3
+      if (gnip3.lt.0) pnip3 = gnstepno
+*
+      if (flipit) then
+         call flipwr (fa,nomvar,0,ip2,pnip3,ng,nprefout)
+      else
+*
+      dimx = g_if - g_id + 1
+      dimy = g_jf - g_jd + 1
+      call datp2f (idate,gcrunstrt)
+*
+      do 20 n=kdfi(1),kdfi(2),kdfi(3)
+*
+         if (nprefout.gt.1) then
+            pnip1=nint(rf(nprefout-n+1)/100.)
+            if (levtyp.ne.'P') pnip1=12001 + nint(rf(n)/5.)
+         endif
+         pnip1 = max(0,pnip1)
+*
+         pawk = loc(fa(1,n))
+         cnt = 0
+         do j=g_jd,g_jf
+         do i=g_id,g_if
+            cnt = cnt + 1
+            wkij(cnt) = con * wk(i,j)
+         end do
+         end do
+         ier= fstecr(wkij,wkij,-nbit,24,idate,gnlst,gnstepno,
+     $        dimx,dimy,1,pnip1,pnip2,pnip3,gttpvar,nomvar,gtetikt,
+     $        gtgrtyp,Grd_ig1,Grd_ig2,Grd_ig3,Grd_ig4,datyp,.false.)
+*     
+ 20   continue
+*
+#if defined (NEC) || defined (HPPA)
+      call flush(6)
+#endif
+*  
+      endif
+      return
+*----------------------------------------------------------------------
+      end
+
+

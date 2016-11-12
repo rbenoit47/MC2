@@ -1,0 +1,178 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r diagcfl - Computes maximum courant numbers (CN)
+*
+      subroutine diagcfl (stepno)
+      implicit none
+* 
+      integer stepno
+*
+*OBJECT
+*     computes and prints position and value of:
+*                        - maximum horizontal CN 
+*                        - maximum vertical CN   
+*                        - maximum 3D CN  
+*     formal parameters:
+*         - u,v     - horizontal wind
+*         - w       - vertical wind
+*
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR   Michel Desgagne                   May     1993
+*
+*HISTORY
+*
+**
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+      include 'mpif.h'
+*
+      integer i,j,k,imax,jmax,kmax,tag,iproc,offi,offj,err
+      integer MPI_status(MPI_status_size)
+      real cfl,mcfl,wk,tr(4,3)
+      real w0(minx:maxx,miny:maxy,1:gnk)
+      real*8 pt5
+      parameter(pt5=0.5d0)
+      pointer (pawk, wk(*))
+      data    tag /310/
+
+*--------------------------------------------------------------------
+*
+      call sw2w3(w0,u0,v0,sw0,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                         minx,maxx,miny,maxy,gnk)
+* 
+      offi = gc_ld(1,myproc) - 1
+      offj = gc_ld(3,myproc) - 1
+*
+      if (numproc.gt.1) then
+         if (myproc.eq.0) call hpalloc (pawk, 12*(numproc-1), err, 1)
+      endif
+*
+* ** Horizontal
+      mcfl = -1.0
+      do 1 k=1,gnk-1
+         do 1 j=1,ldnj-north
+         do 1 i=1,ldni-east
+            cfl= sqrt(  ((u0(i  ,j,k)*sby(i  ,j)*odxu(1)
+     $                   +u0(i+1,j,k)*sby(i+1,j)*odxu(1)  )*.5)**2 +
+     $                  ((v0(i,j  ,k)*sbx(i,j  )*odyv(j)
+     $                   +v0(i,j+1,k)*sbx(i,j+1)*odyv(j+1))*.5)**2 )
+               if (cfl .gt. mcfl) then
+                  mcfl= cfl
+                  imax  = i
+                  jmax  = j
+                  kmax  = k
+               endif
+ 1    continue
+      tr(1,1) = mcfl * grdt
+      tr(2,1) = float(imax+offi)
+      tr(3,1) = float(jmax+offj)
+      tr(4,1) = float(kmax)
+*
+* ** Vertical
+      mcfl = -1.0
+      do 2 k=1,gnk-1
+         do 2 j=1,ldnj-north
+            do 2 i=1,ldni-east
+               cfl= abs(w0(i,j,k))
+               if (cfl .gt. mcfl) then
+                  mcfl= cfl
+                  imax  = i
+                  jmax  = j
+                  kmax  = k
+               endif
+ 2    continue
+      tr(1,2) = mcfl * grdt
+      tr(2,2) = float(imax+offi)
+      tr(3,2) = float(jmax+offj)
+      tr(4,2) = float(kmax)
+*
+* ** 3D
+      mcfl = -1.0
+      do 3 k=1,gnk-1
+         do 3 j=1,ldnj-north
+         do 3 i=1,ldni-east
+            cfl= sqrt(  ((u0(i  ,j,k)*sby(i  ,j)*odxu(1)
+     $                   +u0(i+1,j,k)*sby(i+1,j)*odxu(1)  )*.5)**2 +
+     $                  ((v0(i,j  ,k)*sbx(i,j  )*odyv(j)
+     $                   +v0(i,j+1,k)*sbx(i,j+1)*odyv(j+1))*.5)**2 +
+     $                    w0(i,j,k)**2. )
+               if (cfl .gt. mcfl) then
+                  mcfl= cfl
+                  imax  = i
+                  jmax  = j
+                  kmax  = k
+               endif
+ 3    continue
+      i = imax
+      j = jmax
+      k = kmax
+      tr(1,3) = mcfl * grdt
+      tr(2,3) = float(imax+offi)
+      tr(3,3) = float(jmax+offj)
+      tr(4,3) = float(kmax)
+*
+      if (myproc.eq.0) then
+         print*
+         do iproc = 2, numproc
+            call MPI_recv(wk((iproc-2)*12+1),12,MPI_REAL,iproc-1,tag,
+     $                              MPI_COMM_WORLD, MPI_status, err)
+         end do
+         mcfl =      tr(1,1)
+         imax = nint(tr(2,1))
+         jmax = nint(tr(3,1))
+         kmax = nint(tr(4,1))
+         do iproc = 2, numproc
+            if (wk((iproc-2)*12+1).gt.mcfl) then
+               mcfl =      wk((iproc-2)*12+1)
+               imax = nint(wk((iproc-2)*12+2))
+               jmax = nint(wk((iproc-2)*12+3))
+               kmax = nint(wk((iproc-2)*12+4))
+            endif
+         end do
+         write (6,101) stepno,'x,y',imax,jmax,kmax,mcfl
+         mcfl =      tr(1,2)
+         imax = nint(tr(2,2))
+         jmax = nint(tr(3,2))
+         kmax = nint(tr(4,2))
+         do iproc = 2, numproc
+            if (wk((iproc-2)*12+5).gt.mcfl) then
+               mcfl =      wk((iproc-2)*12+5)
+               imax = nint(wk((iproc-2)*12+6))
+               jmax = nint(wk((iproc-2)*12+7))
+               kmax = nint(wk((iproc-2)*12+8))
+            endif
+         end do
+         write (6,101) stepno,'z',imax,jmax,kmax,mcfl
+         mcfl =      tr(1,3)
+         imax = nint(tr(2,3))
+         jmax = nint(tr(3,3))
+         kmax = nint(tr(4,3))
+         do iproc = 2, numproc
+            if (wk((iproc-2)*12+9).gt.mcfl) then
+               mcfl =      wk((iproc-2)*12+9 )
+               imax = nint(wk((iproc-2)*12+10))
+               jmax = nint(wk((iproc-2)*12+11))
+               kmax = nint(wk((iproc-2)*12+12))
+            endif
+         end do
+         write (6,101) stepno,'3D',imax,jmax,kmax,mcfl
+      else
+         call MPI_send(tr, 12, MPI_REAL, 0, tag, MPI_COMM_WORLD, err)
+      endif
+*
+      if (numproc.gt.1) then
+         if (myproc.eq.0) call hpdeallc (pawk  ,err, 1)
+      endif
+*
+ 101  format (i5,' MAX COURANT NUMBER:  ',
+     $        a3,': [(',i5,',',i5,',',i5,') ',f12.7,']')
+*
+*----------------------------------------------------------------
+      return
+      end 

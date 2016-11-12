@@ -1,0 +1,110 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r lhs3_wt
+      subroutine lhs3_wt
+      implicit none
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*
+*******************************************************************
+*                                                                 *
+*    CALCULATES                                                   *
+*                time-level t+Dt UPDATED variables                *
+*                swp, tpp                                         *
+*       FROM                                                      *
+*                right-hand sides                                 *
+*                Qw=swp, Qt=tpp                                   *
+*       AND                                                       *
+*                already updated variable                         *
+*                up, vp, qpp                                      *
+*                                                                 *
+*     PERFORMS   essentially the following calculations:          *
+*                                                                 *
+*                                ~                      ___Z      *
+*         swp  =   swp - nu0 * [ d(qpp)/dZ - 2*c02*nssq*qpp ]     *
+*                                                                 *
+*                                   ___Z                          *
+*         tpp  =   tpp + c05*gots * qpp  - dtp*c06*nssq*swp       *
+*                                                                 *
+*                                          ~                      *
+*        SEE     rhs3_pm for definition of d/dZ                   *
+*                                                                 *
+*                cxxpar  for definitions of parameters cXX        *
+*                                                                 *
+*******************************************************************
+*
+*
+#include "nbcpu.cdk"
+#include "dynmem.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "topo.cdk"
+#include "dtmdtp.cdk"
+*
+      integer i,j,k
+      real*8 pt5, q3, swp1, swpgnk, nu0
+      parameter (pt5 = 0.5d0)
+*
+*---------------------------------------------------------------
+*
+!$omp do
+      do k = 1, gnk
+*
+         if (k.eq.1) then
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               nu0  =  dtp / ( c03 + dtp * dtp * c06 * nssq(i,j,k) )
+               swp1       = swp(i,j,k)
+               q3         = sbxy(i,j) * pt5 *
+     $              ( gg1(i+1,j,k)*up(i+1,j,k) + gg1(i,j,k)*up(i,j,k)
+     $              + gg2(i,j+1,k)*vp(i,j+1,k) + gg2(i,j,k)*vp(i,j,k) )
+               swp(i,j,k) = dhdt(i,j,k) - q3
+               qpp(i,j,0) = ( swp(i,j,k) - swp1 + ( nu0*
+     $                      (gg0wr(i,j,k)-c02*nssq(i,j,k)))*qpp(i,j,k) )
+     $                    / (nu0*(gg0wr(i,j,k)+c02*nssq(i,j,k)))
+               tpp(i,j,k) = tpp(i,j,k)
+     $                   + c05*pt5*gots(i,j,k)*(qpp(i,j,k)+qpp(i,j,k-1))
+     $                   - dtp*c06*nssq(i,j,k)* swp(i,j,k)
+            end do
+            end do
+*
+         else if ((k.eq.gnk).and.(.not.flextop)) then
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               nu0  =  dtp / ( c03 + dtp * dtp * c06 * nssq(i,j,k) )
+               swpgnk = swp(i,j,k)
+               swp(i,j,k) = 0.
+               qpp(i,j,k) = ( - swp(i,j,k) + swpgnk + ( nu0*
+     $                     (gg0wr(i,j,k)+c02*nssq(i,j,k)))*qpp(i,j,k-1))
+     $                    / (nu0*(gg0wr(i,j,k)-c02*nssq(i,j,k)))
+               tpp(i,j,k) = tpp(i,j,k)
+     $                   + c05*pt5*gots(i,j,k)*(qpp(i,j,k)+qpp(i,j,k-1))
+     $                   - dtp*c06*nssq(i,j,k)* swp(i,j,k)
+            end do
+            end do
+*
+         else
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               nu0  =  dtp / ( c03 + dtp * dtp * c06 * nssq(i,j,k) )
+               swp(i,j,k) = swp(i,j,k) - nu0 *
+     $                     ( (qpp(i,j,k)-qpp(i,j,k-1))*gg0wr(i,j,k)
+     $                     - (qpp(i,j,k)+qpp(i,j,k-1))*c02*nssq(i,j,k) )
+               tpp(i,j,k) = tpp(i,j,k)
+     $                   + c05*pt5*gots(i,j,k)*(qpp(i,j,k)+qpp(i,j,k-1))
+     $                   - dtp*c06*nssq(i,j,k)* swp(i,j,k)
+            end do
+            end do
+*
+         endif
+*
+      end do
+!$omp enddo
+*
+*---------------------------------------------------------------
+      return
+      end

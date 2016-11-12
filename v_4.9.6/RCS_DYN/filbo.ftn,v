@@ -1,0 +1,90 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine filbo (f,bo,grid,lminx,lmaxx,lminy,lmaxy,lnk)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk
+      character*1 grid
+      real f(lminx:lmaxx,lminy:lmaxy,lnk)
+      real bo(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+*     
+#include "lcldim.cdk"
+      integer i,j,k,iff,id,jd,jf,inorth,ieast
+*----------------------------------------------------------------------
+      id   = 1 - hx
+      jd   = 1 - hy
+      iff  = ldni + hx 
+      jf   = ldnj + hy
+*
+      ieast  = 0
+      inorth = 0
+      if ( grid.eq."u" ) ieast  = 1
+      if ( grid.eq."v" ) inorth = 1
+*
+      if (.not.period_y) then
+         if (north.gt.0) then
+            do k=1,lnk
+               do j=ldnj+inorth,jf
+                  do i=id,iff
+                     f(i,j,k) = bo(i,j,k)
+                  end do
+               end do
+            end do
+         endif
+         if (south.gt.0) then
+            do k=1,lnk
+               do j=jd,0
+                  do i=id,iff
+                     f(i,j,k) = bo(i,j,k)
+                  end do
+               end do
+            end do
+         endif
+      endif
+      if (.not.period_x) then
+         if (west.gt.0) then
+            do k=1,lnk
+               do i=id,0
+                  do j=jd,jf
+                     f(i,j,k) = bo(i,j,k)
+                  end do
+               end do
+            end do
+         endif
+         if (east.gt.0) then
+            do k=1,lnk
+               do i=ldni+ieast,iff
+                  do j=jd,jf
+                     f(i,j,k) = bo(i,j,k)
+                  end do
+               end do
+            end do
+         endif
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

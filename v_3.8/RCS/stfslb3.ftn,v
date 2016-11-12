@@ -1,0 +1,1280 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@      subroutine stfslb3
+      write(6,'(A)') "SUBROUTINE STFSLB3 IS OBSOLETE"
+      call qqexit(1)
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d1 5
+a5 1231
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P STFSLB3
+#include "phy_macros_f.h"
+      SUBROUTINE STFSLB3 ( FM1,FM,BM1,
+     2                     TE,QE,SRR,SSR,ILAB,
+     3                     TTM,QQM,
+     4                     T,Q,PS,PSM,
+     5                     NSLBJ,
+     6                     SIGMA,N,NI,NK,DELT,DBGSUN,SATUCO)
+*
+#include "impnone.cdk"
+*
+      LOGICAL DBGSUN
+      LOGICAL SATUCO
+*
+      EXTERNAL SERXST,SERSET
+*
+      INTEGER NI,NK,N
+      INTEGER NSLBJ
+      REAL FM1(NI,NK) , FM(NI,NK)
+      REAL BM1(NI,NK) , DELT
+      REAL TE(NI,NK) , QE(NI,NK)
+      REAL SRR(NI) , SSR(NI)
+      INTEGER ILAB(NI,NK)
+      REAL TTM(N,NK),QQM(N,NK)
+      REAL T(N,NK) , Q(N,NK)
+      REAL PS(N) , PSM(N)
+      REAL SIGMA(ni,NK)
+      REAL TEMP1, TEMP2, TEMP3, TEMP4, TEMP5, TEMP6
+*
+*Author
+*          J.Pudykiewicz
+*
+*Revision
+* 001      J.Pudykiewicz - (Sept 85)
+*          - Delete the independent prediction of U
+*          - change the definition of the threshold value of U
+*          - modify the formula for partial cloud cover
+*          - general modifications according to "China Notes" by H.
+*          Sundqvist
+* 002      J.Pudykiewicz (Nov 85)
+*          - changes in the algorithm used to solve the cloud water
+*          equation.
+*          Explicit scheme is replaced by a more accurate implicit
+*          algorithm
+*          - Change the order of the computation of advection
+*          and microphysics(old sequence: Microphysics--->Advection
+*          is replaced by: ADVECTION---->MICROPHYSIC
+*          - Change in the structure of the subroutine STFSLB: Many
+*          "Outer" vertical loops are replaced by one main vertical
+*          loop
+*          - Introduction to the list of parameters to 3D array-FM3D
+*          containing cloud water field for time level (N+1)
+*          - Reduction in the dynamic allocation of memory
+*          - Computing AT and AQ within STFSLB instead in VKUOCON
+*          (reduction of the memory requirements)
+*          - Adding the field AM : AM=FM((N+1)"STAR")-FM1 / 2. *DT
+*          - Modification of U00 for low level and for cirrus
+*          clouds
+*          - Modification of function describing evaporation from
+*          rain
+*          - calculation of the modified precipitation rate,
+*          modification is due to evaporation from rain
+*          - Correction of the formula describing the rate of
+*          evaporation from clouds
+*          - Parameterization of the Bergeron-Findeisen process
+*          (Using values of C0 and MR dependent on temperature and
+*          precipitation rate)
+* 003      J. Pudykiewicz (Dec 85)
+*          - Introduction of the array "WHERE" carrying information
+*          about points with parameterization of stratiform
+*          condensation. (Array "WHERE" is updated several times
+*          within main vertical loop of the subroutine STFSLB).
+*          - Introduction of the array - "WEVCL" carrying explicit
+*          information about evaporation from clouds.
+*          - Modification of the evaluation of evaporation from rain.
+*          - Second correction of the term describing evaporation
+*          from clouds
+*          - Second modificaiton of the algorithm used to compute the
+*          partial cloud cover.
+*          - Introduction of the array "UP1" containing information
+*          about relative humidity for time level - (N+1)
+*          - Introduction of the parameter PSUP used in criterion for
+*          supersaturation.
+*          - Introduction of the 1D array - "BCU" carrying
+*          information about partial cloud cover for points with
+*          convection.
+*          - Additional limiting of the values of : UM1 and UM  (UM1,
+*          UM are always.LE. PUMX)
+*          - Additional criterion for computation of the final cloud
+*          cover in DO LOOP 9017.
+* 004      R. Benoit (May 1989)
+*          - Modification of memory allocation
+*          - Time series extraction
+*          - Introduction of TETENS formula for calculating
+*          specific humidity
+* 005      R. Benoit (Aug - Dec 93) Local Sigma
+* 006      B. Bilodeau (Jan 94) Remove FM3D -
+*          - Change name from STFSLB to STFSLB2
+* 007      B. Bilodeau (Aug 94) New physics interface
+*          - Change name from STFSLB2 to STFSLB3
+* 008      B. Bilodeau (Jan 01) Automatic arrays
+*
+*Object
+*          to compute values related to stratiform clouds
+*
+*Arguments
+*
+*
+*          - Input -
+* FM1      cloud water content (time level N-1)
+*
+*          - Input/Output -
+* FM       cloud water content (time level N+1)
+*
+*          - Output -
+* BM1      partial cloud cover (time level N)
+* TE       tendency of T due to processes in stratiform clouds
+* QE       tendency of Q due to processes in stratiform clouds
+* SRR      precipitation rate (RAIN)
+* SSR      precipitation rate (SNOW)
+*
+*          - Input -
+* ILAB     flag array from subroutine KUO
+* TTM      temperature (time level N-1)
+* QQM      humidity (time level N-1)
+* T        temperature (time level N+1)
+* Q        humidity (time level N+1)
+* PS       surface pressure (time level N)
+* PSM      surface pressure (time level N-1)
+*
+*
+*          - Input -
+* NSLBJ    number of the slab which is currently being processed
+* SIGMA    distribution of the sigma levels
+* N        horizontal grid dimension
+* NI       number of grid points in the X-direction
+* NK       number of the grid points in the vertical direction
+* DELT     2.*DT
+* DBGSUN   .TRUE. to output the fields involved in Sundqvist
+*          parameterization
+* SATUCO   .TRUE. if water/ice phase for saturation
+*          .FALSE. if water phase only for saturation
+*
+*Notes
+*          1)to compute the physical tendencies of the two prognostic
+*          variables T and Q due to processes occurring in stratiform
+*          clouds.  Stratiform clouds are represented by liquid water
+*          content-M, which is an additional prognostic variable of
+*          the meteorological model.
+*          2)to compute the precipitation rate from stratiform
+*          clouds
+*          3)to compute predicted value of the cloud water in
+*          stratiform clouds for time level (N+1)
+*
+**
+*
+      INTEGER INDMT,INDMX
+      REAL DUMMYV,EPSILON
+      INTEGER NIT,NK1,JK,JI,i,NITMX,IVL1,IVL2,IVL3
+      REAL PU0,PUS,PUMX,PSUP,PSGBT,PUSG1,PTCI,PKE,PC00,PMR0
+      REAL PC1,PTFR,PC2,PL,PLCP,PR,PCP,PGRAV
+      REAL RESIDUE,TMIN
+      REAL VTMPC2
+      REAL XWU00,XBM1,XW2,XPSM,XDSIG,XW3,XWPP,XDSG,XAQ
+      REAL XT,XQ,XQS,XSQ,XWFLO,XSIGMA,XW1,XTTM,XU,XP,XPM1,XDELT
+      REAL XB,XN,XM,XMAV,XEVAP,XDERU,XM1,XWQ,XWE,XAM,XWMR
+      REAL XAT,XDM,XFM1,XW4,XWH,XWC0,XWP1
+      REAL YPKE,YPG,YPCPL,YPCP,YPR,YPU0,YPSGBT,YPUSG1,YPUS
+      REAL YPLCP,YPTCI,YU0,YPC1,YPC2,YPTFR,YPGRAV
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+     AUTOMATIC (LOCOST,  LOGICAL , (NI   ))
+     AUTOMATIC (LOW1  ,  LOGICAL , (NI   ))
+*
+     AUTOMATIC (W1    ,  REAL    , (NI   ))
+     AUTOMATIC (W2    ,  REAL    , (NI   ))
+     AUTOMATIC (W3    ,  REAL    , (NI   ))
+     AUTOMATIC (WQS   ,  REAL    , (NI   ))
+     AUTOMATIC (WL    ,  REAL    , (NI   ))
+     AUTOMATIC (WSQ   ,  REAL    , (NI   ))
+     AUTOMATIC (WSL   ,  REAL    , (NI   ))
+     AUTOMATIC (WP1   ,  REAL    , (NI   ))
+     AUTOMATIC (WE    ,  REAL    , (NI   ))
+     AUTOMATIC (WQ    ,  REAL    , (NI   ))
+     AUTOMATIC (WU0   ,  REAL    , (NI   ))
+     AUTOMATIC (OW2   ,  REAL    , (NI   ))
+     AUTOMATIC (WPP   ,  REAL    , (NI   ))
+     AUTOMATIC (WEV0  ,  REAL    , (NI   ))
+     AUTOMATIC (UM1   ,  REAL    , (NI   ))
+     AUTOMATIC (UM    ,  REAL    , (NI   ))
+     AUTOMATIC (AT    ,  REAL    , (NI   ))
+     AUTOMATIC (AQ    ,  REAL    , (NI   ))
+     AUTOMATIC (AM    ,  REAL    , (NI   ))
+     AUTOMATIC (W4    ,  REAL    , (NI   ))
+     AUTOMATIC (W5    ,  REAL    , (NI   ))
+     AUTOMATIC (WH    ,  REAL    , (NI   ))
+     AUTOMATIC (WU00  ,  REAL    , (NI   ))
+     AUTOMATIC (WFLO  ,  REAL    , (NI   ))
+     AUTOMATIC (WC0   ,  REAL    , (NI   ))
+     AUTOMATIC (WMR   ,  REAL    , (NI   ))
+     AUTOMATIC (WHERE ,  REAL    , (NI   ))
+     AUTOMATIC (UP1   ,  REAL    , (NI   ))
+     AUTOMATIC (BCU   ,  REAL    , (NI   ))
+     AUTOMATIC (WEVCL ,  REAL    , (NI   ))
+*
+     AUTOMATIC (SD    ,  REAL    , (NI,NK))
+*
+************************************************************************
+*
+*
+*----------------------------------------
+*
+*   PARAMETERS OF THE STRATIFORM CLOUDS
+*   PARAMETERIZATION.
+*
+      PARAMETER (PU0=0.8)
+      PARAMETER (PUS=1.)
+      PARAMETER (PUMX= 1.0 - 1.0 E - 3 )
+      PARAMETER (PSUP=1.02)
+      PARAMETER (PSGBT=0.9)
+      PARAMETER (PUSG1=0.975)
+      PARAMETER (PTCI=238.)
+      PARAMETER (PKE=1.0E-5)
+      PARAMETER (PC00=1.0E-4)
+      PARAMETER (PMR0=3.5E-4)
+      PARAMETER (PC1=90.)
+      PARAMETER (PTFR=263.)
+      PARAMETER (PC2=0.5)
+*
+*
+*----------------------------------------------------
+*
+*
+*____STATEMENT FUNCTIONS
+*
+*________(FUNCTIONS ARE LISTED IN THE ORDER REFLECTING
+*         STRUCTURE OF THE MAIN VERTICAL INTEGRATION LOOP)
+*
+*____________CONVENTION: PARAMETER ---> Y+NAME OF THE PARAMETER
+*                        VARIABLE  ---> X+NAME OF THE VARIABLE
+*
+*     USE COMDECKS FROM PHYSICS LIBRARY   ----------------
+*                                                        *
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+#include "consphy.cdk"
+#include "dintern.cdk"
+      REAL FLDCPE,FSQSAT,FUNC0,FUNB0,FU0,FMODPR,FMODPR2
+      REAL FEVAPR,FMAV,FNV,FDERU,FQD,FBERG1,FBERG2,FBERG3
+      REAL FUNWH,FEINIT,FLIMIT,FRESID,FDERV,FRELP,FPRAT
+      REAL FCLOU
+#include "fintern.cdk"
+*                                                        *
+*     ----------------------------------------------------
+*     (L/CP) EFFECTIVE
+*
+      FLDCPE (XT, XQ) = CVMGT (CHLC,CHLC+CHLF,XT.GT.TRPL)
+     %                  /(CPD*(1.+VTMPC2*XQ))
+*
+*
+*____SQ - TERM
+*
+      FSQSAT(XT,XQS,YPLCP,YPCP,YPR)=
+     X0.622*YPLCP*YPLCP*(YPCP/YPR)*(XQS/(XT*XT))
+*
+*____FUNCTION USED FOR CORRECTING OF THE U00 FOR SIGMA>0.9
+*
+      FUNB0(YPU0,XWFLO,XSIGMA,YPSGBT,YPUSG1)=
+     *     YPU0+XWFLO*((XSIGMA-YPSGBT)/(1.-YPSGBT))*
+     *     (YPUSG1-YPU0)
+*
+*____FUNCTION USED FOR CORRECTING OF THE U00 FOR CIRRUS LEVEL
+*
+      FUNC0(YPUS,YPTCI,XW1,XTTM)=
+     *     YPUS-((YPUS-XW1)/(1.+0.15*(YPTCI-XTTM)))
+*
+*____CLOUD COVER
+*
+      FCLOU(XU,YPUS,XWU00)=1.-SQRT(1.-(XU-XWU00)/(YPUS-XWU00))
+*
+*____THRESHOLD VALUE OF RELATIVE HUMIDITY
+*
+      FU0(XWU00,YPUS,XBM1)=XWU00+XBM1*(YPUS-XWU00)
+*
+*____FIRST FUNCTION USED IN COMPUTATION OF THE MODIFFIED
+*    PRECIPITATION RATE
+*
+      FMODPR(XBM1,YPKE,YPUS,XW2,XPSM,YPG,XDSIG)=
+     *      0.5*(1.-XBM1)*YPKE*(YPUS-XW2)*((XPSM/YPG)*XDSIG)
+*
+*____SECOND FUNCTION USED IN COMPUTATION OF THE MODIFIED
+*    PRECIPITATION RATE
+*
+      FMODPR2(XW3,XW2)=(XW3-XW2)**2
+*
+*____FUNCTION DESCRIBING EVAPORATION FROM RAIN
+*
+      FEVAPR(XW3,XWPP,XPSM,YPG,XDSG)=
+     *       (XW3**2 - XWPP) / ((XDSG*XPSM)/YPG)
+*
+*____MOISTURE ACCESSION
+*
+*           AQ  U  PCPL  SQ  AT  QS  P  PM1  DELT
+      FMAV(XAQ,XU,YPCPL,XSQ,XAT,XQS,XP,XPM1,XDELT)=
+     1XAQ-XU*YPCPL*XSQ*XAT+XU*XQS*(XP-XPM1)/(XPM1*XDELT)
+*
+*____"N" TERM APPEARING IN FORMULA FOR (DU/DT)
+*
+      FNV(YPUS,YU0,XB)=2.*(1.-XB)*(YPUS-YU0)
+*
+*____TENDENCY FOR RELATIVE HUMIDITY
+*
+      FDERU(XN,XB,XQS,XM,XMAV,XEVAP)=
+     1(XN/(XQS*XN+XM/XB))*((1-XB)*XMAV+XEVAP)
+*
+*____NET HEATING TERM
+*
+      FQD(XMAV,XQS,XDERU,XU,XSQ)=
+     1(XMAV-XQS*XDERU)/(1.+XU*XSQ)
+*
+*____FUNCTION F1 USED IN PARAMETERIZATION OF BERGERON PROCESS
+*
+      FBERG1(YPC1,XWPP)=1.+YPC1*SQRT(XWPP)
+*
+*____FUNCTION F2 USED IN PARAMETERIZATION OF BERGERON PROCESS
+*
+      FBERG2(YPC2,XW3)=1.+YPC2*SQRT(XW3)
+*
+*____FUNCTION F3 USED IN PARAMETERIZATION OF BERGERON PROCESS
+*
+      FBERG3(YPTFR,XTTM)=1./(1.+0.1*(PTFR-XTTM))
+*
+*____FUNCTION DESCRIBING H - TERM IN EXPRESSION FOR RESIDUE
+*
+      FUNWH(XM1,XWQ,XWE,XAM,XBM1,XWMR,XDM,XDELT)=
+     *  (2.*XM1+XDELT*(XWQ+XWE+XAM))/(2.*(XBM1+XDM)*XWMR)
+*
+*____FUNCTION DESCRIBING FIRST APPROXIMATION OF THE X
+*    IN ITERATIVE SOLUTION OF THE CLOUD WATER EQUATION
+*
+      FEINIT(XFM1,XBM1,XWMR,XDM)=
+     *      XFM1/((XBM1+XDM)*XWMR)
+*
+*____FUNCTION USED IN LIMITING OF THE VALUE OF X IN
+*    ITERATIVE SOLUTION OF THE CLOUD WATER EQUATION.
+*
+      FLIMIT(XFM1,XBM1,XWMR,XDM)=
+     *        XFM1/(2.*(XBM1+XDM)*XWMR)
+*
+*____FUNCTION DESCRIBING RESIDUE IN NEWTON-RAPHSON
+*    ITERATIONS
+*
+      FRESID(XW1,XW4,XWH,XWC0)=
+     *      XW1+(XWC0*XW1*(1.-XW4))/2.-XWH
+*
+*____DERIVATIVE OF F IN NEWTON-RAPHSON ITERATIONS
+*
+      FDERV(XW1,XW4,XWC0)=
+     *      1.+XWC0/2.-(XWC0/2.)*(1.-2.*XW1*XW1)*XW4
+*
+*____FUNCTION USED FOR COMPUTATION OF THE RATE OF
+*    RELEASE OF PRECIPITATION.
+*
+      FRELP(XAM,XWQ,XWE,XW2,XFM1,XDELT)=
+     *      XAM+XWQ+XWE-(XW2-XFM1)/XDELT
+*
+*____FUNCTION USED TO UPDATE PRECIPITATION RATE
+*
+      FPRAT(XW1,XDSG,XWP1,XPSM,YPGRAV)=XW1+XDSG*XWP1*(XPSM/YPGRAV)
+*
+*
+*
+*----------------------------------------------------------
+*
+*
+*  SOME COMMONLY USED NUMERICAL VALUES:
+*  ----------------------------------------
+*
+      DUMMYV=1.0E-15
+      PL = CHLC
+      PLCP = CHLC/CPD
+      PR = RGASD
+      PCP = CPD
+      PGRAV= GRAV
+      VTMPC2 = CPV/CPD-1
+      NITMX = 5
+*
+      EPSILON = 5.0 E - 5
+*
+*__NEW VALUES FOR ILAB
+*
+      IVL1 = 4       ! POINTS WITH STABLE STRATIFICATION AND U.GT.US
+      IVL2 = 5       ! STRATIFORM POINTS WITHOUT CONDENSATION
+      IVL3 = 6       ! STRATIFORM POINTS WITHOUT PRECIPITATION
+*
+*
+*---------------------------------------------------------
+*
+*
+*__COMPUTATIONS ACCORDINDG TO SUNDQVIST METHOD.
+*
+*
+*
+*________EVALUATE DSIGMA USED IN APPROXIMATION OF INTEGRALS
+*        USED FOR COMPUTATION OF THE PRECIPITATION RATE
+*        AND PRECIPITATION RATE MODIFIED BY EVAPORATION.
+*
+      NK1=NK-1
+*
+      DO 412 JK=2,NK1
+         do 412 ji=1,ni
+            SD(ji,JK) = ( SIGMA(ji,JK+1) - SIGMA(ji,JK-1) ) / 2.
+ 412  continue
+*
+      do 413 ji=1,ni
+         SD(ji,1) = SIGMA(ji,2) - SIGMA(ji,1)
+         SD(ji,NK)= SIGMA(ji,NK)- SIGMA(ji,NK-1)
+ 413  continue
+*
+*________INITIALIZE "ACCUMULATION ARRAYS"
+*
+*
+*________________INITIALIZE ARRAY CARYING PRECIPITATION RATE
+*
+      DO 418 JI=1,NI
+ 418  WPP(JI) = 0.
+*
+*________INITIALIZE PARTIAL CLOUD COVER FOR CONVECTIVE CLOUDS
+*        TO ZERO ( BCU = 0. )
+*
+      DO 419 JI=1,NI
+ 419  BCU(JI)=0.
+*
+*
+*
+*____MAIN VERTICAL LOOP ( --> 1000 )
+*
+*
+      DO 1000 JK = 1 , NK
+*
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*________LOGICAL ARRAY "LOCOST"
+*        LOCOST = .TRUE. FOR POINTS WITH
+*        "STRATIFORM CLOUDS PROCESSES"
+*        (LOCOST IS .TRUE. IF ILAB IS .EQ. 0)
+*        (ILAB - FLAG ARRAY PROVIDED BY SUBROUTINE KUO)
+*
+      DO 5 JI=1,NI
+      LOCOST(JI)=(ILAB(JI,JK).EQ.0)
+ 5    CONTINUE
+*
+*________COMPUTE DYNAMIC TENDENCIES RATES FOR:
+*        TEMPERATURE ---> AT
+*        HUMIDITY    ---> AQ
+*        CLOUD WATER ---> AM
+*
+      DO 7 JI=1,NI
+      AT(JI) = ( T  (JI,JK) - TTM(JI,JK) ) / DELT
+      AQ(JI) = ( Q  (JI,JK) - QQM(JI,JK) ) / DELT
+      AM(JI) = ( FM (JI,JK) - FM1(JI,JK) ) / DELT
+ 7    CONTINUE
+*
+*________COMPUTE SPECIFIC HUMIDITY FOR SATURATION STATE
+*        ( IN WQS )
+*
+      IF(SATUCO) THEN
+      DO 10 JI=1,NI
+      WQS(JI)=FOQST(TTM(JI,JK),PS(JI)*SIGMA(ji,JK))
+ 10   CONTINUE
+      ELSE
+      DO 15 JI=1,NI
+      WQS(JI)=FOQSA(TTM(JI,JK),PS(JI)*SIGMA(ji,JK))
+ 15   CONTINUE
+      ENDIF
+*
+*________COMPUTE LATENT HEAT COEFFICIENT (IN WL)
+*        (IN THIS VERSION L IS CONST)
+*
+      DO 20 JI=1,NI
+           WL(JI)=0.                           !FOR TETENSAT (NOT USED)
+ 20   CONTINUE
+*
+*________COMPUTE L/CP (IN WSL)
+*
+      DO 30 JI=1,NI
+           WSL(JI)=FLDCPE(TTM(JI,JK), QQM(JI,JK))   !FOR TETENSAT
+ 30   CONTINUE
+*
+*________COMPUTE SQ (IN WSQ)
+*
+      DO 40 JI=1,NI
+      TEMP1  = WQS(JI)
+      TEMP2  = WSL(JI)
+      WSQ(JI)=FSQSAT(TTM(JI,JK),TEMP1,TEMP2,PCP,PR)
+ 40   CONTINUE
+*
+*________COMPUTE CP/L (IN WSL)
+*
+      DO 50 JI=1,NI
+      W1(JI)=1./WSL(JI)
+      WSL(JI)=W1(JI)
+ 50   CONTINUE
+*
+*
+*________COMPUTE ARRAY WFLO USED IN CORRECTION FORMULA
+*        FOR U00 WITHIN LOW PART OF THE ATMOSPHERE (SIGMA>0.9)
+*        (WFLO=1. - OVER OCEAN , WFLO=0.5 - OVER LAND)
+*        -----------------------------------------------------
+*        IN THE PRESENT VERSION : WFLO=CONST=0.5
+*        THIS WILL BE MODIFIED IN THE NEXT VERSION OF THE
+*        SUBROUTINE STFSLB.
+*        -----------------------------------------------------
+*
+      DO 51 JI=1,NI
+ 51   WFLO(JI)=0.5
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*________COMPUTE RELATIVE HUMIDITY FOR TIME LEVEL N-1
+*
+      DO 60 JI=1,NI
+      UM1(JI) = AMIN1( (QQM(JI,JK)/WQS(JI))  ,  PUMX  )
+ 60   CONTINUE
+*
+*________COMPUTE RELATIVE HUMIDITY FOR TIME LEVEL N
+*
+      DO 70 JI=1,NI
+      W1(JI)=(Q(JI,JK)+QQM(JI,JK))/2.
+      W2(JI)=(T(JI,JK)+TTM(JI,JK))/2.
+ 70   CONTINUE
+*
+      IF(SATUCO) THEN
+      DO 71 JI=1,NI
+      TEMP1 = W2(JI)
+      W3(JI)=FOQST(TEMP1,(PS(JI)+PSM(JI))*(SIGMA(ji,JK)/2.))
+ 71   CONTINUE
+      ELSE
+      DO 72 JI=1,NI
+      TEMP1 = W2(JI)
+      W3(JI)=FOQSA(TEMP1,(PS(JI)+PSM(JI))*(SIGMA(ji,JK)/2.))
+  72  CONTINUE
+      ENDIF
+*
+      DO 74 JI=1,NI
+      UM(JI) = AMIN1( (W1(JI)/W3(JI))  ,  PUMX )
+ 74   CONTINUE
+*
+*________COMPUTE RELATIVE HUMIDITY FOR TIME LEVEL (T+1)
+*
+      IF(SATUCO) THEN
+      DO 745 JI=1,NI
+ 745  UP1(JI)=Q(JI,JK) / FOQST(T(JI,JK),PS(JI)*SIGMA(ji,JK))
+*
+      ELSE
+      DO 746 JI=1,NI
+ 746  UP1(JI)=Q(JI,JK) / FOQSA(T(JI,JK),PS(JI)*SIGMA(ji,JK))
+      ENDIF
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____INITIALIZE ARRAY WU00 CONTAINING VALUES OF THE
+*    "ABSOLUTE" THRESHOLD VALUE FOR U00 WITH PROPER
+*    MODIFICATIONS FOR LEVELS BETWEEN SIGMA=0.9 AND
+*    SIGMA=1.0 AS WELL AS CORRECTION FOR POINTS WITH
+*    TEMPERATURE .LE. T<CIRRUS>
+*
+*________INITIALIZE WU00 WITH MOST COMMON VALUE OF U00
+*________PERFORM CORRECTION FOR LEVELS BETWEEN SIGMA=0.9
+*        AND 1.
+*
+      DO 77 JI=1,NI
+         WU00(JI)=PU0
+         TEMP1 = WFLO(JI)
+         IF( SIGMA(ji,JK) .GE. PSGBT )
+     $        WU00(JI)=FUNB0(PU0,TEMP1,SIGMA(JI,JK),PSGBT,PUSG1)
+ 77   continue
+*
+*
+*________PERFORM CORRECTION FOR "CIRRUS LEVEL"
+*
+*____________EVALUATE MINIMUM TEMPERATURE IN THE LEVEL - JK
+*
+*________________COPY TTM TO W1
+*
+      DO 78 JI=1,NI
+ 78   W1(JI)=TTM(JI,JK)
+*
+*________________EVALUATE MINIMUM OF W1
+*
+      TMIN= W1(1)
+      DO 2044 I=2,NI
+         TMIN= MIN(TMIN,W1(I))
+ 2044 CONTINUE
+*
+*________>
+*
+      IF( TMIN .LE. PTCI ) THEN
+*
+*
+*____________COPY WU00 TO W1
+*
+      DO 2055 I=1,NI
+         W1(I)= WU00(I)
+ 2055 CONTINUE
+*
+*________________(THIS COPY IS FOR RARE CASE WHERE:
+*                 T<TCIRRUS AND SIGMA>0.9
+*                HAVING WU00 IN FUNC0 PERMITTING
+*                "DOUBLE" CORRECTION.
+*
+      DO 79 JI=1,NI
+      TEMP1 = W1(JI)
+      WU00(JI)=CVMGT(FUNC0(PUS,PTCI,TEMP1,TTM(JI,JK)),
+     *                TEMP1,
+     *                TTM(JI,JK).LE.PTCI)
+ 79   CONTINUE
+*
+      ENDIF
+*
+*____END OF EVALUATION OF THE U00
+*
+*
+*__GENERAL SETTING OF THE ARRAY - "WHERE"
+*
+*
+*________SET "WHERE" TO 1 FOR POINTS WITH SUPERSATURATION
+*
+      DO 4020 JI=1,NI
+ 4020 W1(JI)=CVMGT(1. , 0. , UP1(JI).GT.PSUP)
+*
+*________ADD POINTS WITH STABLE STRATIFICATION.
+*
+      DO 4021 JI=1,NI
+ 4021 W2(JI)=CVMGT(1. , W1(JI) , LOCOST(JI) )
+*
+*________SUBSTRACT POINTS WITH:
+*                              UM1.LT.U00 .AND. UP1 .LE. PSUP
+*
+      DO 4022 JI=1,NI
+ 4022 WHERE(JI)=CVMGT( 0. , W2(JI) ,
+     *                  (UM1(JI).LT.WU00(JI)) .AND.
+     *                  (UP1(JI).LE.PSUP)             )
+*
+      DO 3711 JI=1,NI
+ 3711 if (WHERE(JI).EQ.1.) ILAB(JI,JK) = IVL1
+*
+*
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____COMPUTE PARTIAL CLOUD COVER AND U0.
+*
+*
+*________COMPUTE CLOUD FREE PART OF THE GRID CELL:
+*
+      DO 100 JI=1,NI
+ 100  W1(JI)=AMIN1( (PUS-UM1(JI))/(PUS-WU00(JI))  ,  1. )
+*
+*________COMPUTE PARTIAL CLOUD COVER:
+*
+      DO 101 JI=1,NI
+ 101  BM1(JI,JK)=
+     *               BCU(JI)-(SQRT(W1(JI)) - 1. +BCU(JI) ) *
+     *               CVMGT(1.  ,  0.  ,  LOCOST(JI)  )
+*
+*________COMPUTE U0 ( U0=U00+F(B))
+*        (U0-->WU0 , U00-->WU00 )
+*
+      DO 104 JI=1,NI
+      TEMP1  = WU00(JI)
+      WU0(JI)=FU0(TEMP1,PUS,BM1(JI,JK))
+ 104  CONTINUE
+*
+*____END OF COMPUTATIONS OF THE PARTIAL CLOUD COVER
+*    AND U0.
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*________COMPUTE FIELD - UDAS :
+*
+      DO 124 JI=1,NI
+      W2(JI)=CVMGZ(UM1(JI),WU0(JI),FM1(JI,JK))
+ 124  CONTINUE
+*
+*________COPY SQRT OF PRECIPITATION RATE TO W3
+*
+      DO 126 JI=1,NI
+      W3(JI)=SQRT(WPP(JI))
+ 126  CONTINUE
+*
+*________COMPUTE PRECIPITATION RATE MODIFIED BY EVAPORATION
+*
+*____________COMPUTE 0.5*(1.-BM1)*PKE*(PUS-UDAS)*(P/G)*DSIGMA
+*            (IN W1)
+*
+      DO 127 JI=1,NI
+      TEMP1 = W2(JI)
+      TEMP2 = SD(JI,JK)
+      W1(JI)=FMODPR(BM1(JI,JK),PKE,PUS,TEMP1,PSM(JI),PGRAV,TEMP2)
+ 127   CONTINUE
+*
+*________CHECK VALUE OF THE W1 (SHOULD BE .LE. W3 )
+*
+      DO 128 JI=1,NI
+      W2(JI)=CVMGT(W1(JI),W3(JI),W1(JI).LE.W3(JI))
+ 128  CONTINUE
+*
+*________COMPUTE MODIFIED PRECIPITATION RATE
+*
+      DO 129 JI=1,NI
+      TEMP1 = W3(JI)
+      TEMP2 = W2(JI)
+      WPP(JI)=FMODPR2(TEMP1,TEMP2)
+ 129  CONTINUE
+*
+*________COMPUTE EVAPORATION FROM THE RAIN.
+*
+      DO 1295 JI=1,NI
+      TEMP1 = W3(JI)
+      TEMP2 = WPP(JI)
+      TEMP3 = SD(JI,JK)
+ 1295 WE(JI)=FEVAPR(TEMP1,TEMP2,PSM(JI),PGRAV,TEMP3)
+*  1D SERIES STORAGE
+*     CALL SERXST (WE, 'RE', NSLBJ, NI, 0., 1., -JK-1)
+*
+*
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____COMPUTE MOISTURE ACCESSION IN W1
+*
+*
+*________CORRECT AQ :
+*                     AQ=AQ+AMAX1(0. , (QQM-WQS)/DELT )
+*
+      DO 1133 JI=1,NI
+ 1133 W5(JI)=AQ(JI)+AMAX1( 0. , (QQM(JI,JK)-WQS(JI))/DELT )
+*
+*
+      DO 133 JI=1,NI
+      TEMP1 = W5(JI)
+      TEMP2 = UM(JI)
+      TEMP3 = WSL(JI)
+      TEMP4 = WSQ(JI)
+      TEMP5 = AT(JI)
+      TEMP6 = WQS(JI)
+      W1(JI)=FMAV(TEMP1,TEMP2,TEMP3,TEMP4,
+     *                     TEMP5,TEMP6,PS(JI),PSM(JI),DELT)
+ 133  CONTINUE
+*
+*____END OF COMPUTATIONS OF THE MOISTURE ACCESSION
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____COMPUTE RATE OF EVAPORATION FROM CLOUDS
+*
+*
+*________EVALUATE RATE OF EVAPORATION FROM CLOUDS
+*
+      DO 136 JI=1,NI
+      WEVCL(JI) = CVMGT( AMAX1( 0. , (1.- BM1(JI,JK))*AM(JI)) ,
+     *                   0.  ,
+     *                   LOCOST(JI)   )
+ 136  CONTINUE
+*     CALL SERXST (WEVCL, 'CE', NSLBJ, NI, 0., 1., -JK-1)
+*
+*____END OF COMPUTATIONS OF THE RATE OF EVAPORATION
+*    FROM CLOUDS.
+*
+*
+*____COMPUTE TOTAL EVAPORATION TERM ( IN WEV0 )
+*    (EVAPORATION FROM CLOUDS + EVAPORATION FROM RAIN)
+*
+      DO 137 JI=1,NI
+      WEV0(JI)=WEVCL(JI)+WE(JI)
+ 137  CONTINUE
+*
+*____END OF COMPUTATION OF THE TOTAL EVAPORATION TERM
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____COMPUTATIONS OF THE NET HEATING TERM
+*
+*________COMPUTE N TERM APPEARING IN THE FORMULA FOR
+*        TIME DERIVATIVE OF THE RELATIVE HUMIDITY
+*
+      DO 138 JI=1,NI
+      TEMP1 = WU00(JI)
+      W3(JI)=FNV(PUS,TEMP1,BM1(JI,JK))+DUMMYV
+ 138  CONTINUE
+*
+*________COMPUTE (DU/DT) FOR TIME LEVEL - N
+*
+*
+*____________COMPUTE (DU/DT) IN W2
+*
+      DO 140 JI=1,NI
+      TEMP1 = W3(JI)
+      TEMP2 = WQS(JI)
+      TEMP3 = W1(JI)
+      TEMP4 = WEV0(JI)
+      W2(JI)=FDERU(TEMP1,BM1(JI,JK)+DUMMYV,TEMP2,
+     *             FM1(JI,JK),TEMP3,TEMP4)
+ 140  CONTINUE
+*
+*
+*________END OF THE COMPUTATIONS OF (DU/DT)
+*        ( W2 ---> (DU/DT) )
+*
+*________COMPUTE  ( M - QS * DU/DT ) / (1. + U * SQ )
+*
+*
+      DO 180 JI=1,NI
+      TEMP1 = W1(JI)
+      TEMP2 = WQS(JI)
+      TEMP3 = W2(JI)
+      TEMP4 = UM(JI)
+      TEMP5 = WSQ(JI)
+      W4(JI)=FQD(TEMP1,TEMP2,TEMP3,TEMP4,
+     *                    TEMP5 )
+ 180  CONTINUE
+*
+*
+*
+*________SET "WHERE" TO ZERO IN POINTS WITH :
+*
+*         W4+WE+FM1/DELT+AM  .LE.  0.
+*
+*               .AND.
+*
+*        UP1  .LE.  PSUP
+*
+*________________COMPUTE "LOGICAL SWITCH" FOR THIS CASE:
+*
+      DO 190 JI=1,NI
+ 190  LOW1(JI)=((W4(JI)+WE(JI)+FM1(JI,JK)/DELT+AM(JI))
+     *              .LE.   0.   )  .AND.
+     *            (UP1(JI).LE.PSUP)
+*
+*________UPDATE "WHERE"
+*
+*________________COPY W5 ------> WHERE
+*
+      DO 191 JI=1,NI
+         W5(JI)=CVMGT( 0. , WHERE(JI) , LOW1(JI)  )
+         WHERE(JI)= W5(JI)
+ 191  CONTINUE
+*
+*
+*____COMPUTE NET HEATING TERM
+*____------------------------
+*
+*
+      DO 200 JI= 1 , NI
+*
+ 200  WQ(JI) = WHERE(JI) * W4(JI) - (1.-WHERE(JI))*WEV0(JI)
+*
+      DO 3712 JI=1,NI
+ 3712 if (LOW1(JI)) ILAB(JI,JK) = IVL2
+*
+*
+*
+*____END OF THE COMPUTATION OF THE NET HEATING TERM
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____EVALUATE TENDENCIES FOR TEMPERATURE AND HUMIDITY
+*    (TENDENCIES FROM STRATIFORM POINTS ARE OVERWRTTEN
+*     IN CORESPONDING LOCATIONS IN ARRAYS : QE AND TE)
+*
+*
+*________HUMIDITY
+*
+*________"MERGE" INFORMATION ABOUT CONVECTIVE AND
+*         STRATIFORM TENDENCIES
+*
+      DO 220 JI=1,NI
+ 220  W1(JI) = - WQ(JI) + QE(JI,JK)
+*
+*________COPY W1 BACK TO QE
+*
+      DO 3220 JI=1,NI
+ 3220 QE(JI,JK)=W1(JI)
+*
+*________TEMPERATURE
+*
+*________COMPUTATION OF THE TENDENCIES
+*
+      DO 230 JI=1,NI
+ 230  TE(JI,JK)= WQ(JI) / WSL(JI)
+*
+*____END OF COMPUTATION OF THE TENDENCIES
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____COMPUTATION OF THE CLOUD WATER FOR TIME LEVEL - (N+1)
+*    AND RATE OF RELEASE OF PRECIPITATION.
+*
+*
+*________COMPUTE FUNCTIONS F1,F2,F3 USED FOR PARAMETERIZATION
+*        OF COALESCENCE AND BERGERON-FINDEISEN PROCESSES.
+*        (F1-->FBERG1,F2-->FBERG2,F3-->FBERG3)
+*
+*  COMPUTE F1 IN W1
+*
+      DO 7101 JI=1,NI
+      TEMP1 = WPP(JI)
+ 7101 W1(JI)=FBERG1(PC1,TEMP1)
+*
+*  CHECK VALUE OF F1 , (F1 SHOULD BE  .LE. 4.)
+*
+      DO 7102 JI=1,NI
+ 7102 W2(JI)=CVMGT(W1(JI),4., W1(JI).LE.4.)
+*
+*  COMPUTE F2 IN W1
+*
+*
+*________________PROTECT AGAINST SQRT FROM NEGATIVE NUMBER:
+*                (PTFR-TTM(JI,JK)) WHEN TTM(JI,JK)>PTFR.
+*
+      DO 7093 JI=1,NI
+ 7093 W3(JI)=CVMGT(0.,PTFR-TTM(JI,JK),TTM(JI,JK).GE.PTFR)
+*
+      DO 7103 JI=1,NI
+      TEMP1 = W3(JI)
+ 7103 W1(JI)=CVMGT(1.,FBERG2(PC2,TEMP1),TTM(JI,JK).GE.PTFR)
+*
+*  COMPUTE F1*F2 IN W4
+*
+      DO 7104 JI=1,NI
+ 7104 W4(JI)=W2(JI)*W1(JI)
+*     F1*F2 = F1   * F2
+*
+*-------------------------
+*
+*  CHECK VALUE OF F1*F2 (SHOULD BE .LE. 8.)
+*
+      DO 7105 JI=1,NI
+ 7105 W3(JI)=CVMGT(W4(JI),8.,W4(JI).LE.8.)
+*
+*  ( W2 --> F1 , W3 --> F1*F2 )
+*
+*  COMPUTE F3 IN W1
+*
+      DO 7106 JI=1,NI
+ 7106 W1(JI)=CVMGT(1.,FBERG3(PTFR,TTM(JI,JK)),TTM(JI,JK).GE.PTFR)
+*
+*  (W2-->F1,W3-->F1*F2,W1-->F3)
+*
+*
+*________COMPUTE VALUES OF THE C0 AND MR
+*        AND MULTIPLY THESE "VARIABLE" PARAMETERS BY 2*DT
+*
+*
+      DO 7107 JI=1,NI
+      WC0(JI)=PC00*W3(JI)*DELT
+ 7107 WMR(JI)=PMR0*(W1(JI)/W2(JI))
+*
+*  (WORK SPACE : W1,W2,W3,W4 - AVAILABLE)
+*
+*
+*  COMPUTE H - TERM APPEARING IN FORMULA RESULTING
+*  FROM IMPLICIT SOLUTION OF THE CLOUD WATER EQUATION
+*
+*  (H=(2.*FM1+(AM+Q+E)*DELT)/(2.*BM1*WMR)
+*
+      DO 7108 JI=1,NI
+      TEMP1 = WQ(JI)
+      TEMP2 = WE(JI)
+      TEMP3 = AM(JI)
+      TEMP4 = BM1(JI,JK)
+      TEMP5 = WMR(JI)
+ 7108 WH(JI)= FUNWH(FM1(JI,JK),TEMP1,TEMP2,TEMP3,TEMP4,
+     *                TEMP5,DUMMYV,DELT) * WHERE(JI)
+*
+*  COMPUTE FIRST APPROXIMATION OF THE X (IN W1 )
+*  X IS DEFINED AS: FM1/ BM1*WMR
+*  AND FM1/2.*BM1*WMR  (IN W5)
+*
+      DO 7109 JI=1,NI
+      TEMP1 = BM1(JI,JK)
+      TEMP2 = WMR(JI)
+      W1(JI)= FEINIT(FM1(JI,JK),TEMP1,TEMP2,DUMMYV) * WHERE(JI)
+ 7109 W5(JI)= FLIMIT(FM1(JI,JK),TEMP1,TEMP2,DUMMYV) * WHERE(JI)
+*
+*
+*________PERFORM SOLUTION OF THE EQUATION:
+*
+*        X+((WC0*DELT)/2.)*X*(1.-EXP(-X**2))-WH = 0.
+*
+*  USING NEWTON - RAPHSON METHOD.
+*
+*  FIRST APPROXIMATION OF THE SOLUTION IS STORED IN W1.
+*
+*
+*____________ITERATION LOOP
+*
+*
+      DO 7200 NIT = 1 , NITMX
+*
+*________________COMPUTE MIN(8.,X) IN W3
+*
+      DO 7299 JI=1,NI
+ 7299 W3(JI)=AMIN1(W1(JI),8.)
+*
+*____________COMPUTE EXP(-X**2) IN W4
+*
+      DO 7300 JI=1,NI
+ 7300 W4(JI)=EXP( - W3(JI) ** 2 )
+*
+*____________COMPUTE CURRENT VALUE OF THE "RESIDUE"
+*
+      DO 7301 JI=1,NI
+      TEMP1 = W1(JI)
+      TEMP2 = W4(JI)
+      TEMP3 = WH(JI)
+      TEMP4 = WC0(JI)
+ 7301 W3(JI)=FRESID(TEMP1,TEMP2,TEMP3,TEMP4) * WHERE(JI)
+*
+*____________COMPUTE CURRENT APPROXIMATION OF THE X
+*
+      DO 7302 JI=1,NI
+      TEMP1 = W1(JI)
+      TEMP2 = W4(JI)
+      TEMP3 = WC0(JI)
+ 7302 W2(JI)=W1(JI)-W3(JI)/FDERV(TEMP1,TEMP2,TEMP3)
+*
+*____________CHECK CURRENT VALUE OF X (WRITTEN IN W2)
+*            X SHOULD BE .GE. FM1/2.*BM1*WMR
+*            (FM1/2.*BM1*WMR IS WRITTEN IN W5)
+*
+      DO 7305 JI=1,NI
+ 7305 W1(JI)=CVMGT(W2(JI),W5(JI),W2(JI).GE.W5(JI))
+*
+*________________COMPUTE ABSOLUTE VALUE OF THE RESIDUE
+*                IN W2
+*
+      DO 7307 JI=1,NI
+ 7307 W2(JI)=ABS(W3(JI))
+*
+*____________COMPUTE MAXIMUM ABSOLUTE VALUE OF THE "RESIDUE"
+*
+      RESIDUE= W2(1)
+      DO 2045 I=2,NI
+         RESIDUE= MAX(RESIDUE,W2(I))
+ 2045 CONTINUE
+*
+*____________IF (RESIDUE.LE.EPSILON) DISCONTINUE ITERATIONS
+*
+      IF(RESIDUE.LE.EPSILON) GO TO 7500
+*
+*____________IF (RESIDUE.GT.EPSILON) CONTINUE ITERATIONS
+*
+*
+ 7200 CONTINUE
+*
+*____END OF THE ITERATION LOOP
+*
+*
+ 7500 CONTINUE
+*
+*________COMPUTE CLOUD WATER FIELD FOR TIME LEVEL (N+1)
+*
+      DO 7501 JI=1,NI
+ 7501 W4(JI)=( 2.*BM1(JI,JK)*WMR(JI)*W1(JI) - FM1(JI,JK) ) * WHERE(JI)
+*
+*____________PERFORM VERIFICATION OF THE CLOUD WATER FIELD
+*            FOR TIME LEVEL ---> (N+1)
+*            (IF W4 < 0. -----------------> W2:= 0. )
+*
+      DO 7551 JI=1,NI
+ 7551 W2(JI)=CVMGT(0.,W4(JI),W4(JI).LT.0.)
+*     CALL SERXST (W2, 'MP', NSLBJ, NI, 0., 1., -JK-1)
+*
+*________________W2 CONTAIN CLOUD WATER FOR T(N+1)
+*
+*
+*________COMPUTE RATE OF RELEASE OF PRECIPITATION
+*
+      DO 7502 JI=1,NI
+      TEMP1 = AM(JI)
+      TEMP2 = WQ(JI)
+      TEMP3 = WE(JI)
+      TEMP4 = W2(JI)
+ 7502 WP1(JI)=FRELP(TEMP1,TEMP2,TEMP3,TEMP4,FM1(JI,JK),DELT)
+     *           * WHERE(JI)
+*
+*________PERFORM VERIFICATION OF THE VALUE OF THE RATE OF
+*        RELEASE OF PRECIPITATION.
+*
+*____________IF WP1<0.-------->WP1:=0.
+*
+      DO 7801 JI=1,NI
+ 7801 W1(JI)=CVMGT(0.,WP1(JI),WP1(JI).LE.0.)
+*     CALL SERXST (W1, 'RG', NSLBJ, NI, 0., 1., -JK-1)
+*
+*
+*____________FOR POINTS WITH RATE OF RELEASE OF PRECIPITATION
+*            EQUAL ZERO LOGICAL ARRAY LOW1 -----> .TRUE.
+*
+      DO 7802 JI=1,NI
+ 7802 LOW1(JI)=W1(JI) .EQ. 0.
+*
+*____________UPDATE ARRAY "WHERE"
+*
+      DO 7803 JI=1,NI
+ 7803 WHERE(JI)=CVMGT( 0. , WHERE(JI) , LOW1(JI) )
+*
+*____________COMPUTE NEW VALUE OF LOW1:
+*
+      DO 7804 JI=1,NI
+ 7804 LOW1(JI) = (WHERE(JI) .EQ. 0. ) .AND.  LOCOST(JI)
+*
+      DO 3714 JI=1,NI
+ 3714 if (LOW1(JI)) ILAB(JI,JK) = IVL3
+*
+*_____TIME SERIES EXTRACTION FOR FLAG FIELD
+      DO 3715 JI=1,NI
+ 3715 W5(JI) = ILAB(JI,JK)
+*     CALL SERXST (W5, 'FF', NSLBJ, NI, 0., 1., -JK-1)
+*
+*____________COMPUTE CORRECTED VALUE OF THE RATE OF RELEASE
+*            OF PRECIPITATION:
+*
+      DO 7805 JI = 1 , NI
+ 7805 WP1(JI) = CVMGT( AMAX1(FM1(JI,JK)/DELT + AM(JI) - WEVCL(JI)
+     *                          , 0. )  ,
+     *                    W1(JI)  ,         LOW1(JI)      )
+*
+*________
+*
+*
+*
+*________WRITE W2 (CONTAINING M(N+1) ) TO FM
+*
+*
+      DO 7503 JI=1,NI
+ 7503 FM(JI,JK)= CVMGT( W2(JI) , 0. , LOCOST(JI)) 
+*
+*
+*____________END OF COMPUTATIONS RELATED TO IMPLICIT
+*            SOLUTION OF THE CLOUD WATER EQUATION.
+*
+*
+*
+*____COMPUTE UPDATED PRECIPITATION RATE
+*
+*____________COPY WPP TO W1
+*
+      DO 7700 JI=1,NI
+ 7700 W1(JI)=WPP(JI)
+*
+*________UPDATE PRECIPITATION RATE
+*
+      DO 7702 JI=1,NI
+      TEMP1 = W1(JI)
+      TEMP2 = WP1(JI)
+      TEMP3 = SD(JI,JK)
+ 7702 WPP(JI)=FPRAT(TEMP1,TEMP3,TEMP2,PSM(JI),PGRAV)
+*
+*____END OF COMPUTATION OF THE NEW VALUE OF PRECIPITATION RATE
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*________COMPUTE FINAL CLOUD COVER
+*        -------------------------
+*
+*__________________COMPUTE NEW VALUE OF THE LOW1
+*
+      DO 9017  JI = 1 , NI
+ 9017 LOW1(JI) = LOW1(JI) .OR.
+     *              (LOCOST(JI) .AND. (W2(JI).EQ.0.) )
+*
+*
+      DO 9007 JI = 1 , NI
+ 9007 W5(JI) = CVMGT( 0. , BM1(JI,JK) , LOW1(JI) )
+*
+*________________COPY W5 ------> BM1
+*
+      DO 9008 JI = 1 , NI
+ 9008 BM1(JI,JK) = W5(JI)
+*
+*____
+*
+ 1000 CONTINUE
+*
+*__END OF THE MAIN VERTICAL LOOP
+*  2D SERIES STORAGE
+*     CALL SERXST (BM1, 'BM', NSLBJ, NI, 0., 1., -1)
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*____SIMPLIFIED CLASSIFICATION OF THE PRECIPITATION FORM
+*    <IF T (SURFACE) IS GT 273 , WPP IS CONSIDERED AS PRECIPITATION
+*     RATE FOR RAIN, IF T(SURFACE) IS LE 273 , WPP IS CONSIDERED AS
+*     PRECIPITATION RATE FOR SNOW>
+*
+*________COPY T(SURF) TO W1
+*
+      DO 1128 JI=1,NI
+      W1(JI)=T(JI,NK)
+ 1128 CONTINUE
+*
+*________PERFORM SIMPLIFIED CLASSIFICATION OF THE PRECIPITATION
+*        FORM.
+*
+      DO 2128 JI=1,NI
+*
+*____________RAIN:
+*
+      SRR(JI)=CVMGT(WPP(JI),0.,W1(JI).GT.273.)
+*
+*____________SNOW
+*
+      SSR(JI)=CVMGT(WPP(JI),0.,W1(JI).LE.273.)
+*
+ 2128 CONTINUE
+*
+*--------*---------*---------*---------*---------*---------*---------*--
+*
+*__END OF THE COMPUTATIONS
+*
+*
+      RETURN
+      END
+@

@@ -1,0 +1,17 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      character*32 v_interp
+      real posit,huv,htt,hww,posit_od,huv_od,htt_od,hww_od,
+     $     posit_odh,huv_odh,htt_odh,hww_odh,posit_op,hww_op
+      pointer (paposit, posit(*)), 
+     $        (pahuv, huv(*)), (pahtt, htt(*)), (pahww, hww(*)),
+     $    (papositd, posit_od(*)), 
+     $    (pahuvd, huv_od(*)), (pahttd, htt_od(*)), (pahwwd, hww_od(*)),
+     $    (papositdh, posit_odh(*)), (pahuvdh, huv_odh(*)), 
+     $    (pahttdh, htt_odh(*)), (pahwwdh, hww_odh(*)),
+     $    (papositp, posit_op(*)), (pahwwp, hww_op(*))
+*
+      common /vinterpor/ paposit,pahuv,pahtt,pahww,
+     $                   papositd,pahuvd,pahttd,pahwwd,
+     $                   papositdh,pahuvdh,pahttdh,pahwwdh,
+     $                   papositp,pahwwp
+      common /vinterpoc/ v_interp

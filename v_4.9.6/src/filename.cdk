@@ -1,0 +1,8 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      character*256 pilot_dir, pilot_f(500)
+      logical useMEtostart
+      integer npilf,ipilf,un_pil
+
+      common /fname_c/ pilot_dir, pilot_f
+      common /fname_l/ useMEtostart
+      common /fname_i/ npilf,ipilf,un_pil

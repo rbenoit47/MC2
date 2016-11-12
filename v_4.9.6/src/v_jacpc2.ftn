@@ -1,0 +1,225 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine v_jacpc2 ( r,h,s,czz,w1,nx,ny,nz,niter )
+      implicit none
+*
+      integer nx,ny,nz,niter
+      real*8 r(nx,ny,nz),  h(nx,ny,nz), w1(*), 
+     $     czz(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),nz,3)
+      real   s(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1))
+*
+#include "dynmem.cdk"
+#include "nbcpu.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+*
+      integer i, j, k, iter, unroll, np, dim, i0, j0, in, jn, spc
+      real*8 t1,t2,a,b,p1,p2,p3,xchv,hxch,con
+      pointer 
+     $  (paa , a (1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),*)),
+     $  (pab , b (1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),*)),
+     $  (pap1, p1(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),*)),
+     $  (pap2, p2(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),*)),
+     $  (pap3, p3(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1),*)),
+     $  (paxc, xchv(minx-1:maxx+1,miny-1:maxy+1,nz)),
+     $  (pahc, hxch(minx  :maxx  ,miny  :maxy  ,*)),
+     $  (paco, con(1-(niter-1):ny+(niter-1)))
+
+*---------------------------------------------------------------------- 
+*
+      dim  = niter - 1
+      spc  = (nx+2*dim)*(ny+2*dim)*nz
+      dim  = (maxx-minx+3)*(maxy-miny+3)*nz
+      paa  = loc (w1         )
+      pab  = loc (w1(  spc+1))
+      pap1 = loc (w1(2*spc+1))
+      pap2 = loc (w1(3*spc+1))
+      pap3 = loc (w1(4*spc+1))
+      paxc = loc (w1(5*spc+      1))
+      pahc = loc (w1(5*spc+  dim+1))
+      paco = loc (w1(5*spc+2*dim+1))
+      dim = niter - 1
+!$omp do
+      do k = 1, nz
+      do j = 1, ny
+      do i = 1, nx
+         hxch(i,j,k)  = h(i,j,k)
+      enddo        
+      enddo   
+      enddo   
+!$omp enddo
+*
+!$omp single
+      xchv   = 0.d0
+      con(:) = odx(1)*(odxu(1)+odxu(1))+ody(:)*(odyv(:)+odyv(:+1))
+      call rpn_comm_xch_halon (hxch,minx,maxx,miny,maxy,ldni,ldnj,
+     $                         nz,hx,hy,period_x,period_y,ldni,0,2)
+!$omp end single
+*
+      unroll = 3
+      np = (nz - 1)/unroll
+!$omp do
+      do j = 1-dim, ny+dim
+         do i = 1-dim, nx+dim
+            b(i,j,1)  = czz(i,j,1,2) - con(j)*s(i,j)
+         enddo        
+         do k = 2, np*unroll+1,unroll
+         do i = 1-dim, nx+dim
+            p3(i,j,k-1) = 1.0/ b(i,j,k-1)
+            p1(i,j,k  ) = czz(i,j,k  ,1) * p3(i,j,k-1)
+            p2(i,j,k-1) = czz(i,j,k-1,3) * p3(i,j,k-1)
+            b (i,j,k  ) = czz(i,j,k,2)-con(j)*s(i,j)-czz(i,j,k,1)
+     $                    *p2(i,j,k-1)
+
+            p3(i,j,k  ) = 1.0/ b(i,j,k)
+            p1(i,j,k+1) = czz(i,j,k+1,1) * p3(i,j,k)
+            p2(i,j,k  ) = czz(i,j,k  ,3) * p3(i,j,k)
+             b(i,j,k+1) = czz(i,j,k+1,2)-con(j)*s(i,j)-czz(i,j,k+1,1)
+     $                    *p2(i,j,k)
+
+            p3(i,j,k+1) = 1.0/ b(i,j,k+1)
+            p1(i,j,k+2) = czz(i,j,k+2,1) * p3(i,j,k+1)
+            p2(i,j,k+1) = czz(i,j,k+1,3) * p3(i,j,k+1)
+             b(i,j,k+2) = czz(i,j,k+2,2)-con(j)*s(i,j)-czz(i,j,k+2,1)
+     $                    *p2(i,j,k+1)
+         enddo        
+         enddo   
+         do k = np*unroll+2,nz
+         do i = 1-dim, nx+dim
+            p3(i,j,k-1) = 1.0/ b(i,j,k-1)
+            p1(i,j,k  ) = czz(i,j,k  ,1) * p3(i,j,k-1)
+            p2(i,j,k-1) = czz(i,j,k-1,3) * p3(i,j,k-1)
+             b(i,j,k  ) = czz(i,j,k,2)-con(j)*s(i,j)-czz(i,j,k,1)
+     $                    *p2(i,j,k-1)
+         enddo        
+         enddo   
+         do i = 1-dim, nx+dim
+            p3(i,j,nz)  = 1.0d0 / b(i,j,nz)
+         enddo        
+      enddo   
+!$omp enddo
+*
+      i0 = 1  - dim*(1-west )
+      j0 = 1  - dim*(1-south)
+      in = nx + dim*(1-east )
+      jn = ny + dim*(1-north)
+*
+      do 10 iter = 1, niter
+*
+         unroll = 2
+         np = (nz - 1)/unroll
+!$omp do
+         do j = j0, jn
+            do i = i0, in
+               a(i,j,1) = hxch(i,j,1) - s(i,j)*(
+     $           (xchv(i+1,j,1)*odxu(1)  +xchv(i-1,j,1)*odxu(1))*odx(1)
+     $          +(xchv(i,j+1,1)*odyv(j+1)+xchv(i,j-1,1)*odyv(j))*ody(j))
+            end do
+            do k = 2, np*unroll+1,unroll
+            do i = i0, in
+               t1 = hxch(i,j,k) - s(i,j)*(
+     $           (xchv(i+1,j,k)*odxu(1)  +xchv(i-1,j,k)*odxu(1))*odx(1)
+     $          +(xchv(i,j+1,k)*odyv(j+1)+xchv(i,j-1,k)*odyv(j))*ody(j))
+               a(i,j,k) = t1 - p1(i,j,k)*a(i,j,k-1)
+               t2 = hxch(i,j,k+1) - s(i,j)*(
+     $       (xchv(i+1,j,k+1)*odxu(1  )+xchv(i-1,j,k+1)*odxu(1))*odx(1)
+     $      +(xchv(i,j+1,k+1)*odyv(j+1)+xchv(i,j-1,k+1)*odyv(j))*ody(j))
+               a(i,j,k+1) = t2 - p1(i,j,k+1)*a(i,j,k)
+            end do
+            end do
+            do k = np*unroll+2,nz
+            do i = i0, in
+               t1 = hxch(i,j,k) - s(i,j)*(
+     $           (xchv(i+1,j,k)*odxu(1)  +xchv(i-1,j,k)*odxu(1))*odx(1)
+     $          +(xchv(i,j+1,k)*odyv(j+1)+xchv(i,j-1,k)*odyv(j))*ody(j))
+               a(i,j,k) = t1 - p1(i,j,k)*a(i,j,k-1)
+            end do
+            end do
+         end do
+!$omp enddo
+*
+         unroll = 3
+         np = (nz - 1)/unroll
+*
+         if ( iter .lt. niter ) then    
+* 
+!$omp do
+            do j = j0,jn
+               do i = i0,in
+                  xchv(i,j,nz) = a(i,j,nz) * p3(i,j,nz)
+               end do
+               do k = (nz-1),(nz-1)-np*unroll+1,-unroll
+               do i = i0,in
+                  xchv(i,j,k  )= a(i,j,k  )*p3(i,j,k  ) 
+     $                        - p2(i,j,k  )*xchv(i,j,k+1)
+                  xchv(i,j,k-1)= a(i,j,k-1)*p3(i,j,k-1) 
+     $                        - p2(i,j,k-1)*xchv(i,j,k  )
+                  xchv(i,j,k-2)= a(i,j,k-2)*p3(i,j,k-2) 
+     $                        - p2(i,j,k-2)*xchv(i,j,k-1)
+               end do
+               end do
+               do k = (nz-1)-np*unroll,1,-1
+               do i = i0,in
+                 xchv(i,j,k  )= a(i,j,k  )*p3(i,j,k  ) 
+     $                       - p2(i,j,k  )*xchv(i,j,k+1)
+               end do
+               end do
+            end do
+!$omp enddo
+*
+!$omp do
+            do k = 1, nz
+               if (south.gt.0) then
+                  do i = i0,in
+                     xchv(i,0,k) = xchv(i,1,k)
+                  enddo
+               endif
+                if (west.gt.0) then
+                  do j = j0,jn
+                     xchv(0,j,k) = xchv(1,j,k)
+                  enddo
+                endif
+               if (east.gt.0) then
+                  do j = j0,jn
+                     xchv(ldni,j,k) = xchv(ldni-1,j,k)
+                  enddo
+               endif
+               if (north.gt.0) then
+                  do i = i0,in
+                    xchv(i,ldnj,k) = xchv(i,ldnj-1,k)
+                  enddo
+               endif
+            end do
+!$omp enddo
+*
+         else
+*
+!$omp do
+            do j = 1, ny
+               do i = 1, nx
+                  r(i,j,nz) = a(i,j,nz) * p3(i,j,nz)
+               end do
+               do k = (nz-1),(nz-1)-np*unroll+1,-unroll
+               do i = 1, nx
+                  r(i,j,k  )= a(i,j,k  )*p3(i,j,k  ) 
+     $                      - p2(i,j,k  )*r(i,j,k+1)
+                  r(i,j,k-1)= a(i,j,k-1)*p3(i,j,k-1) 
+     $                      - p2(i,j,k-1)*r(i,j,k  )
+                  r(i,j,k-2)= a(i,j,k-2)*p3(i,j,k-2) 
+     $                      - p2(i,j,k-2)*r(i,j,k-1)
+               end do
+               end do
+               do k = (nz-1)-np*unroll,1,-1
+               do i = 1, nx
+                  r(i,j,k)= a(i,j,k)*p3(i,j,k) - p2(i,j,k)*r(i,j,k+1)
+               end do
+               end do
+            end do
+!$omp enddo
+         endif
+*
+ 10   continue
+*
+*----------------------------------------------------------------------
+      return
+      end

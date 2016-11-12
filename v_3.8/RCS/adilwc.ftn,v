@@ -1,0 +1,115 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R ADILWC
+*
+      SUBROUTINE ADILWC(LWC, T, Q, OMGA, DT, PS, SE, NI, NN, NK)
+#include "impnone.cdk"
+*
+      REAL LWC(NI,NK), T(NN,NK), Q(NN,NK), OMGA(NI,NK)
+      REAL DT, PS(NI), SE(NI,NK)
+      INTEGER NI,NN,NK,j,k
+      REAL TE,QE,TVE,QSAT,BETA,GAMAS,DSGDZ
+*
+*Author
+*          C.Girard (1996)
+*Objet
+*          To calculate the adiabatic liquid water content produced
+*          during a saturated parcel ascent: dz = - omga*dt/dsgdz
+*
+*          Order of magnitude: dlwc/dz = 2.5 ppm/m
+*
+*                   LWC = GAMAS*dz/(L/cp)
+*
+*                 GAMAS = GAMAD*(1-ALFA/BETA)*BETA/(1+BETA)
+*                 GAMAD = grav/cp
+*
+*                  BETA = L/cp dqs/dT
+*                  BETA = eps*L*L/Rd/cp * qs/T/Tv
+*                  BETA =    1.35e7     * qs/T/Tv
+*                  ALFA = -L/Rd/Tv dqs/dlnp = L*qs/Rd/T
+*                  ALFA/BETA = cp/eps/L * T
+*                  ALFA/BETA =  6.46e-4 * T
+*
+*Arguments
+*
+*          - Output -
+* LWC      liquid water content (kg water per kg air)
+*          - Input -
+* SE       sigma levels
+* T        temperature
+* Q        specific humidity
+* OMGA     (1/ps) dp/dt
+* DT       timestep
+* PS       surface pressure
+* NI       number of rows
+* NN       number of rows for T and Q
+* NK       number of layers
+*
+**
+*
+#include "consphy.cdk"
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+      DO k=1,NK
+         DO j=1,NI
+*
+            TE=0.5*(T(j,k)+T(j,k+1))
+            QE=0.5*(Q(j,k)+Q(j,k+1))
+            TVE=FOTVT(TE,QE)
+*
+            QSAT=FOQST(TE,SE(j,k)*PS(j))
+            BETA=1.35E7*QSAT/(TE*TVE)
+            GAMAS=(GRAV/CPD)*(1.-6.46E-4*TE)*BETA/(1.+BETA)
+*
+            DSGDZ=GRAV*SE(j,k)/(RGASD*TVE)
+*
+            LWC(j,k)=-GAMAS*OMGA(j,k)*DT/(DSGDZ*2.5E3)
+            LWC(j,k)=max(LWC(j,k),0.)
+*
+         ENDDO
+      ENDDO
+
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

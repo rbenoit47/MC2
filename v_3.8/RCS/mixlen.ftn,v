@@ -1,0 +1,295 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P MIXLEN
+*
+*
+#include "phy_macros_f.h"
+      SUBROUTINE MIXLEN( RIF, ZN, ZE, T, Q, EN, Z, S, PS,
+     1                   N, NK, KOUNT,trnch)
+*
+*
+#include "impnone.cdk"
+*
+	integer trnch
+      INTEGER N,NK
+*
+      INTEGER KOUNT
+      REAL RIF(N,NK)
+      REAL ZN(N,NK), ZE(N,NK), T(N,NK), Q(N,NK)
+      REAL EN(N,NK), Z(N,NK), S(N,NK), PS(N)
+*
+*
+*
+*Author
+*          S. Belair (November 1996)
+*
+*Revision
+* 001       B. Bilodeau (January 2001) - Automatic arrays
+*
+*Object
+*           Calculates the mixing length ZN and the dissipation
+*           length ZE based on the Bougeault and Lacarrere
+*           method.
+*
+*Arguments
+*                        -Output-
+*
+* ZN        Mixing length
+* ZE        Dissipation length
+*
+*                         -Input-
+*
+* T         Temperature
+* Q         Specific humidity
+* EN        Turbulent kinetic energy
+* Z         Height of the sigma levels
+* S         Sigma levels
+* PS        Surface pressure
+* N,NK      Horizontal and vertical dimensions
+*
+*
+      INTEGER J, K, KI
+*
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( KIK      , INTEGER , (N,NK   ) )
+*
+      AUTOMATIC ( THVS     , REAL    , (N      ) )
+      AUTOMATIC ( BETA     , REAL    , (N      ) )
+      AUTOMATIC ( PRES     , REAL    , (N,NK   ) )
+      AUTOMATIC ( LUP      , REAL    , (N,NK   ) )
+      AUTOMATIC ( LDOWN    , REAL    , (N,NK   ) )
+      AUTOMATIC ( DELTHK   , REAL    , (N,NK   ) )
+      AUTOMATIC ( SLOPE    , REAL    , (N,NK   ) )
+      AUTOMATIC ( DELEN    , REAL    , (N,NK   ) )
+      AUTOMATIC ( DELZUP   , REAL    , (N,NK   ) )
+      AUTOMATIC ( DELZDOWN , REAL    , (N,NK   ) )
+      AUTOMATIC ( TH       , REAL    , (N,NK   ) )
+      AUTOMATIC ( BUOYSUM  , REAL    , (N,NK,NK) )
+*
+************************************************************************
+*
+#include "consphy.cdk"
+#include "scfrst.cdk"
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*
+*
+*                          Calculate the pressure and the
+*                          potential temperature
+*
+      DO K=1,NK
+      DO J=1,N
+        PRES(J,K) = S(J,K) * PS(J)
+        TH(J,K) = ( PRES(J,K)/100000. )**(-CAPPA) * T(J,K)
+      END DO
+      END DO
+*
+*
+*                          ... the virtual potential temperature
+*                              at the surface and the surface
+*                              buoyancy term BETA
+*
+      DO J=1,N
+        THVS(J) = FOTVT( TH(J,NK), Q(J,NK) )
+        BETA(J) = GRAV / THVS(J)
+      END DO
+*
+*
+*
+*                      --------- FIND THE UPWARD MIXING LENGTH
+*                                (LUP)
+*
+      DO KI=1,NK
+      DO J=1,N
+        KIK(J,KI) = 1
+      END DO
+      END DO
+
+      DO K=1,NK
+      DO KI=1,NK
+      DO J=1,N
+         BUOYSUM(J,KI,K) = 0.0
+      END DO
+      END DO
+      END DO
+*
+      DO K=NK-1,2,-1
+      DO KI=2,NK-1
+      DO J=1,N
+        IF (KI.EQ.K) BUOYSUM(J,KI,K+1) = 0.0
+        BUOYSUM(J,KI,K) =
+     1           BUOYSUM(J,KI,K+1)     +
+     1       0.5*( Z(J,K-1)-Z(J,K) ) *
+     1   ( TH(J,K-1) + TH(J,K) - 2.*TH(J,KI) )
+*
+        IF (BUOYSUM(J,KI,K).GT.EN(J,KI)/BETA(J).AND.
+     1      KIK(J,KI).EQ.1.AND.K.LE.KI)
+     1                       KIK(J,KI) = K
+      END DO
+      END DO
+      END DO
+*
+*
+*
+      DO K=2,NK
+      DO J=1,N
+        LUP(J,K)     = Z(J,KIK(J,K)) - Z(J,K)
+        DELTHK(J,K)  = TH(J,KIK(J,K)) - TH(J,K)
+        SLOPE(J,K)   = ( TH(J,KIK(J,K)-1) - TH(J,KIK(J,K) ) ) /
+     1                 (  Z(J,KIK(J,K)-1) -  Z(J,KIK(J,K) ) )
+        SLOPE(J,K)   = MAX( SLOPE(J,K), 1.E-6 )
+        DELEN(J,K)   = EN(J,K) / BETA(J) - BUOYSUM(J,K,KIK(J,K)+1)
+        DELZUP(J,K)  = -DELTHK(J,K) +
+     1               SQRT(DELTHK(J,K)*DELTHK(J,K) +
+     1                    2.*SLOPE(J,K)*DELEN(J,K) )
+        DELZUP(J,K)  = DELZUP(J,K) / SLOPE(J,K)
+        LUP(J,K)     = LUP(J,K) + DELZUP(J,K)
+        LUP(J,K)     = MAX( LUP(J,K), 1. )
+      END DO
+      END DO
+*
+*
+      DO J=1,N
+        LUP(J,1) = LUP(J,2)
+      END DO
+*
+*
+*
+*                             Same work but for the downward
+*                             free path
+*
+      DO KI=1,NK
+      DO J=1,N
+        KIK(J,KI) = 1
+      END DO
+      END DO
+*
+*
+*
+      DO K=2,NK-1
+      DO KI=2,NK-1
+      DO J=1,N
+        IF (KI.EQ.K) BUOYSUM(J,KI,K-1) = 0.0
+        BUOYSUM(J,KI,K) = BUOYSUM(J,KI,K-1) +
+     1       0.5*( Z(J,K) - Z(J,K+1) ) *
+     1       ( 2.*TH(J,KI) - TH(J,K) - TH(J,K+1) )
+*
+        IF (BUOYSUM(J,KI,K).GT.EN(J,KI)/BETA(J).AND.
+     1      KIK(J,KI).EQ.1.AND.K.GE.KI)
+     1                                  KIK(J,KI) = K
+        IF (K.EQ.NK-1.AND.KIK(J,KI).EQ.1) KIK(J,KI) = NK-1
+      END DO
+      END DO
+      END DO
+*
+*
+      DO J=1,N
+        KIK(J,1) = 1
+      END DO
+*
+*
+      DO K=1,NK-1
+      DO J=1,N
+        LDOWN(J,K)    = Z(J,K) - Z(J,KIK(J,K))
+        DELTHK(J,K)   = TH(J,K) - TH(J,KIK(J,K))
+        SLOPE(J,K)    = ( TH(J,KIK(J,K)) - TH(J,KIK(J,K)+1) ) /
+     1                 (  Z(J,KIK(J,K)) -  Z(J,KIK(J,K)+1) )
+        SLOPE(J,K)    = MAX( SLOPE(J,K), 1.E-6 )
+        DELEN(J,K)    = EN(J,K)/BETA(J) - BUOYSUM(J,K,KIK(J,K)-1)
+        DELZDOWN(J,K) = -DELTHK(J,K) + SQRT (
+     1                   DELTHK(J,K)*DELTHK(J,K) +
+     1                   2.*SLOPE(J,K)*DELEN(J,K) )
+        DELZDOWN(J,K) = DELZDOWN(J,K) / SLOPE(J,K)
+        LDOWN(J,K)    = LDOWN(J,K) + DELZDOWN(J,K)
+        LDOWN(J,K)    = MIN( LDOWN(J,K), Z(J,K) )
+        LDOWN(J,K)    = MAX( LDOWN(J,K), 1. )
+      END DO
+      END DO
+*
+*
+      DO J=1,N
+        LDOWN(J,NK)  = LDOWN(J,NK-1)
+      END DO
+*
+*
+*
+*
+*                            Calculate the mixing length ZN
+*                            and the dissipation length from the
+*                            LUP and LDOWN results
+*
+*
+      DO K=1,NK
+      DO J=1,N
+        ZN(J,K) = MIN( LUP(J,K), LDOWN(J,K) )
+        ZN(J,K) = MIN(  ZN(J,K), Z(J,K) )
+        ZE(J,K) =
+     1      ZN(J,K) * (1.-RIF(J,K)) / (1.-2.*RIF(J,K))
+      END DO
+      END DO
+*
+*
+      DO J=1,N
+        ZN(J,NK-1) = MIN( ZN(J,NK-1), 0.35*Z(J,NK-1) )
+        ZN(J,NK)   = MIN( ZN(J,NK)  , 0.35*Z(J,NK)   )
+        ZE(J,NK-1) = MIN( ZE(J,NK-1), 0.35*Z(J,NK-1) )
+        ZE(J,NK)   = MIN( ZE(J,NK)  , 0.35*Z(J,NK)   )
+      END DO
+*
+*
+      DO K=1,NK
+      DO J=1,N
+        ZN(J,K) = MAX( ZN(J,K), 1.E-6 )
+        ZE(J,K) = MAX( ZE(J,K), 1.E-6 )
+      END DO
+      END DO
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

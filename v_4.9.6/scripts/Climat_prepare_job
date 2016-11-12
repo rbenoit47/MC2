@@ -1,0 +1,184 @@
+ #
+ # Mode CLIMAT: On prepare la job a lancer.
+ # Ce code est concu pour etre appelle en mode
+ # "inline" par la scrip Um_launch de GEM/DM
+ #
+ cd ${REPCFG}
+ #
+ # Verifier d'abord les conditions d'exeption
+ #
+ #
+ # Revisions...
+ #    001 - june        2002: Climat_var_test added (Katja Winger)
+ #
+ #
+ if [ "$execdir" ] ; then
+  echo "WARNING: Renaming execdir for integrity"
+  unset execdir
+ fi
+ #
+ _status=OK
+ fst89=0 
+ d2z=1
+ #
+ . Climat_var_test || exit 2
+ #
+ if [ "$startdate" ] ; then
+  if [ `echo $startdate | wc -w` != 4 ] ; then _status=ABORT ; fi
+ else _status=ABORT ; fi
+ if [ "$enddate" ] ; then
+  if [ `echo $enddate | wc -w` != 4 ] ; then _status=ABORT ; fi
+ else _status=ABORT ; fi
+ if [ ! $interval ] ; then _status=ABORT ; fi
+ #
+ if [ "$_status" = "ABORT" ] ; then
+  echo ERROR : cannot subdivide climatic job
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+  exit 2
+ fi
+ #
+ echo `pwd`
+ if ! [ -f output.cfg -a -f ${MODEL}_settings.cfg ] ; then 
+  echo "ERROR : configuration files output.cfg and/or ${MODEL}_settings.cfg missing"
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+  exit 3
+ fi
+ #
+ # Check if first job and calculate climatic objective
+ #
+ if [ ! "$continue" ] ; then
+  #
+  # In prevjob mode, add number of previously treated steps 
+  #
+  if [ "$prevjob" ] ; then
+   if [ "$newdate" ] ; then
+    set $newdate
+    compltime=$(( `cdate -gj $newdate` - `cdate -gj $startdate` ))
+    stepout=$(( $compltime * 3600 / $deltat ))
+    #
+    # Clean config file for relaunch
+    #
+    sed "s/prevjob=.*/prevjob=\;/" ${config_file}.cfg > DOT.CFG_TMP
+    sed "s/newdate=.*/newdate=\;/" DOT.CFG_TMP > ${config_file}.cfg
+    #
+   else
+    echo "ERROR: Please specify \$newdate when using prevjob"
+    echo "       where \$newdate= where to begin."
+    echo "       Also keep \$startdate of prevjob." 
+    echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+    exit 4
+   fi
+  else
+   set $startdate
+  fi
+  #
+  objmonth=$(( $2 + $interval ))
+  objaddyears=$(( $objmonth / 12 ))
+  #
+  if [ $(( objmonth %= 12 )) -eq 0 ] ; then
+   objmonth=12
+   objaddyears=$(( $objaddyears - 1 ))
+  fi
+  #
+  objdate="$(( $1 + ${objaddyears:-0} )) $objmonth $3 $4"
+  diffdate=$(( `cdate -gj $objdate` - `cdate -gj $startdate` ))
+          objstep=$(( $diffdate * 3600 / $deltat ))
+  #
+  if [ ${2} -lt 10 ] ; then startmonth="0${2#0}" ; fi
+  if [ ${objmonth} -lt 10 ] ; then objmonth="0${objmonth#0}" ; fi
+  #
+  if [ ${interval} -gt 1 ] ; then
+   exp=${exp%_*}_${1}${startmonth:-$2}-${objmonth}
+  else
+   exp=${exp%_*}_${1}${startmonth:-$2}
+  fi
+  #
+ else
+  #
+  objstep=$step_total
+  objhours=$(( $step_total * $deltat / 3600 ))
+  objdate=$(( `cdate -gj $startdate` + $objhours ))
+  objdate=` cdate -jg $objdate `
+  #
+ fi
+ #
+ # Update config files for possible relaunch
+ #
+ echo ${ECHOARG} "\n Modification to ${config_file}.cfg..."
+ grep -v "[a-z]exp=" ${config_file}.cfg | grep "exp="
+ grep "/step_total=" ${config_file}.cfg
+ echo " ...becomes..."
+ sed "/[a-z]exp=/!s/exp=.*/exp=$exp\;/" ${config_file}.cfg > DOT.CFG_TMP
+ sed "s/step_total=.*/step_total=${objstep}\;/" DOT.CFG_TMP > ${config_file}.cfg
+ rm -f DOT.CFG_TMP
+ grep -v "[a-z]exp=" ${config_file}.cfg | grep "exp="
+ grep "/step_total=" ${config_file}.cfg
+ #
+ echo ${ECHOARG} "\n Modification to output.cfg..."
+ grep "steps=" output.cfg | grep ",[0-9]*,"
+ echo " ...becomes..."
+ sed "/steps=/s/,[0-9]*,/,${objstep},/" output.cfg > OUTPUT.CFG_TMP
+ #
+ if [ "${stepout}" ] ; then
+  sed "/steps=/s/<[0-9]*,/<${stepout},/" OUTPUT.CFG_TMP > output.cfg
+  rm -f OUTPUT.CFG_TMP
+ else
+  mv OUTPUT.CFG_TMP output.cfg
+ fi
+ grep "steps=" output.cfg | grep ",[0-9]*,"
+ #
+ echo ${ECHOARG} "\n Modification to ${MODEL}_settings.cfg..."
+ grep "Step_total *= [0-9]*" ${MODEL}_settings.cfg
+ echo " ...becomes..."
+ sed "s/Step_total *= [0-9]*/Step_total  = ${objstep}/p" ${MODEL}_settings.cfg > SETTINGS.CFG_TMP 
+ mv SETTINGS.CFG_TMP ${MODEL}_settings.cfg
+ grep "Step_total *= [0-9]*" ${MODEL}_settings.cfg
+ echo ""
+ #
+ # Name of cfs archive
+ #
+ if [ "${fularch}" ]; then
+  fularch=${exp}step${objstep}
+  echo "WARNING: renaming fularch to $fularch"
+ fi
+ #
+ # Prepare for next job
+ #
+ set $objdate
+#nextmonth=$(( $2 + $interval )) 
+ nextmonth=`expr $2 + $interval`
+ addyears=$(( $nextmonth / 12 ))
+ #
+ if [ $(( nextmonth %= 12 )) -eq 0 ] ; then
+  nextmonth=12
+  addyears=$(( $addyears - 1 ))
+ fi
+ #
+ nextdate="$(( $1 + ${addyears:-0} )) $nextmonth $3 $4"
+ if [ `cdate -gj $nextdate` -le `cdate -gj $enddate` ] ; then
+  #
+  diffdate=$(( `cdate -gj $nextdate` - `cdate -gj $startdate` ))
+  nextstep=$(( $diffdate * 3600 / $deltat ))
+  #
+  if [ ${2} -lt 10 ] ; then objmonth="0${2#0}" ; fi
+  if [ ${nextmonth} -lt 10 ] ; then nextmonth="0${nextmonth#0}" ; fi
+  #
+  if [ ${interval} -gt 1 ] ; then
+   nextname=${exp%_*}_${1}${objmonth:-$2}-${nextmonth}
+  else
+   nextname=${exp%_*}_${1}${objmonth:-$2}
+  fi
+  #
+ fi
+ #
+ if [ "$continue" ] ; then prevjob=$continue ; fi
+ if [ ${delayed} -eq 0 ]; then delayed=1 ; fi
+ #
+ if [ ${d2z_dplusp} -gt 0 ]; then
+   echo ${ECHOARG} "\nThe d2z_dplusp variable is always turned off in climate mode"
+   echo ${ECHOARG} "as it interferes with the strip_phy and diagnos variables\n"
+   d2z_dplusp=0
+ fi
+ #
+ cd ${ici}
+ #

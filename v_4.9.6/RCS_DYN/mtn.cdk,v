@@ -1,0 +1,34 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos
+      real mtn_heigth,mtn_flo,mtn_thrate
+      real blb_zp
+      integer blb_xp,blb_xs,blb_zs
+      character mtn_typ
+*
+      common /mtn/ mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos,mtn_heigth,
+     $             mtn_thrate,mtn_flo,
+     $             blb_zp,blb_xs,blb_zs,blb_xp,mtn_typ
+*
+@

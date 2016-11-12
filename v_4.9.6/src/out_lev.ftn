@@ -1,0 +1,91 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine out_lev (intlev,nl,pres,prt,height,ng,nk,nkfout)
+      implicit none
+*
+      integer nl,ng,nk,nkfout
+      real intlev(*),pres(*),prt(ng,nk),height(*)
+*
+#include "yomdyn1.cdk"
+#include "sor.cdk"
+#include "partopo.cdk"
+*
+      integer i,j,k,cnt,err
+      real upperl,upperl_g
+*
+*----------------------------------------------------------------------
+*
+      if (levtyp.eq.'P') then
+*
+         do k=1,nkfout
+            if (pres(k).lt.0.) goto 10
+         end do
+ 10      nl = k-1
+         if (nl.lt.1) return
+*
+         upperl=200000.
+         do i=1,ng    
+            upperl = min (upperl,prt(i,nk))
+         end do
+         call RPN_COMM_allreduce (upperl, upperl_g, 1, "MPI_REAL", 
+     $                                    "MPI_MAX", "GRID", err )
+         upperl = upperl_g
+         upperl = real(int(upperl/100.)+5)
+         call sort (pres,nl)
+         cnt=0
+         do i=nl,1,-1
+            if (pres(i).ge.upperl) then
+               cnt=cnt+1
+               intlev(cnt) = pres(i)
+            endif
+         end do
+         nl = cnt
+         call sort (intlev,nl)
+         if (myproc.eq.0) then
+            write (6,990) upperl
+            do k=1,nl
+               print '(2x,a8,i3,5x,f9.2)', 'Level # ',k,intlev(k)
+            end do
+         endif
+*
+      elseif (levtyp.eq.'H') then
+*
+         do k=1,nkfout
+            if (height(k).lt.0.) goto 20
+         end do
+ 20      nl = k-1
+         if (nl.lt.1) return
+*
+         upperl=htop
+
+         call sort (height,nl)
+         cnt=0
+         do i=1,nl
+            if (height(i).le.upperl) then
+               cnt=cnt+1
+               intlev(cnt) = height(i)
+            endif
+         end do
+         nl = cnt
+         call sort (intlev,nl)
+         if (myproc.eq.0) then
+            write (6,991) upperl
+            do k=1,nl
+               print '(2x,a8,i3,5x,f9.2)', 'Level # ',k,intlev(k)
+            end do
+         endif
+*     
+      endif
+*
+ 990  format ( ' ------------------------------------------------'/
+     $         ' MINIMUM PRESSURE FOUND:',f10.2,' hPa'/
+     $         ' VERTICAL INTERPOLATION WILL BE PERFORMED'/
+     $         ' ON THE FOLLOWING PRESSURE LEVELS:')
+ 991  format ( ' ------------------------------------------------'/
+     $         ' MAXIMUM HEIGHT FOUND:',f10.2,' m'/
+     $         ' VERTICAL INTERPOLATION WILL BE PERFORMED'/
+     $         ' ON THE FOLLOWING HEIGHT LEVELS:')
+*
+*----------------------------------------------------------------------
+*
+      return
+      end

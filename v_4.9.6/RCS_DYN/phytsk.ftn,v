@@ -1,0 +1,130 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r phytsk -- Takes care of the multitasking
+*
+      subroutine phytsk (kount,geobus,geosize,nis,njs,nks)
+      implicit none
+*
+      integer kount,geosize,nis,njs,nks
+      real geobus(geosize)
+*
+*AUTHOR   Robert Benoit / Michel Desgagne     Apr   1993
+*
+*REVISION
+*001      B. Bilodeau (Feb 1999) - Entry bus
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (phytsk)
+*     This routine is taking care of the multitasking coordination.
+*     All common must therefore be initializes before calling physlb.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*    geobus     I    R     A  Geophysical fields from the analysis
+*    geosize    I    I     S  Size of array geobus
+*    kount      I     I    S  timestep
+*    nis        I     I    S  first horizontal dimension
+*    njs        I     I    S  second horizontal dimension
+*    nks        I     I    S  vertical dimension
+*
+*IMPLICIT
+*
+#include "lesbus.cdk"
+#include "physcom.cdk"
+#include "physnml.cdk"
+#include "lcldim.cdk"
+#include "lun.cdk"
+#include "phymem.cdk"
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+*
+*MODULES
+*
+**
+      integer  open_db_file,close_db_file,rewind_db_file
+      external open_db_file,close_db_file,rewind_db_file
+*
+      integer njdone,i,j,icpu,err,xnerr,id,mul,cnt
+      real geofld
+      pointer (pageofld,geofld(*))
+*
+*----------------------------------------------------------------------
+*
+      njdone=0
+*
+      call serset('HEURE',kount*dt/3600.,1,xnerr)
+*
+      if (kount.eq.0) then
+*
+         call hpalloc (pageofld,geosize,err,1)  
+*
+         do id =1,geotop
+         do mul=1,geopar(id,3)
+            cnt=0
+            do j=gc_ld(3,myproc),gc_ld(4,myproc)
+            do i=gc_ld(1,myproc),gc_ld(2,myproc)
+               cnt=cnt+1
+               geofld(geopar(id,1)+(mul-1)*ldni*ldnj+cnt-1)=
+     $         geobus(geopar(id,1)+(mul-1)*gni*gnj+(j-1)*gni+i-1)
+            end do
+            end do
+         end do
+         end do
+*
+      endif
+*
+      if (.not.incore) then
+         xnerr = open_db_file   (un_gbusper)
+         xnerr = rewind_db_file (un_gbusper)
+      endif
+*
+!$omp parallel
+!$omp do
+      do icpu=1,npeOpenMP
+      call physlb (icpu,njdone,kount,
+     $          fu0,fv0,fsw0,ft0,fes0,fcl0,fum,fvm,ftm,fesm,fclm,
+     $          ttrad,tugwd,tvgwd,thudifv,ttdifv,tudifv,tvdifv,twdifv,
+     $          thucond,ttcond,cltend,lebus,geofld,geosize,
+     $          phyobus,phyobusc,prt,dez,sfcpsm,area,nis,njs,nks)
+      end do
+!$omp enddo
+!$omp end parallel
+*
+      if (.not.incore) then
+         xnerr = close_db_file (un_gbusper)
+      endif
+*
+      if (kount.eq.0) call hpdeallc(pageofld,err,1)
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+@

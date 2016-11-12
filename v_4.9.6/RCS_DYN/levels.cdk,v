@@ -1,0 +1,34 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer maxdynlv
+      parameter (maxdynlv = 1000)
+*
+      real zt(maxdynlv),ztr(maxdynlv),zm(maxdynlv),kh(maxdynlv),
+     $     nu(maxdynlv),b0t(maxdynlv,2),b0w(maxdynlv,2),
+     $     b0m(maxdynlv,2),endlvlr
+      common /levelsr/ zt,ztr,zm,kh,nu,endlvlr
+      common /b0r/ b0t,b0w,b0m
+*
+
+@

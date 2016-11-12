@@ -1,0 +1,68 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r cxxpar -- Computes parameters c00 to c14
+*
+      subroutine cxxpar
+      implicit none
+*
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+*
+      real*8 pt5,one
+      parameter(pt5=0.5d0,one=1.0d0)
+*---------------------------------------------------------------
+*
+* hydrostatic approximation: gnnohyd = 0
+* Boussinesq  approximation: gnbousq = 0
+* homogeneous fluid approx.: gnhomog = 0
+*
+* - modify these two at your own risk:
+*     initial conditions must be prepared consistently !
+* - you may not set gnhomog=0 and gnnohyd=0 simultaneously !
+*
+      gnbousq = 1
+      gnhomog = 1
+*
+      if (theocase.eq.'BROOK') gnbousq = 0
+      if (theocase.eq.'BROOK') gnhomog = 0
+*
+      c00  = -(one-cappa_8)             *dble(gnbousq)
+      c00t = -(one-cappa_8)
+      c01  =  pt5*grav_8*(one-cappa_8)  *dble(gnbousq)
+      c01t =  grav_8*(one-cappa_8)
+      c02  =  pt5 / grav_8              *dble(gnbousq)
+      c03  =  one                                     *dble(gnnohyd)
+      c04  =  one / grav_8              *dble(gnbousq)
+      c05  =  one / cpd_8               *dble(gnbousq)
+      c06  =  one                                     *dble(gnhomog)
+      c11  =  cappa_8/(one-cappa_8)     *dble(gnbousq)
+      c13  =  one / grav_8              *dble(gnbousq)
+      c14  =  one                       *dble(gnbousq)
+*
+*---------------------------------------------------------------
+      return
+      end
+@

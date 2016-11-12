@@ -1,0 +1,62 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r imhrdif
+*
+      subroutine imhrdif (wrk)
+      implicit none
+*
+      real wrk(*)
+**
+#include "yomdyn1.cdk"
+#include "dynmem.cdk"
+#include "levels.cdk"
+*
+      integer i,j,k,n,err
+*----------------------------------------------------------------------
+*
+      if ((kh(1).lt.1.0e-10).and.(hord_zspng.eq.0)) return
+* 
+      if (hord_fuv.gt.0.) then
+      call diffxy2  (up, wrk,minx,maxx,miny,maxy,nk,0,1,0,hord_fuv,kh)
+      call diffxy2  (vp, wrk,minx,maxx,miny,maxy,nk,1,0,0,hord_fuv,kh)
+      endif
+      if (hord_fww.gt.0.) then
+      call diffxy2  (swp,wrk,minx,maxx,miny,maxy,nk,1,1,0,hord_fww,kh)
+      endif
+      if (hord_ftt.gt.0.)
+     $call diffxy2  (tpp,wrk,minx,maxx,miny,maxy,nk,1,1,0,hord_ftt,kh)
+      if (hord_fhu.gt.0.)
+     $call diffxy2  (hmp,wrk,minx,maxx,miny,maxy,nk,1,1,0,hord_fhu,kh)
+
+      if (hord_ftr.gt.0.) then
+      do n=1,ntr
+         call diffxy2(clp(1-hx,1-hy,1,n),wrk,minx,maxx,miny,maxy,nk,
+     $                                            1,1,0,hord_ftr,kh)
+      end do
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

@@ -1,0 +1,102 @@
+#!/bin/ksh
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+     -rep      "output"  ""    "[output directory]"\
+     -nbf      "0"       "0"   "[nb of files to re-assemble]"\
+     -fst89    "0"       "1"   "[produce older 89 FST files]"\
+     -prefix   ""        ""    "[added prefix to output file names]"\
+     -split    "0"       "1"   "[bemol is asked to produce coarse and core outputs]"\
+  ++ $*`
+#
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+if [ ${fst89} -gt 0 ] ; then 
+  reassembleur=bemol89
+  which ${reassembleur} 1> /dev/null 2>&1
+  if [ $? -gt 0 ] ; then
+    echo ${ECHOARG} "\n $reassembleur not available on `hostname` ; reverting to bemol2000\n"
+    reassembleur=bemol2000
+  fi
+else
+  reassembleur=bemol2000
+fi
+#
+which ${reassembleur} 1> /dev/null 2>&1
+if [ $? -gt 0 ] ; then
+  echo ${ECHOARG} "\n ${reassembleur} not available on `hostname` --- ABORT ---\n"
+  exit 1
+fi
+#
+cd ${rep}
+rep_dir=`pwd`
+#
+if [ $? -gt 0 ] ; then
+  exit 2
+fi
+#
+laliste=`ls *-??-??* 2> /dev/null` 
+dliste=""
+for i in ${laliste} ; do
+  step=${i##*_}
+  dejala=`echo $dliste | grep $step | wc -l`
+  if [ $dejala -lt 1 ] ; then
+    dliste="${dliste} $step"
+  fi
+done
+#laliste="${prefix}dm ${prefix}dp ${prefix}pm"
+laliste="dm dp dh pm pp ph"
+if [ ${split} -eq 0 ] ; then 
+  mkdir out_bemol 
+else
+  mkdir high coarse
+fi
+for i in ${dliste} ; do
+  for n in $laliste ; do
+    bliste=`ls ${prefix}${n}*${i} 2> /dev/null`
+    ienati=`echo ${bliste} | wc -w`
+    if [ ${ienati} -gt 0 ] ; then
+      for ii in ${bliste} ; do
+        destination=${ii%%-*}_${ii##*_}
+        break
+      done
+      nn=0
+      if [ ${nbf} -gt 0 ] ; then
+        nn=`echo ${bliste} | wc -w`
+        if [ ${nn} -ne ${nbf} -a ${nn} -ne 0 ] ; then
+          echo ${ECHOARG} "\n Incomplete set of files for ${destination}\n"
+          exit 3
+        fi
+      fi
+      if [ ${nn} -eq ${nbf} ] ; then
+        if [ ${split} -gt 0 ]; then
+          /bin/rm -f high/${destination} coarse/${destination}
+          echo 'reassembleur         : ' ${reassembleur}
+          echo 'source               : ' ${bliste}
+          echo 'destination (core)   : ' high/${destination}
+          echo 'destination (coarse) : ' coarse/${destination}
+          ${reassembleur} -src ${bliste} -core ${rep_dir}/high/${destination} \
+               -coarse ${rep_dir}/coarse/${destination} || exit 3
+          if [ -s high/${destination} -a -s coarse/${destination} ] ; then
+            /bin/rm -f ${bliste}
+          fi
+        else
+          /bin/rm -f out_bemol/${destination} ${destination}
+          echo 'reassembleur         : ' ${reassembleur}
+          echo 'source               : ' ${bliste}
+          echo 'destination          : ' ${destination}
+          ${reassembleur} -src ${bliste} -dst out_bemol/${destination} 1> /dev/null 2> /dev/null || exit 3
+          if [ -s out_bemol/${destination} ] ; then
+            /bin/rm -f ${bliste}
+          fi
+        fi
+      fi
+
+    fi
+  done
+done
+if [ ${split} -eq 0 ]; then /bin/mv out_bemol/* ./ ; rmdir out_bemol ; fi
+#
+exit 0
+
+

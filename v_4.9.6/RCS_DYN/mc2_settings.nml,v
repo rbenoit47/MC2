@@ -1,0 +1,81 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.04.19.01.09;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@ &grille 
+  Grd_ni  = 70 , Grd_nj  = 50, Grd_dx= 20000.,
+  Grd_iref= 35, Grd_jref= 25, Grd_latr= 0. , Grd_lonr= 170.
+  Grd_xlat1= 42., Grd_xlon1=-92.,Grd_xlat2= 10., Grd_xlon2=  -10.,
+  Grd_proj_S= 'M', Grd_phir= 22.5 , Grd_dgrw= -70.5
+/
+ &pil_cfgs
+  Pil_runstrt_S = "20010920.120000",   Pil_nesdt = 21600,
+  gnnt = 6,   grdt = 600.,   gnnrstrt = 4000, gnmtn = 1
+  Hblen_x = 10
+/
+ &pe_topo
+  npex = 1, npey = 1
+/
+ &mc2_cfgs
+  gnk        = 31, htop       = 30000.0,  nktop     = -1
+  gnnpbl     = -1, zt         = -1, iscal = 10000, 3000,
+  gndtini    = 0,  grninit    = 240.,
+  gndstat    = 3,  gnpstat    = 4000, gnstatdp      = 0,
+  gnnls      = 3,  nstepsor_d = 360, launchsor        =.false.
+  gnmaphy    =  1,  gnnohyd    = 1,grepsi            = 0.1, gnload = 1
+  hord_del   = 6,  hord_lnr  = 0.01, hord_type  = 'explicit',
+  hord_nutop = 0., hord_zspng = 0
+  hord_fuv   = 1., hord_fww   = 1., hord_fhu        = 0.
+  hord_ftt   = 1., hord_ftr   = 0.
+  glconta    = .false.
+  hsolvpre   = 1.0e-4, precond= 'jacobi', maxite = 300, diagres= .false.
+  g_id       = -5, g_if       = 50000,g_jd = -5,g_jf = 50000
+  z_out      = -1
+  theocase = "mtn_shaer"
+  vmh_stime = 0,   vmh_ndt = 60
+  nesmt_bgx= 1,   nesmt_bgy= 1,   nesmt_ndx= 5,   nesmt_ndy= 5
+  Grdc_ni  = 90 , Grdc_nj  = 100, Grdc_dx= 2000.,
+  Grdc_iref= 45, Grdc_jref= 45, Grdc_latr= 0. , Grdc_lonr= 170.
+  Grdc_proj_S= 'M',
+  Grdc_ndt = -3, Grdc_nsor = 360,
+/
+ &physics
+  incore   = .true.   ,
+  radia    = "newrad" ,   kntrad   = 6
+  fluvert  = "clef"   ,   schmsol  = "fcrest"
+  convec   = "kuosym"    ,   stcond   = "consun"
+  gwdrag   = "gwd86"  ,   shlcvt   = "conres","nil"
+  pfbtyp   = "prosplit",  hrclip   = -1
+  wet      = .true. , satuco   = .true., nstepsor_p=360
+  agregat  = .true.
+  upolist  = "RAIN:30","SCREEN:30"
+/
+ &sor_cfgs
+  gtetikt  = "MC2_V4.9.6"
+  gnstep1  = 0,   gnstep2  = 10000
+  levtyp_s = 'p'
+  pres_o   = 10., 50.,  100., 200., 250., 300., 400., 500.,
+             600., 700., 750., 800., 850., 900., 950., 1000.
+  height_o = 50., 200., 1000., 3000., 5000., 10000., 15000., 20000., 25000.,
+             300000.
+  udolist  = "TT","GZ","PN","P0","UU","VV","HU","WZ"
+/
+@

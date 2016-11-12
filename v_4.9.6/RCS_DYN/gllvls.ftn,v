@@ -1,0 +1,173 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r gllvls - Establishes computational Gal-Chen levels
+*
+      subroutine gllvls (nk)
+      implicit none
+*
+      integer nk
+*
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+*
+**
+*
+      integer i,k,ierr,nklect,nk_s,cnt,maxiter_gl
+      real*8 levone,prhpbl,r,mm,bb,inc,prhhh,qlolimit,qhilimit
+      real*8 prdz(nk),one,top,fact,epsilon,c1,c2
+      parameter (one=1.0d0, epsilon = 1.d-7, prhhh = 1500.d0,
+     $           qlolimit = 1.d-4, qhilimit = 4.d0, maxiter_gl = 500)
+*
+*---------------------------------------------------------------------
+*
+      nk_s = nk - nktop - 1
+      top  = htop
+      cnt  = 1
+*
+*  IF AUTOMATIC VERTICAL LAYERING (EQUAL OR STRETCHED DEPTHS)
+ 8877 if (zt(2).lt.0.) then
+*
+*  IF STRETCHED DEPTHS...
+      if (zt(1).lt.0.) then
+*
+*  Determine the height of the PBL (prhpbl).
+         prhpbl   = min(prhhh,dble(htop*3.0d0/10.0d0))
+*
+*  Determine the number of levels within the PBL (gnnpbl).
+         mm     = 3./(55000. - prhpbl)
+         bb     = 1. - mm*prhpbl
+         if(gnnpbl.lt.0) gnnpbl = max(2, nint(nk_s/(htop*mm+bb)))
+         gnnpbl = min(nk_s-1,max(2, gnnpbl))
+*
+*  Iterative process to determine the stretching factor (r).
+         inc  = 1.e-7
+ 665     inc  = 100.*inc
+         r    = one
+         if (inc.le.0.1) then
+            r   = r + inc
+            do i= 1, 100
+               if((r-1..lt.qlolimit).or.(r-1..gt.qhilimit)) goto 665
+               r=
+     $         (one-top/prhpbl*(one-r**dble(gnnpbl-1)))**(1./dble(nk_s))
+            end do
+         endif
+         prdz(1) = top/(one-r**dble(nk_s))*(one-r)
+*
+*  Check value of stretching factor r and depth of the
+*  first layer prdz(1).
+         if ((r-one.le.qlolimit).or.(r-one.ge.qhilimit)) then
+            zt(1) = 0.
+            goto 7777
+         endif
+         if (prdz(1).lt.0.5) then
+            zt(1) = 0.
+            goto 7777
+         endif
+*
+*  Establish the remaining depths
+*
+         do k=2,nk_s
+            prdz(k) = prdz(k-1) * r
+         end do
+*
+      endif
+*
+      if (top+max(0,(nk-nk_s-1))*prdz(nk_s)-htop.gt.epsilon) then
+         fact = max(1.d0,20000.d0/(top+max(0,(nk-nk_s-1))*prdz(nk_s)-htop))
+         top = top - prdz(nk_s)/fact
+         cnt = cnt + 1
+         if (cnt.lt.maxiter_gl) goto 8877
+         print*, ' COULD NOT CONVERGE TO VERTICAL LAYERING SPECS ',
+     $           '--- ABORT ---'
+         call mc2stop(-1)
+      endif
+*
+ 7777 continue
+*
+*  IF EQUAL... 
+*
+      if (zt(1).ge.0) then
+         do k=1,nk-1
+            prdz(k)=dble(htop)/dble(nk-1)
+         end do
+      endif
+*
+      zt(1)= 0.0
+      do k=2,nk_s+1
+         zt(k)= zt(k-1) + prdz(k-1)
+      end do
+*
+      do k=nk_s+2,nk
+         zt(k) = zt(k-1) + prdz(nk_s)
+      end do      
+      zt(nk) = htop
+*
+*  IF MANUAL VERTICAL LAYERING
+*
+      else
+*
+*   * Computational thermodynamic levels from zt in "model_settings"
+*
+         nklect=0
+         do 35 k=1,maxdynlv
+            if (zt(k).ge.0.0) nklect=nklect+1
+ 35      continue
+         if (nklect.ne.nk) then   
+            write (6,1002)
+            write (6,1007) nklect,nk
+            stop
+         endif
+*
+      endif
+*
+      do k=1,nk-1
+         ztr(k) =  zt(k)
+         zm (k) = (zt(k+1)+zt(k))*0.5
+      end do
+      zm (nk  ) =  zt(nk)
+      ztr(1   ) =  zm(1)*0.5
+      ztr(nk  ) = (zm(nk)+zm(nk-1))*0.5
+*
+      c1 = 1.0d0/sinh(htop/iscal(1))
+      c2 = 1.0d0/sinh(htop/iscal(2))
+      do k=1,nk
+         b0t(k,1) = max(0.d0,sinh((htop-ztr(k))/iscal(1))*c1)
+         b0t(k,2) = max(0.d0,sinh((htop-ztr(k))/iscal(2))*c2)
+         b0w(k,1) = max(0.d0,sinh((htop-zt (k))/iscal(1))*c1)
+         b0w(k,2) = max(0.d0,sinh((htop-zt (k))/iscal(2))*c2)
+         b0m(k,1) = max(0.d0,sinh((htop-zm (k))/iscal(1))*c1)
+         b0m(k,2) = max(0.d0,sinh((htop-zm (k))/iscal(2))*c2)
+      end do
+*
+ 1001 format (/' =====> GLLVLS: LEVELS WILL BE EQUALLY SPACED <====='/)
+ 1002 format (/' =====> STOP IN GLLVLS <=====')
+ 1005 format (' FIRST THERMODYNAMIC LEVEL FOR W MUST BE AT 0.'/)
+ 1007 format (' IN mc2_settings.cfg, YOU SPECIFIED ',i3,
+     $        ' LEVELS AND YOU'/
+     $        ' APPARENTLY INTEND TO RUN THE MODEL ON',i3,' LEVELS.'/)
+*---------------------------------------------------------------------
+      return
+      end
+@

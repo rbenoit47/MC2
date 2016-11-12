@@ -1,0 +1,462 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@*!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***s/r dumpini2 - Dump interface bus statistics
+*
+      Subroutine dumpini2( dsize, fsize, vsize, npe, ni,nj, gni,gnj )
+#include "impnone.cdk"
+*
+      integer    npe, ni, nj, gni, gnj
+      integer    dsize , fsize , vsize
+      real       d(1)  , f(1)  , v(1)
+      integer    slice , lun   , step, pe
+*
+*author bernard dugas - rpn - july 2000
+*
+*revision
+* 001      B. Dugas    (Nov 2002) - make code MPI aware
+*
+*language
+*       fortran 77
+*
+*object(dumpini2/dumpbus2/dumpwrit2)
+*       Computes and writes horizontaly averaged statitics for
+*       all variables of the three main physics interface's buses.
+*       Nothing is done before dumpini is called. Finally, note that
+*       dumpini and dumpwrit SHOULD NOT be macro- or micro-tasked.
+*
+*arguments (dumpini2)
+*       dsize - dynamic bus size
+*       fsize - permanent bus size
+*       vsize - volatil bus size
+*       npe   - total number of processing units (PE)
+*       ni    - local first horizontal slice dimension
+*       nj    - local second horizontal dimension (i.e. total number of slices)
+*       gni   - global first horizontal dimension
+*       gnj   - global second horizontal dimension
+*arguments (dumpbus2)
+*       d     - dynamic   bus
+*       f     - permanent bus 
+*       v     - volatil   bus
+*       slice - slice ordinal (assumed smaller than nj)
+*arguments (dumpwrit2)
+*       lun   - logical I/O unit
+*       step  - current timestep
+*       pe    - current processing unit
+*
+*implicits 
+#include "buses.cdk"
+*
+*local variables
+*
+      integer    position,positiong
+      integer    i,j,k, ier, nvar, busvar
+      integer    nsize, nslice, nvard,nvarp,nvarv
+      integer    G_npe,G_ni,G_nj, nvart,err
+*
+      real*8     maxs,mins,sums,sum2,rmss,curv
+*
+      real*8     sampd,sampp,sampv
+      pointer ( isampd,sampd(4,nslice,nvard) )
+      pointer ( isampp,sampp(4,nslice,nvarp) )
+      pointer ( isampv,sampv(4,nslice,nvarv) )
+*
+      real*8     gamp,lamp
+      pointer ( igamp,gamp(4,nvard+nvarp+nvarv,G_npe) )
+      pointer ( ilamp,lamp(4,nvard+nvarp+nvarv) )
+*
+      character  donini*12
+*
+      save       ilamp,igamp,isampd, donini,nsize, G_ni,G_nj
+      Common    /dumpzzz/ nslice, nvard,nvarp,nvarv, G_npe
+*
+      integer ik
+*     fonction-formule pour faciliter le calcul des indices
+      ik(i,k) = (k-1)*nsize + i
+*
+      data       donini / 'ini not done' /
+*--------------------------------------------------------------------
+      if (donini.eq.'ini not done') then
+
+*        save dimensions ...
+
+         nsize  = ni
+         nslice = nj
+         G_npe  = npe
+         G_ni   = gni
+         G_nj   = gnj
+ 
+         nvard   = dsize / nsize
+         nvarp   = fsize / nsize
+         nvarv   = vsize / nsize
+
+         nvart   = nvard+nvarp+nvarv
+
+*        ...  and allocate local and global sample space
+
+         call hpalloc( isampd,4*nslice*nvart ,ier, 8 )
+         call hpalloc( igamp ,4*G_npe *nvart ,ier, 8 )
+         call hpalloc( ilamp ,4       *nvart ,ier, 8 )
+
+         donini = ' '
+
+      end if
+
+      return
+*--------------------------------------------------------------------
+      Entry dumpbus2( d, f, v, slice )
+
+      if (donini.eq.'ini not done') return
+
+*     dump dynamic variables bus
+
+      do nvar = 1,nvard
+
+         maxs = d(ik(1,nvar))
+         mins = d(ik(1,nvar))
+         sums = d(ik(1,nvar))
+         sum2 = sums * sums
+
+         do i=2,nsize
+            curv = dble( d(ik(i,nvar)) )
+            maxs = max( maxs , curv )
+            mins = min( mins , curv )
+            sums =      sums + curv
+            sum2 =      sum2 + curv * curv
+         end do
+
+         sampd(1,slice,nvar) = maxs
+         sampd(2,slice,nvar) = mins
+         sampd(3,slice,nvar) = sums
+         sampd(4,slice,nvar) = sum2
+
+      end do
+
+*     dump permanent variables bus
+
+      isampp = loc( sampd(1,1,nvard+1) )
+
+      do nvar = 1,nvarp
+
+         maxs = f(ik(1,nvar))
+         mins = f(ik(1,nvar))
+         sums = f(ik(1,nvar))
+         sum2 = sums * sums
+
+         do i=2,nsize
+            curv = dble( f(ik(i,nvar)) )
+            maxs = max( maxs , curv )
+            mins = min( mins , curv )
+            sums =      sums + curv
+            sum2 =      sum2 + curv * curv
+         end do
+
+         sampp(1,slice,nvar) = maxs
+         sampp(2,slice,nvar) = mins
+         sampp(3,slice,nvar) = sums
+         sampp(4,slice,nvar) = sum2
+
+      end do
+
+*     dump volatile variables bus
+
+      isampv = loc( sampp(1,1,nvarp+1) )
+
+      do nvar = 1,nvarv
+
+         maxs = v(ik(1,nvar))
+         mins = v(ik(1,nvar))
+         sums = v(ik(1,nvar))
+         sum2 = sums * sums
+
+         do i=2,nsize
+            curv = dble( v(ik(i,nvar)) )
+            maxs = max( maxs , curv )
+            mins = min( mins , curv )
+            sums =      sums + curv
+            sum2 =      sum2 + curv * curv
+         end do
+
+         sampv(1,slice,nvar) = maxs
+         sampv(2,slice,nvar) = mins
+         sampv(3,slice,nvar) = sums
+         sampv(4,slice,nvar) = sum2
+
+      end do
+
+      return
+*--------------------------------------------------------------------
+      Entry dumpwrit2( lun,step,pe )
+
+      if (donini.eq.'ini not done') return
+
+      nvart = nvard+nvarp+nvarv
+
+*     calculate global statistics and print them.
+*     but first, do all we can on the local domain
+
+      do nvar = 1,nvard
+
+         maxs = sampd(1,1,nvar)
+         mins = sampd(2,1,nvar)
+         sums = sampd(3,1,nvar)
+         sum2 = sampd(4,1,nvar)
+
+         do i=2,nslice
+            maxs = max( maxs , sampd(1,i,nvar) )
+            mins = min( mins , sampd(2,i,nvar) )
+            sums = sums      + sampd(3,i,nvar)
+            sum2 = sum2      + sampd(4,i,nvar)
+         end do
+
+         lamp(1,nvar) = maxs
+         lamp(2,nvar) = mins
+         lamp(3,nvar) = sums
+         lamp(4,nvar) = sum2
+
+      end do
+
+      isampp = loc( sampd(1,1,nvard+1) )
+
+      do nvar = 1,nvarp
+
+         maxs = sampp(1,1,nvar)
+         mins = sampp(2,1,nvar)
+         sums = sampp(3,1,nvar)
+         sum2 = sampp(4,1,nvar)
+
+         do i=2,nslice
+            maxs = max( maxs , sampp(1,i,nvar) )
+            mins = min( mins , sampp(2,i,nvar) )
+            sums = sums      + sampp(3,i,nvar)
+            sum2 = sum2      + sampp(4,i,nvar)
+         end do
+
+         lamp(1,nvar+nvard) = maxs
+         lamp(2,nvar+nvard) = mins
+         lamp(3,nvar+nvard) = sums
+         lamp(4,nvar+nvard) = sum2
+
+      end do
+
+      isampv = loc( sampp(1,1,nvarp+1) )
+
+      do nvar = 1,nvarv
+
+         maxs = sampv(1,1,nvar)
+         mins = sampv(2,1,nvar)
+         sums = sampv(3,1,nvar)
+         sum2 = sampv(4,1,nvar)
+
+         do i=2,nslice
+            maxs = max( maxs , sampv(1,i,nvar) )
+            mins = min( mins , sampv(2,i,nvar) )
+            sums = sums      + sampv(3,i,nvar)
+            sum2 = sum2      + sampv(4,i,nvar)
+         end do
+
+         lamp(1,nvar+nvard+nvarp) = maxs
+         lamp(2,nvar+nvard+nvarp) = mins
+         lamp(3,nvar+nvard+nvarp) = sums
+         lamp(4,nvar+nvard+nvarp) = sum2
+
+      end do
+
+*     gather statistics from all processor on processor 0
+
+      call RPN_COMM_gather(
+     +       lamp, 4*nvart, 'MPI_REAL8',
+     +       gamp, 4*nvart, 'MPI_REAL8', 0,'GRID',err )
+
+      if (lun.gt.0 .and. pe.eq.0) then
+
+*        produce global statistics from what was gathered
+
+         do nvar=1,nvart
+
+            maxs = gamp(1,nvar,1)
+            mins = gamp(2,nvar,1)
+            sums = gamp(3,nvar,1)
+            sum2 = gamp(4,nvar,1)
+
+            do i=2,G_npe
+               maxs = max( maxs , gamp(1,nvar,i) )
+               mins = min( mins , gamp(2,nvar,i) )
+               sums = sums      + gamp(3,nvar,i)
+               sum2 = sum2      + gamp(4,nvar,i)
+            end do
+
+            gamp(1,nvar,1) = maxs
+            gamp(2,nvar,1) = mins
+            gamp(3,nvar,1) = sums
+            gamp(4,nvar,1) = sum2
+
+         end do
+
+*        finish processing and do the printing for each bus
+
+         write(lun,6000) step,'dynamic'
+
+         busvar = 1
+
+         do nvar=1,nvard
+
+            maxs = gamp(1,nvar,1)
+            mins = gamp(2,nvar,1)
+            sums = gamp(3,nvar,1)
+            sum2 = gamp(4,nvar,1)
+
+            sums = sums / ( G_ni * G_nj )
+            sum2 = sum2 / ( G_ni * G_nj )
+
+            if (abs( sum2 - ( sums  * sums ) ) .lt.
+     +         1.e-14 * sum2) then
+               sum2 = 0.0
+            else
+               sum2 = sum2 - ( sums  * sums )
+            end if
+
+            rmss = sqrt( sum2 )
+
+            position  = (nvar-1)*nsize+1
+            positiong = (nvar-1)*G_ni+1
+
+            if (dynpar(busvar,1).eq.position) then
+               write(lun,6001) dynnm(busvar,1),
+     +                         dynnm(busvar,1)(1:2),
+     +                         dyndc(busvar)(1:40)
+               busvar = busvar+1
+            end if
+
+            write(lun,6002) positiong,maxs,mins,sums,rmss
+
+         end do
+
+         write(lun,6000) step,'permanent'
+
+         busvar = 1
+
+         do nvar=1,nvarp
+
+            maxs = gamp(1,nvar+nvard,1)
+            mins = gamp(2,nvar+nvard,1)
+            sums = gamp(3,nvar+nvard,1)
+            sum2 = gamp(4,nvar+nvard,1)
+
+            sums = sums / ( G_ni * G_nj )
+            sum2 = sum2 / ( G_ni * G_nj )
+
+            if (abs( sum2 - ( sums  * sums ) ) .lt.
+     +         1.e-14 * sum2) then
+               sum2 = 0.0
+            else
+               sum2 = sum2 - ( sums  * sums )
+            endif
+
+            rmss = sqrt( sum2 )
+
+            position  = (nvar-1)*nsize+1
+            positiong = (nvar-1)*G_ni+1
+
+            if (perpar(busvar,1).eq.position) then
+               write(lun,6001) pernm(busvar,1),
+     +                        pernm(busvar,1)(1:2),
+     +                        perdc(busvar)(1:40)
+               busvar = busvar+1
+            end if
+
+            write(lun,6002) positiong,maxs,mins,sums,rmss
+
+         end do
+
+         write(lun,6000) step,'volatil'
+
+         busvar = 1
+
+         do nvar=1,nvarv
+
+            maxs = gamp(1,nvar+nvard+nvarp,1)
+            mins = gamp(2,nvar+nvard+nvarp,1)
+            sums = gamp(3,nvar+nvard+nvarp,1)
+            sum2 = gamp(4,nvar+nvard+nvarp,1)
+
+            sums = sums / ( G_ni * G_nj )
+            sum2 = sum2 / ( G_ni * G_nj )
+
+            if (abs( sum2 - ( sums  * sums ) ) .lt.
+     +          1.e-14 * sum2) then
+               sum2 = 0.0
+            else
+               sum2 = sum2 - ( sums  * sums )
+            endif
+
+            rmss = sqrt( sum2 )
+
+            position  = (nvar-1)*nsize+1
+            positiong = (nvar-1)*G_ni+1
+
+            if (volpar(busvar,1).eq.position) then
+               write(lun,6001) volnm(busvar,1),
+     +                         volnm(busvar,1)(1:2),
+     +                         voldc(busvar)(1:40)
+               busvar = busvar+1
+            end if
+
+            write(lun,6002) positiong,maxs,mins,sums,rmss
+
+         end do
+
+         call flush( lun )
+
+      end if         
+
+      return
+*--------------------------------------------------------------------
+
+ 6000 format(/' At timestep ',I8,', ',A,' bus contains...')
+ 6001 format(/ 1X , A , 1X , '(' , A , ')' , 1X , A /
+     +         18X,'maximum',10X,'minimum',
+     +         13X,   'mean',10X,'std dev')
+ 6002 format( I8,4e17.7)
+
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

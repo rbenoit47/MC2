@@ -1,0 +1,70 @@
+#Descriptions du fichier /home/rb/exper/MC2/v_4.9.6/RCS_DYN/.recettes
+ 
+#
+#   Common recipes for models
+#
+include $(MODEL_PATH)/Makefile_$(EC_ARCH)   #RB new arch
+RCOMPIL = r.compile $(MPI) $(OMP)
+PATCH   =
+OPTF    =
+#FCOMPF  = -debug
+#DEBUG   = -debug
+EXTOBJ  = 
+#
+#MPI = rpn_comm_stubs
+
+PHY_VERSION = 5.0.2
+PHYLIBPATH  = $(MODLIBPATH)
+PHY         = phy #RB2016 class
+
+#RB2016 ajoute hpcsperf a others
+OTHERS   = $(COMM) $(TOOLS) lapack blas massvp4 $(BINDC) $(LLAPI) $(IBM_LD) hpcsperf
+LIBPATH  = $(MODLIBPATH) $(PHYLIBPATH) 
+LIBS     = $(MODEL) $(PHY) $(PATCH) $(OTHERS)
+
+LCLPO   = malib$(EC_ARCH)
+mainntr = main$(MODEL)ntr_$(BASE_ARCH)_${MODEL_VERSION}.Abs
+maindm  = main$(MODEL)dm_$(BASE_ARCH)_${MODEL_VERSION}.Abs
+rmpo:
+	/bin/rm -f $(LCLPO)/*.o
+#
+libdyn: rmpo $(OBJECTS)
+#
+ 
+#Descriptions du fichier /home/rb/exper/MC2/v_4.9.6/RCS_DYN/.cibles
+ 
+#Descriptions du fichier /home/rb/exper/MC2/v_4.9.6/RCS_DYN/.cibles
+ 
+#
+#
+#   Targets to load SISL  (guillimin)
+#   adapted from .cibles of gemclim
+#
+mc2: mc2ntr mc2dm
+
+mc2ntr:
+	makebidon mc2ntr;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o $(EXTOBJ) -libpath $(LIBPATH) -optf "=$(LFLAGS)" -o $(mainntr) $(OMP) -libappl "$(LIBS)" -librmn $(RMN) -codebeta $(CODEBETA) $(MPI) $(DEBUG);\
+	/bin/cp $(mainntr) $(PWD)/$(mainntr) ; /bin/rm -f $(mainntr)* bidon.o
+
+mc2dm:
+	makebidon mc2dm;\
+	cd $(LCLPO);\
+	$(RBUILD) -obj *.o $(EXTOBJ) -libpath $(LIBPATH) -optf "=$(LFLAGS)" -o $(maindm) $(OMP) -libappl "$(LIBS)" -librmn $(RMN) -codebeta $(CODEBETA) $(MPI) $(DEBUG);\
+	/bin/cp $(maindm) $(PWD)/$(maindm) ; /bin/rm -f $(maindm)* bidon.o
+
+mc2_nompi: mc2ntr_nompi mc2dm_nompi
+
+mc2ntr_nompi:
+	make mc2ntr COMM="$(COMM) rpn_commstubs_40509" MPI=
+
+mc2dm_nompi:
+	make mc2dm  COMM="$(COMM) rpn_commstubs_40509" MPI=
+
+geophy: geophy.o
+	makebidon geophy
+	$(RBUILD) -obj $(LCLPO)/geophy.o $(LCLPO)/bidon.o -opt "=$(LFLAGS)" -o geophy.Abs -librmn $(RMN)
+	/bin/rm -f $(LCLPO)/geophy.o $(LCLPO)/bidon.o
+
+#

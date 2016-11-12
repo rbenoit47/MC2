@@ -1,0 +1,275 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.10.16.06.10;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r mc2dm  -- Mesoscale Compressible Community (MC2) Model --
+*
+      subroutine mc2dm
+      implicit none
+*
+*AUTHOR   Andre Robert                      Jun   1989
+*
+*REVISION
+*
+*IMPLICIT
+#include "lcldim.cdk"
+#include "partopo.cdk"
+#include "maxdim.cdk"
+#include "serinml.cdk"
+#include "lun.cdk"
+#include "nesting.cdk"
+#include "rec.cdk"
+#include "yomdyn.cdk"
+#include "lesbus.cdk"
+#include "phymem.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+*
+**
+      integer ndyn_var,nphy_td,maxntr
+      parameter (ndyn_var  = 6)
+      parameter (nphy_td   = 4)
+      parameter (maxntr    = 500)
+*
+      character*256 pcmesg
+      character*8 trname(maxntr)
+      character*25 pprstrt
+      integer i,err,status,dynm0p_dim,dynnes_dim,dyndiv_dim,
+     $        dynrstrt_dim,phytend_dim,dyndxdy_dim,fnom,fstouv,fstfrm
+      integer longueur,set_world_view
+      logical bootphy,boottr,bootdif,mustop,bcastc,run_is_ok
+      external fnom,bcastc,longueur,set_world_view
+*
+      real*8 wrk2_8
+      pointer (pawrk2, wrk2_8(*))
+*
+      real dynm0p,dynnes,dyndiv,phytend,dynwrk,dyndxdy
+      pointer (padync,dynm0p(*)),(padynn, dynnes(*)),(padynd,dyndiv(*)),
+     $        (padynw,dynwrk(*)),(paphyt,phytend(*)),(padxdy,dyndxdy(*))
+*
+      real geobus,wrk1
+      pointer (pageobus,geobus(*)), (pawrk1, wrk1(*))
+*
+      data bootphy,boottr,bootdif,run_is_ok 
+     $     /.true.,.true.,.true.,.false./
+      data trname /maxntr*'@@#$%^&*!'/
+      data pprstrt /'restart'/
+*
+*--------------------------------------------------------------------
+*
+      if (set_world_view ().lt.0) goto 9910
+      call tmg_init ( myproc, 'MC2DM' )
+      call tmg_start ( 1, 'MC2DM' ) 
+*
+cccccccccccc   open debug file   cccccccccccccccccc
+c      err=fnom  (66,'../cascade','STD+RND',0)
+c      err=fstouv(66,'RND')
+ccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+*   * Initializing CMC/RPN physics package 
+*
+      if (gnmaphy.gt.0)  
+     $     call myphys (geobus,geospc,bootphy,trname,maxntr)
+*
+*   * Initializing tracers
+*
+      call tracers (trname,maxntr,boottr)
+*
+*   * Establishing local memory requirements
+*
+      ndynvar = ndyn_var+ntr
+      dynm0p_dim  =(dim3d * ndynvar + dim2d)*3
+      dynrstrt_dim=(dim3d * ndynvar + dim2d)
+      dynnes_dim  =(dim3d * ndynvar + dim2d)*2
+      dyndiv_dim  = dim3d*11 + dim2d*9 + (maxx-minx+2)*(maxy-miny+2)*4
+      dyndxdy_dim = (dim2d*4+2)*2
+*
+      phytend_dim = nphy_td + ntrphy
+      if (diffuw) phytend_dim = phytend_dim + 1
+      phytend_dim = dim3d* phytend_dim * gnmaphy
+      if (gnpfb.gt.1) phytend_dim = phytend_dim * 2
+*
+*   * Main dynamic memomy allocation
+*
+      call hpalloc (padync  ,dynm0p_dim        , err,1)
+      call hpalloc (padynn  ,dynnes_dim        , err,1)
+      call hpalloc (padynd  ,dyndiv_dim        , err,1)
+      call hpalloc (padxdy  ,dyndxdy_dim       , err,1)
+      call hpalloc (pawrk1  ,dim3d*(ndynvar+1) , err,1)
+      call hpalloc (pawrk2  ,dim3d*4           , err,1)
+      pageobus = 0
+      paphyt   = 0
+      if (geospc     .gt.0) call hpalloc (pageobus,geospc      , err,1)
+      if (phytend_dim.gt.0) call hpalloc (paphyt  , phytend_dim, err,1)
+*
+*   * Defining pointers into main blocs of memory
+*
+      call setpnt2 (dynm0p,dynm0p_dim,phytend,phytend_dim,
+     $              dynnes,dynnes_dim,dyndiv,dyndiv_dim,dyndxdy)
+*
+*   * Reading geophysical fields
+*
+      call rdgeop2 (geobus,geospc)
+      call setup4 ()
+*
+      if (.not.modrstrt) then
+*800
+*   * Computing metric terms (documentation: section 6.3)
+*
+*   * Prepare the sponge layer (diffusion coefficient Kh)
+*
+         call hordiff (bootdif,wrk1,wrk2_8)
+*500
+*   * Reading & vertical interpolation of initial conditions
+*
+         if (.not.theoc) then
+            call initcond (trname,ntr)
+         else
+            call theo_3d (geobus,geospc)
+         endif
+*1300
+*     * Dynamic initialization ? (if gndtini > 0)
+*
+         if (gndtini.gt.0) call initdyn9 (trname,ntr)
+*
+      else
+*
+*1600
+*     * Restart (if modrstrt=true).
+*
+         call rdrstrt (dynrstrt_dim,dynnes,dynnes_dim,phytend,
+     $                 phytend_dim,dyndiv,dyndiv_dim,lebus,sizpbus*fnj)
+*
+         bootdif=.false.
+*
+      endif
+*
+      if (myproc.eq.0) write (6,900)
+      call statdyn2 (.false.,.false.,.true.)
+*
+*1800
+*     **************** Main DO LOOP ************************
+*
+*     * gnnt     : total number of timesteps
+*     * gnstepno : current timestep #
+*     * gnnrstrt : number of timesteps per restart sequence
+*     * endstepno: timestep # at which to end current sequence
+*     * gnnls    : number of timesteps between output on prog file
+*
+      write (pcmesg,33) gnstepno
+      pcmesg='_startstep='//pcmesg(1:longueur(pcmesg))//';'
+      if (myproc.eq.0) call write_status_file (pcmesg)
+      endstepno = min (gnnt, gnstepno+gnnrstrt)
+      write (pcmesg,33) endstepno
+      pcmesg='_endstep='//pcmesg(1:longueur(pcmesg))//';'
+*
+       open (49,file='../helsol',access='SEQUENTIAL',form='UNFORMATTED')
+*
+ 100  continue
+*
+      call out_dyn (trname)
+*2000
+*     * Must we stop the current sequence? I yes, must we write
+*     * a restart file?
+*
+      if (gnstepno.ge.endstepno) then
+         if (myproc.eq.0) call write_status_file (pcmesg)
+         if (gnstepno.lt.gnnt) then
+            if (myproc.eq.0) 
+     $           print*, 'WRITING RESTART FILE ''',pprstrt,''''
+            call wrrstrt (pprstrt,dynrstrt_dim,dynnes,dynnes_dim,
+     $                    phytend,phytend_dim,dyndiv,dyndiv_dim,lebus,
+     $                    sizpbus*fnj)
+         endif
+         if (myproc.eq.0) write (6,800)
+         goto 9999
+      endif
+*2100
+*     * Incrementing timestep
+*
+      gnstepno=gnstepno+1
+      if (myproc.eq.0) write (6,910) gnstepno,gnnt
+*2200
+*     * Forward time step (ending with hor. + vert. nesting)
+*
+      call tmg_start ( 2, 'Dyn_step') 
+      call step8 (phytend_dim,trname,ntr)
+      call tmg_stop (2)
+*
+*2300
+*     * Physics parameterizations
+*
+      if (gnmaphy.gt.0) then
+         call tmg_start ( 3, 'Phy_step' )
+         call myphys (geobus,geospc,bootphy,trname,maxntr)
+         call tmg_stop (3)
+      else
+         if (myproc.eq.0) print *, 'NO PHYSICS'
+      endif
+*
+*2550
+*   * Horizontal diffusion + time filtering
+*
+      call tmg_start ( 4, 'Hzd_Tfilt') 
+!$omp parallel
+      call hordiff (bootdif,wrk1,wrk2_8)
+*
+      call tfilt5 (myproc.eq.0)
+!$omp end parallel
+      call tmg_stop (4)
+*
+      if ((mod(gnstepno,gndstat).eq.0).or.(gnstepno.ge.endstepno)) then
+         call statdyn2 (.false.,.false.,.true.)
+         call diagcfl (gnstepno)
+      endif
+*
+      go to 100
+*
+ 9999 continue
+*
+*    * Closing files    
+*
+      run_is_ok = .true.
+ 9910 if ((myproc.eq.0).and.(nstat.gt.0)) close (un_ser)
+      if ((gnmaphy.eq.1).and.(.not.incore)) call fclos(un_gbusper)
+*
+c      close (49)
+cccc  close debug file  ccc
+c      err=fstfrm(66)
+ccccccccccccccccccccccccccc
+*
+      call tmg_stop ( 1 ) 
+      call tmg_terminate ( myproc, 'MC2DM' )
+      call stop_world_view (gnstepno.lt.gnnt,run_is_ok)
+*
+*------------------------------------------------------------------
+ 33   format (i10.10)
+ 400  format (1x,'LA DUREE POUR INITIALISATION EST SUPERIEURE A '/
+     $        1x,'L INTERVALLE ENTRE DEUX PAS DE TEMPS ARCHIVE')
+ 800  format (/1x,'MC2DM RUN ENDED NORMALLY'/)
+ 900  format (/'STARTING THE INTEGRATION WITH THE FOLLOWING DATA:'/)
+ 910  format (/' TIMESTEP #',i5,'   OUT OF',i5)
+ 999  format (/,' --ABORT--ABORT--ABORT-- in MC2'/)
+*
+      return
+      end
+@

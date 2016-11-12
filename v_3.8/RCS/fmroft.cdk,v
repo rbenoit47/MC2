@@ -1,0 +1,44 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.05;	author armnphy;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+C       FMROFT      TEMPERATURE FUNCTION TO MULTIPLY MR WITH
+C                   FOR T<273 
+!
+!  internal function definition
+!
+       REAL FUNCTION fmroft(F_xt)
+       REAL F_xt
+
+       if (F_XT.GT.250.) then
+          FMROFT = Z1(F_XT)
+       else
+          FMROFT = Z5(F_XT)
+       endif
+
+       END FUNCTION fmroft@

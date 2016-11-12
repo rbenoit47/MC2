@@ -1,0 +1,87 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r nes)initwh -- Horizontal nesting on 4 faces
+*
+      subroutine nes_initwh
+      implicit none
+*
+*AUTHOR    Michel Desgagne  -  April 2003
+*
+*REVISION
+*
+*ARGUMENTS
+*
+*IMPLICIT
+#include "lcldim.cdk"
+#include "nestpnt.cdk"
+#include "consdyn_8.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,err
+      real*8 lx,ly,pis2,zero,p5,one,two
+      parameter (zero = 0.0d0, p5 = 0.5d0, one = 1.0d0, two = 2.0d0)
+*----------------------------------------------------------------------
+*
+      call hpalloc (pawh_w  , max(1,2*hblen_x)        , err,1)
+      call hpalloc (pawh_e  , max(1,2*hblen_x)        , err,1)
+      call hpalloc (pawh_s  , max(1,2*hblen_y)        , err,1)
+      call hpalloc (pawh_n  , max(1,2*hblen_y)        , err,1)
+      call hpalloc (pawh_sw , max(1,2*hblen_x*hblen_y), err,1)
+      call hpalloc (pawh_se , max(1,2*hblen_x*hblen_y), err,1)
+      call hpalloc (pawh_nw , max(1,2*hblen_x*hblen_y), err,1)
+      call hpalloc (pawh_ne , max(1,2*hblen_x*hblen_y), err,1)
+*
+      pis2 = pi_8/two
+*
+      lx   = dble(hblen_x) - p5
+      ly   = dble(hblen_y) - p5
+*
+      do i=1,hblen_x
+         wh_w(i)        = (cos(pis2*(i-1)/lx))**two
+         wh_e(ldni-i+1) = wh_w(i)
+      end do
+      do i=1,hblen_y
+         wh_s(i)        = (cos(pis2*(i-1)/ly))**two
+         wh_n(ldnj-i+1) = wh_s(i)
+      end do
+      do j=1,hblen_y
+      do i=1,hblen_x
+         wh_sw(i,j) = (cos(pis2*(one-min(one,
+     $           sqrt(((lx-i+1)/lx)**two+((ly-j+1)/ly)**two)))))**two
+         wh_se(ldni-i+1,       j) = wh_sw(i,j)
+         wh_nw(i       ,ldnj-j+1) = wh_sw(i,j)
+         wh_ne(ldni-i+1,ldnj-j+1) = wh_sw(i,j)
+      end do
+      end do
+*
+*----------------------------------------------------------------------
+*
+      return
+      end
+
+
+
+@

@@ -1,0 +1,149 @@
+#
+# Author...
+#    Katja Winger
+#
+# Revisions...
+#    001 - August  2002: initial version
+#    002 - August  2000: add more LAM tests (BD)
+#
+# ---------------------------------------------------------------------------------
+# splitout test : if output splitted, high resolution area must exist
+# -----------------
+# 
+splitout=${splitout:-0}
+#
+if [ ${splitout} -gt 0 ]; then
+  #
+  NI=`grep -i ni gem_settings.cfg | sed s/' '//g | grep -i 'ni=' | tr "[a-z]" "[A-Z]"`
+  NI=${NI#*NI=}
+  NI=${NI%%,*}
+  #
+  NJ=`grep -i nj gem_settings.cfg | sed s/' '//g | grep -i 'nj=' | tr "[a-z]" "[A-Z]"`
+  NJ=${NJ#*NJ=}
+  NJ=${NJ%%,*}
+  #
+  NILA=`grep -i nila gem_settings.cfg | sed s/' '//g | grep -i 'nila=' | tr "[a-z]" "[A-Z]"`
+  NILA=${NILA#*NILA=}
+  NILA=${NILA%%,*}
+  #
+  NJLA=`grep -i njla gem_settings.cfg | sed s/' '//g | grep -i 'njla=' | tr "[a-z]" "[A-Z]"`
+  NJLA=${NJLA#*NJLA=}
+  NJLA=${NJLA%%,*}
+  #
+  NILA=${NILA:-$NI}
+  NJLA=${NJLA:-$NJ}
+  if [ ${NI} -eq ${NILA} -a ${NJ} -eq ${NJLA} ]; then
+    echo ERROR in Climat_var_test
+    echo ERROR : You want to split the output, but you have no high resolution area!
+    echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+    exit 1
+  fi
+  #
+fi
+#
+#
+# ---------------------------------------------------------------------------------
+# lam test : if lam is used, lam=1 must be set in configexp.dot.cfg
+# --------
+#
+lam=${lam:-0}
+#
+GRD_TYP=`grep -i Grd_typ_S gem_settings.cfg | sed s/' '//g | tr "[a-z]" "[A-Z]"`
+GRD_TYP=${GRD_TYP#*GRD_TYP_S=\'}
+GRD_TYP=${GRD_TYP%%\'*}
+#
+if [ ${GRD_TYP} = LU -o ${GRD_TYP} = LV ] ; then
+  if [  ${lam} -eq 0 ] ; then
+    echo ERROR in Climat_var_test
+    echo ERROR : You are launching LAM, so you must set lam=1 in your configexp.dot.cfg!
+    echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+    exit 2
+  elif [ ${gaussout} -gt 0 -o \
+         ${splitout} -gt 0 -o \
+         ${zoncal}   -gt 0  ] ; then
+    echo ERROR in Climat_var_test
+    echo ERROR : You are launching LAM, so you must unset gaussout
+    echo ERROR : splitout and zoncal in your configexp.dot.cfg!
+    echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+    exit 3
+  fi
+else
+  if [ ${lam} -gt 0 ] ; then
+    echo ERROR in Climat_var_test
+    echo ERROR : LAM not set in configexp.dot.cfg, while GRD_TYP_S=${GRD_TYP}
+    echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+    exit 4
+  fi
+fi
+#
+if [ ${strip_phy} -gt 0 -a ${gaussout} -gt 1000 ]; then
+  lonlat=$(( 10000000 + ${gaussout} ))
+  lon=`echo ${lonlat} | cut -c2-5 `
+  lat=`echo ${lonlat} | cut -c6-8 `
+  lonlat="-outlon ${lon} -outlat ${lat}"
+  echo ${ECHOARG} "\nClimat_strip_phy extra arguments: ${lonlat} \n"
+fi
+#
+# ---------------------------------------------------------------------------------
+# p_out_moyhr test : p_out_moyhr must fit to the output interval
+# ----------------
+#
+P_out_moyhr=${P_out_moyhr:-0}
+#
+MOYHR=`grep -i P_out_moyhr gem_settings.cfg | sed s/' '//g | tr "[a-z]" "[A-Z]"`
+MOYHR=${MOYHR#*P_OUT_MOYHR=}
+MOYHR=${MOYHR%%,*}
+#
+DELTAT=`grep -i deltat configexp.dot.cfg | sed s/' '//g | tr "[a-z]" "[A-Z]"`
+DELTAT=${DELTAT#*DELTAT=}
+DELTAT=${DELTAT%%;*}
+#
+#
+FILE1=${TMPDIR}/a$$
+sed s/' '//g output.cfg | tr "[A-Z]" "[a-z]" > $FILE1
+FILE2=${TMPDIR}/b$$
+grep "steps=" $FILE1 | grep "<" > $FILE2
+#
+TEST=0
+if [ `wc -l < $FILE2` = 0 ] 
+then TEST=1
+fi
+while read LINE
+do
+  #
+  STEP_NUM=${LINE#*steps=}
+  STEP_NUM=${STEP_NUM%%,*}
+  CHECK=steps,$STEP_NUM
+  EXISTEND=`grep $CHECK $FILE1 | wc -l | sed s/' '//g`
+  #
+  if [ $EXISTEND -ge 1 ] ; then
+    #
+    KIND=${LINE#*,}
+    KIND=${KIND%%,*} 
+    INT=${LINE%%\>*}
+    INT=${INT##*,}
+    #
+    OUTINT=-1
+    if [ $KIND = 'step' ] ; then 
+      OUTINT=`expr $DELTAT \* $INT`
+      OUTINT=`expr $OUTINT / 3600`
+    fi
+    #
+    if [ $KIND = 'hour' ] ; then
+      OUTINT=$INT
+    fi
+    #
+    if [ $OUTINT -eq $MOYHR ] ; then TEST=1 ; fi
+    #
+  fi
+  #
+done < $FILE2
+#
+if [ $TEST = 0 ] ; then
+  echo ERROR in Climat_var_test
+  echo ERROR : Your P_out_moyhr dose not correspond to your output time step!
+  echo ${ECHOARG} "\n ----------- ABORT ---------\n"
+  exit 5
+fi
+#
+/bin/rm -rf $FILE1 $FILE2

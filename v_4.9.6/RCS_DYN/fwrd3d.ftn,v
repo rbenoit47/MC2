@@ -1,0 +1,277 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r fwrd3d -- Compute so-called Q terms
+*
+      subroutine fwrd3d ( xyzd, t1, dtm, dtp )
+      implicit none
+*
+      real t1(*)
+      real*8 xyzd(*),dtm,dtp
+*
+*
+*AUTHORs    M. Desgagne & C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *               ANDRE ROBERT  SEMI-LAGRANGIAN SCHEME              *
+*    *                                                                 *
+*    *                                                                 *
+*    *     CALCULATES                                                  *
+*    *                                                                 *
+*    *                 Q  = P (t-dt,r-dr)+dtm*R (t,r-dr)+dtp*R (t,r)   *
+*    *                  u    u                 u              u        *
+*    *                                                                 *
+*    *                                                                 *
+*    *                 Q  = P (t-dt,r-dr)+dtm*R (t,r-dr)+dtp*R (t,r)   *
+*    *                  v    v                 v              v        *
+*    *                                                                 *
+*    *                                                                 *
+*    *                 Q  = P (t-dt,r-dr)+dtm*R (t,r-dr)+dtp*R (t,r)   *
+*    *                  w    w                 w              w        *
+*    *                                                                 *
+*    *                                                                 *
+*    *                 Q  = P (t-dt,r-dr)+dtm*R (t,r-dr)+dtp*R (t,r)   *
+*    *                  t    t                 t              t        *
+*    *                                                                 *
+*    *                                                                 *
+*    *                 Q  = P (t-dt,r-dr)                              *
+*    *                  q    q                                         *
+*    *                                                                 *
+*    *                                                                 *
+*    *       upstream interpolations are done by                       *
+*    *                                                slag3d           *
+*    *                                                                 *
+*    *******************************************************************
+*                                                                       
+*     _________________________________________________________________ 
+*    |                                                                 |
+*    |                                                                 |
+*    |     Example:   Solving     dQ/dt = R + S      as follows        |
+*    |                                                                 |
+*    |                                                                 |
+*    |                                                                 |
+*    |  Q(t+dt,r) = Q(t-dt,r-dr) + dtm*R(t,r-dr) + dtm*S(t-dt,r-dr)    |
+*    |                                                                 |
+*    |                           + dtp*R(t,r)    + dtp*S(t-dt,r-dr)    |
+*    |                                                                 |
+*    |                                                                 |
+*    |                                                                 |
+*    |     Grouping terms at (t-dt,r-dr) under the letter P :          |
+*    |                                                                 |
+*    |                                                                 |
+*    |        P(t-dt,r-dr) = Q(t-dt,r-dr) + (dtm+dtp)*S(t-dt,r-dr)     |
+*    |                                                                 |
+*    |                                                                 |
+*    |     we end up with:                                             |
+*    |                                                                 |
+*    |                                                                 |
+*    |        Q(t+dt,r) = P(t-dt,r-dr) + dtm*R(t,r-dr) + dtp*R(t,r)    |
+*    |                                                                 |
+*    |                                                                 |
+*    |     Grouping terms at r-dr under the letter Q" :                |
+*    |                                                                 |
+*    |                                                                 |
+*    |        Q"(r-dr) = P(t-dt,r-dr) + dtm*R(t,r-dr)                  |
+*    |                                                                 |
+*    |                                                                 |
+*    |     we end up with:                                             |
+*    |                                                                 |
+*    |                                                                 |
+*    |        Q(t+dt,r) = Q"(r-dr) + dtp*R(t,r)                        |
+*    |                                                                 |
+*    |_________________________________________________________________|
+*                                                                       
+*
+*ARGUMENTS
+*     _________________________________________________________________
+*    |         |                                                 |     |
+*    |  NAME   | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |  xyzd   | displacements xd, yd, zd                        |  i  |
+*    |         |                                                 |     |
+*    | qptmp   | Q term for variable qp    (work)                |     |
+*    |  utmp   | Q term for variable u     (work)                |     |
+*    |  vtmp   | Q term for variable v     (work)                |     |
+*    | swtmp   | Q term for variable sw    (work)                |     |
+*    | tptmp   | Q term for variable tp    (work)                |     |
+*    | hmtmp   | Q term for variable hm    (work)                |     |
+*    | cltmp   | Q term for variable cl    (work)                |     |
+*    |         |                                                 |     |
+*    |   dtm   | timestep lenght (-)                             |  i  |
+*    |   dtp   | timestep lenght (+)                             |  i  |
+*    |         |                                                 |     |
+*    |_________|_________________________________________________|_____|
+*
+*
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynmem.cdk"
+#include "wrnmem.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+*
+** 
+      integer i,j,k,n,id,jd,iff,jf,err
+      real qptmp,utmp,vtmp,swtmp,tptmp,hmtmp,cltmp
+      pointer (paqptmp, qptmp(minx:maxx,miny:maxy,*)),
+     $        (pautmp , utmp (minx:maxx,miny:maxy,*)),
+     $        (pavtmp , vtmp (minx:maxx,miny:maxy,*)),
+     $        (paswtmp, swtmp(minx:maxx,miny:maxy,*)),
+     $        (patptmp, tptmp(minx:maxx,miny:maxy,*)),
+     $        (pahmtmp, hmtmp(minx:maxx,miny:maxy,*)),
+     $        (pacltmp, cltmp(minx:maxx,miny:maxy,gnk,*))
+      real*8 xdu, ydu, zdu, fxx, fyy, fzz
+      pointer (paxdu, xdu(minx:maxx,miny:maxy,*)),
+     $        (paydu, ydu(minx:maxx,miny:maxy,*)),
+     $        (pazdu, zdu(minx:maxx,miny:maxy,*)), 
+     $        (pafxx, fxx(minx:maxx,miny:maxy,*)),
+     $        (pafyy, fyy(minx:maxx,miny:maxy,*)), 
+     $        (pafzz, fzz(minx:maxx,miny:maxy,*))
+      include 'mpif.h'
+      real *8 time_i,time_f,time_it,time_ft
+*----------------------------------------------------------------------
+*
+      paqptmp = loc(t1(        1))
+      pautmp  = loc(t1(  dim3d+1))
+      pavtmp  = loc(t1(2*dim3d+1))
+      paswtmp = loc(t1(3*dim3d+1))
+      patptmp = loc(t1(4*dim3d+1))
+      pahmtmp = loc(t1(5*dim3d+1))
+      if (ntr.ge.1) pacltmp = loc(t1(6*dim3d+1))
+      paxdu   = loc(xyzd(3*dim3d+1))
+      paydu   = loc(xyzd(4*dim3d+1))
+      pazdu   = loc(xyzd(5*dim3d+1))
+      pafxx   = loc(xyzd(6*dim3d+1))
+      pafyy   = loc(xyzd(7*dim3d+1))
+      pafzz   = loc(xyzd(8*dim3d+1))
+*
+*     A) Compute the part of Q terms to be evaluated at upwind positions
+*
+*                   Q' = P (t-dt,r)+dtm*R (t,r)
+*                    x    x              x
+*
+*   upwind-point range
+*
+      id =1-hx*west
+      jd =1-hy*south
+      iff=ldni+(hx-1)*east
+      jf =ldnj+(hy-1)*north
+*
+!$omp do
+      do k=1,gnk
+         if(k.ne.gnk) then
+            do j=jd,jf
+            do i=id+west,iff
+               utmp (i,j,k) = up (i,j,k) + dtm*ur (i,j,k)
+            end do
+            end do
+            do j=jd+south,jf
+            do i=id,iff
+               vtmp (i,j,k) = vp (i,j,k) + dtm*vr (i,j,k)
+            end do
+            end do
+         endif
+         do j=jd,jf
+         do i=id,iff
+            qptmp(i,j,k) = qpp(i,j,k)
+            tptmp(i,j,k) = tpp(i,j,k) + dtm*tpr(i,j,k)
+            swtmp(i,j,k) = swp(i,j,k) + dtm*swr(i,j,k)
+            hmtmp(i,j,k) = hmp(i,j,k)
+         end do
+         end do
+         do n=1,ntr
+            do j=jd,jf
+            do i=id,iff
+               cltmp(i,j,k,n) = clp(i,j,k,n)
+            end do
+            end do
+         end do
+      end do
+!$omp enddo
+*
+*     B) Interpolate this part at upwind positions
+*        and perform its Lagrangian displacement
+*
+*              from Q'(t-dt,r) to Q"(t-dt,r-dr) 
+*                    x             x
+*
+!$omp single
+      call rpn_comm_xch_halon (xyzd,minx,maxx,miny,maxy,ldni,ldnj,
+     $                         3*gnk,hx,hy,period_x,period_y,ldni,0,2)
+      call rpn_comm_xch_halo (qptmp,minx,maxx,miny,maxy,ldni,ldnj,
+     $                        6*gnk,hx,hy,period_x,period_y,ldni,0)
+      if (ntr.gt.0) 
+     $     call rpn_comm_xch_halo (cltmp,minx,maxx,miny,maxy,ldni,ldnj,
+     $                         ntr*gnk,hx,hy,period_x,period_y,ldni,0)
+!$omp end single
+*
+      call slag3d ( qpp(minx,miny,1),up,vp,swp,tpp,hmp,clp,
+     $              qptmp,utmp,vtmp,swtmp,tptmp,hmtmp,cltmp,
+     $              xyzd, xyzd(dim3d+1),xyzd(2*dim3d+1),
+     $              xdu,ydu,zdu,fxx,fyy,fzz,
+     $              minx,maxx,miny,maxy )
+*
+*
+*     C) Add the final contribution to the Q terms 
+*
+*                     Q  = Q"  + dtp*R
+*                      x    x         x
+*
+*  at destination points
+*
+      id =1
+      jd =1
+      iff=ldni-east
+      jf =ldnj-north
+*
+!$omp do
+      do k=1,gnk
+         if(k.ne.gnk) then
+            do j=jd,jf
+            do i=id+west,iff
+               up (i,j,k) = up (i,j,k) + dtp*ur (i,j,k)
+            end do
+            end do
+            do j=jd+south,jf
+            do i=id,iff
+               vp (i,j,k) = vp (i,j,k) + dtp*vr (i,j,k)
+            end do
+            end do
+         endif
+         do j=jd,jf
+         do i=id,iff
+            tpp(i,j,k) = tpp(i,j,k) + dtp*tpr(i,j,k)
+            swp(i,j,k) = swp(i,j,k) + dtp*swr(i,j,k)
+         end do
+         end do
+      end do
+!$omp enddo
+*
+*----------------------------------------------------------------------
+      return
+      end
+@

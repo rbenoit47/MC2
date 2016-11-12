@@ -1,0 +1,127 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+      SUBROUTINE CLASSPAR
+
+*
+*Author
+*          Y. Delage (April 1997)
+*
+*Object
+*          Initialise the parameters in the COMMONs of CLASS
+*
+*Revision
+* 001      B. Bilodeau (Nov 2000) - Rename PR --> PRA
+*
+**
+*
+#include "impnone.cdk"
+*
+#include "classcom.cdk"
+*
+      DATA      VKC,        CT,         SLTHICK,    BEEM,       ALFAH
+     1       /  0.40,       0.90E-3,    0.060,      10.0,       1.0    /
+      DATA      FAC,        GAMRH,      GAMRM,      VMIN,       TCGLAC
+     1       /  32.5,       6.00,       6.00,       0.1,        2.24   /
+      DATA      TCW,        TCICE,      TCSAND,     TCCLAY,     TCOM
+     1       /  0.57,       2.24,       8.0,        2.5,        0.25   /
+      DATA      TCDRYS,     TCDRYP,     TCSAPW,     TCSAPI,     THLMIN
+     1       /  0.275,      0.06,       0.48,       1.44,       0.04   /
+      DATA      RHOSOL,     RHOOM,      HCPSND,     HCPCLY
+     1       /  2.65E3,     1.30E3,     2.13E6,     2.38E6      /
+      DATA      HCPW,       HCPICE,     HCPSOL,     HCPOM,      HCPSNI
+     1       /  4.187E6,    1.96E6,     2.25E6,     2.50E6,     0.20E6 /
+      DATA      SPHW,       SPHICE,     SPHVEG
+     1       /  4.186E3,    2.10E3,     2.70E3      /
+      DATA      RHOW,       RHOICE,     RHOSNI,     CLHMLT,     CLHVAP
+     1       /  1.0E3,      0.917E3,    0.10E3,     0.334E6,    2.501E6/
+      DATA      ZOLNG,      ZOLNS,      ZOLNI,      ZORATG
+     1       /  -4.605,     -6.908,     -6.215,     3.0         /
+      DATA  B       /3.39,4.18,4.98,5.77,6.57,7.36,8.16,8.95,9.75,10.54,
+     1               11.34,12.13,0.00/
+      DATA  THPOR   /0.461,0.455,0.449,0.442,0.436,0.430,0.423,0.417,
+     1               0.411,0.405,0.398,0.392,0.386,0.379,0.373,0.000,
+     2               0.800,1.000/
+      DATA  THLRAT  /0.9315,0.9408,0.9479,0.9534,0.9579,0.9616,0.9647,
+     1               0.9674,0.9696,0.9716,0.9734,0.9749,1.000/
+      DATA  TCSATW  /1.42,1.48,1.55,1.62,1.70,1.78,1.87,1.95,2.05,2.16,
+     1               2.27,2.39,2.52,2.66,2.81,2.24/
+      DATA  TCSATI  /2.57,2.66,2.75,2.85,2.95,3.06,3.19,3.30,3.44,3.59,
+     1               3.73,3.89,4.06,4.25,4.44,2.24/
+      DATA  PSISAT  /0.391,0.336,0.289,0.248,0.214,0.184,0.158,0.136,
+     1               0.117,0.101,0.0865,0.0744,0.0639,0.0550,0.0473,
+     2               1.0E8,0.0000,0.0000/
+      DATA  GRKSAT  /2.00E-6,2.39E-6,2.85E-6,3.39E-6,4.05E-6,4.83E-6,
+     1               5.76E-6,6.86E-6,8.19E-6,9.76E-6,11.6E-6,13.9E-6,
+     2               16.6E-6,19.8E-6,23.6E-6,0.00,2.00E-6,0.00/
+      DATA  GRKTLD  /1.00E-6,1.19E-6,1.42E-6,1.70E-6,2.02E-6,2.41E-6,
+     1               2.88E-6,3.43E-6,4.09E-6,4.88E-6,5.82E-6,6.94E-6,
+     2               8.28E-6,9.88E-6,11.8E-6,0.00,2.00E-6,0.00/
+      DATA GROWYR   /213.,213.,213.,213.,213.,213.,0.,0.,0.,
+     1               0.,0.,0., 75.,106.,136.,167.,167.,167.,
+     2               273.,273.,273.,273.,273.,273.,0.,0.,0.,
+     3               0.,0.,0.,135.,166.,196.,196.,196.,196.,
+     4               121.,121.,121.,121.,121.,121.,0.,0.,0.,
+     5               0.,0.,0.,275.,244.,214.,214.,214.,214.,
+     6               151.,151.,151.,151.,151.,151.,0.,0.,0.,
+     7               0.,0.,0.,305.,274.,244.,244.,244.,244.,
+     8               213.,213.,213.,213.,213.,213.,0.,0.,0.,
+     9               0.,0., 75.,106.,136.,167.,167.,167.,167.,
+     A               273.,273.,273.,273.,273.,273.,0.,0.,0.,
+     B               0.,0.,135.,166.,196.,196.,196.,196.,196.,
+     C               121.,121.,121.,121.,121.,121.,0.,0.,0.,
+     D               0.,0.,275.,244.,214.,214.,214.,214.,214.,
+     E               151.,151.,151.,151.,151.,151.,0.,0.,0.,
+     F               0.,0.,305.,274.,244.,244.,244.,244.,244. /
+      DATA CANEXT   /-0.5,-1.5,-0.8,-0.8/
+      DATA PRA      /1.0/
+      DATA    SBC / 5.66796E-8 /
+      DATA FTHFC  / 0.7 /
+      DATA AGGRUF / 2 /
+      DATA ZBLEND /50. /
+*     Minimum leaf stomatal resistance for each vegetation category.
+      data rsleafmn / 100.0,50.0,50.0,50.0 /
+      DATA TOPO /.TRUE. /
+
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

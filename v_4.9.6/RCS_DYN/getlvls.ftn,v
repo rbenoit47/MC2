@@ -1,0 +1,130 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r getlvls
+* 
+      subroutine getlvls (pref,nlvls,nkfin,datestp,nomvar,iun)
+      implicit none
+*
+      integer nlvls,nkfin,datestp,iun
+      character* (*) nomvar
+      real pref(nkfin)
+*
+#include "yomdyn.cdk"
+*
+**
+      integer nlis
+      parameter (nlis = 1024)
+      integer liste (nlis)
+      character*16 date
+      character*12 etktdm,mesglvl
+      character*4 nvardm
+      character*2 tvardm
+      character*1 grtypdm
+      integer fstinl,fstprm
+      external fstinl,fstprm
+      integer idetdm,npasdm,nbitdm,idtpdm,ig1,ig2,ig3,ig4,swadm,ilngdm,
+     $        idtfdm,iubcdm,ixt1dm,ixt2dm,ixt3dm,ip1,ip2,ip3,tmpdate,
+     $        ilvls,nrec,ni,nj,nk,lislon,ier,i
+*
+*--------------------------------------------------------------------
+*
+      ilvls = 0
+      nlvls = ilvls
+*
+      nrec= fstinl (iun,ni,nj,nk,datestp,' ',-1,-1,-1,' ',nomvar,
+     $                                        liste,lislon,nlis)
+      if ((lislon.eq.0).and.(nomvar.eq.'TT'))
+     $     nrec= fstinl (iun,ni,nj,nk,datestp,' ',-1,-1,-1,' ','VT',
+     $                                           liste,lislon,nlis)
+*      
+      if (lislon.gt.nkfin) then
+         write (6,800) lislon
+         stop
+      endif    
+      do i=1,lislon
+         ier=fstprm (liste(i),tmpdate,idetdm,npasdm,ni,nj,nk,
+     $               nbitdm,idtpdm,ip1,ip2,ip3,tvardm,nvardm,etktdm,
+     $               grtypdm,ig1,ig2,ig3,ig4,swadm,ilngdm,idtfdm,iubcdm,
+     $               ixt1dm,ixt2dm,ixt3dm)
+         if (ip1.gt.0) then
+            ilvls       = ilvls+1
+            pref(ilvls) = float(ip1)
+         endif
+      end do
+*
+      if (ilvls.le.0) then
+         call datf2p (date,datestp)
+         write(6,900) nomvar,date
+         return
+      endif
+*
+      call sort (pref,ilvls)  
+      nlvls = ilvls
+*
+      if (pref(nlvls).gt.12000.0) then 
+         gngalsig = 1
+         mesglvl='Gal-Chen'
+      else
+         if (pref(1).ge.2000.0) then
+            gngalsig = 2
+            mesglvl='Sigma'
+         else
+            gngalsig = 0
+            mesglvl='Pressure'
+         endif
+      endif   
+*
+      write (6,300)
+      write (6,320) nlvls,mesglvl,nomvar
+      write (6,300)
+*      
+      if (gngalsig.eq.1) then
+         do 21 i=1,nlvls
+            pref(i)= (pref(i)-12001.0)*5.0
+ 21      continue
+      endif  
+      if (gngalsig.eq.2) then
+         do 22 i=1,nlvls
+            pref(i)= (pref(i)-2000.0)/10000.0
+ 22      continue
+      endif
+*
+      do i=1,nlvls
+         write (6,600) i,pref(i)
+      end do
+      write (6,300)
+      print*
+*--------------------------------------------------------------------
+ 300  format (75('*'))
+ 320  format ('(GETLVLS) Found the following:',i4,1x,a9,
+     $        ' levels for this dataset',1x,'(',a4,')')
+ 600  format (i5,f10.3)
+ 800  format (/1x,"PROBLEM IN ROUTINE ""GETLVLS"""/
+     $         1x,"THERE ARE",i4," LEVELS IN THIS DATASET."/
+     $         1x,"INCREASE THE LENGTH OF VECTOR pref"/)
+ 900  format (1x,"(GETLVLS):",1x,
+     $            "COULD NOT FIND (",a,") VALID AT: ",a16)
+      return
+      end
+@

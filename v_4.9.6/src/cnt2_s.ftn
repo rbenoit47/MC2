@@ -1,0 +1,92 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r cnt2_s Elavue les coefficients ccz(k,l)
+*
+      subroutine cnt2_s (czz,nx,ny,nz) 
+      implicit none
+* 
+      integer nx,ny,nz
+      real*8 czz(nx,ny,nz,3)
+*
+*AUTHOR
+*
+*REVISION
+*
+*OBJECT
+*     Calcule les coefficients de la derivee seconde en z: czz(i,j,k,3) 
+*     servant dans l'equation de Helmoltz.
+*     le terme d'Helmoltz y est ajoute.
+*
+*IMPLICIT
+#include "dynmem.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dtmdtp.cdk"
+*
+**
+*
+      integer i,j,k
+      real*8 nu0
+*----------------------------------------------------------------------
+*
+      do j=1,ny
+      do i=1,nx
+         czz(i,j,1,1)     = 0.0
+         czz(i,j,1,2)     = c00*orts(i,j,1)
+         czz(i,j,gnk-1,3) = 0.0
+      end do
+      end do
+*
+      do 2 k=1,gnk-2 
+*
+      do 2 j=1,ny
+      do 2 i=1,nx
+*
+         nu0 = dtp * dtp / ( c03 + dtp * dtp * c06 * nssq(i,j,k+1) )
+*
+         czz(i,j,k+1,1) =            (gg0r (i,j,k+1)+c01*orts(i,j,k+1))*
+     $                               (gg0wr(i,j,k+1)+c02*nssq(i,j,k+1))*
+     $                                                     nu0
+         czz(i,j,k+1,2) = c00*orts(i,j,k+1) -
+     $                               (gg0r (i,j,k+1)+c01*orts(i,j,k+1))*
+     $                               (gg0wr(i,j,k+1)-c02*nssq(i,j,k+1))*
+     $                                                     nu0
+*
+         czz(i,j,k,2)   = czz(i,j,k,2) -
+     $                               (gg0r (i,j,k  )-c01*orts(i,j,k  ))*
+     $                               (gg0wr(i,j,k+1)+c02*nssq(i,j,k+1))*
+     $                                                     nu0
+         czz(i,j,k,3)   =            (gg0r (i,j,k  )-c01*orts(i,j,k  ))*
+     $                               (gg0wr(i,j,k+1)-c02*nssq(i,j,k+1))*
+     $                                                     nu0
+    2 continue
+*
+      if(flextop) then
+         do j=1,ny
+         do i=1,nx
+*
+            nu0 = dtp * dtp / ( c03 + dtp * dtp * c06* nssq(i,j,gnk  ) )
+*
+            czz(i,j,gnk  ,1) =                    c01t*orts(i,j,gnk  ) *
+     $                          (gg0wr(i,j,gnk  )+c02 *nssq(i,j,gnk  ))*
+     $                                                     nu0
+            czz(i,j,gnk  ,2) = c00t*orts(i,j,gnk) -
+     $                                            c01t*orts(i,j,gnk  ) *
+     $                          (gg0wr(i,j,gnk  )-c02 *nssq(i,j,gnk  ))*
+     $                                                     nu0
+            czz(i,j,gnk  ,3) = 0.0
+*
+            czz(i,j,gnk-1,2) = czz(i,j,gnk-1,2) -
+     $                          (gg0r (i,j,gnk-1)-c01 *orts(i,j,gnk-1))*
+     $                          (gg0wr(i,j,gnk  )+c02 *nssq(i,j,gnk  ))*
+     $                                                     nu0
+            czz(i,j,gnk-1,3) =  (gg0r (i,j,gnk-1)-c01 *orts(i,j,gnk-1))*
+     $                          (gg0wr(i,j,gnk  )-c02 *nssq(i,j,gnk  ))*
+     $                                                     nu0
+         enddo
+         enddo
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end 

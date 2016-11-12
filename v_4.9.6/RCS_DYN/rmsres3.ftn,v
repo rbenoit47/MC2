@@ -1,0 +1,114 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine rmsres3 (resrms, r, g, h, s, czz, c2,
+     $                    lminx, lmaxx, lminy, lmaxy, lnk)
+     $                   
+*
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk
+      real    r(lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        g(lminx:lmaxx,lminy:lmaxy,lnk),
+     $        h(lminx:lmaxx,lminy:lmaxy,lnk), 
+     $        s(lminx:lmaxx,lminy:lmaxy), czz(lnk,4)
+      real    resrms,c2
+#include "lcldim.cdk"
+      integer i, j, k
+      real wk
+
+      do k = 1, nk
+
+        do j = 1, ldnj-1
+          r(1,j,k)    = g(2,j,k) - g(1,j,k)
+          r(ldni-1,j,k) = g(ldni-2,j,k) - g(ldni-1,j,k)
+        enddo
+
+        do i = 2, ldni-2
+          do j = 1, ldnj-1
+            r(i,j,k) = g(i+1,j,k) - g(i,j,k) + g(i-1,j,k) - g(i,j,k)
+*           r(i,j,k) = g(i+1,j,k) - 2*g(i,j,k) + g(i-1,j,k)
+          enddo
+        enddo
+
+        do i = 1, ldni-1
+          r(i,1,k)    = r(i,1,k) + g(i,2,k) - g(i,1,k)
+          r(i,ldnj-1,k) = r(i,ldnj-1,k) + g(i,ldnj-2,k) - g(i,ldnj-1,k)
+        enddo
+
+        do j = 2, ldnj-2
+          do i = 1, ldni-1
+            r(i,j,k) = r(i,j,k) + 
+     $                 g(i,j+1,k) - g(i,j,k) + g(i,j-1,k) - g(i,j,k)
+*    $                 g(i,j+1,k) - 2*g(i,j,k) + g(i,j-1,k)
+          enddo
+        enddo
+
+        do i = 1, ldni-1
+          do j = 1, ldnj-1
+            r(i,j,k) = s(i,j) * r(i,j,k)
+          enddo
+        enddo
+
+      enddo
+
+      do k = 1, nk-1
+        do j = 1, ldnj-1
+          do i = 1, ldni-1
+            r(i,j,k) = r(i,j,k) + czz(k,1)*g(i,j,k + 1) -
+     $                            czz(k,2)*g(i,j,k)
+          enddo
+        enddo
+      enddo
+
+      do k = 2, nk
+        do j = 1, ldnj-1
+          do i = 1, ldni-1
+            r(i,j,k) = r(i,j,k) + czz(k,4)*g(i,j,k-1) -
+     $                            czz(k,3)*g(i,j,k) 
+          enddo
+        enddo
+      enddo
+
+      do k = 1, nk
+        do j = 1, ldnj-1
+          do i = 1, ldni-1
+            r(i,j,k) = r(i,j,k) + c2*g(i,j,k) - h(i,j,k)
+          enddo
+        enddo
+      enddo
+*
+      wk=0.0
+      do k=1,nk
+         do j=1,ldnj-1
+            do i=1,ldni-1
+               wk = wk + r(i,j,k)*r(i,j,k)
+            end do
+         end do
+      end do
+      resrms = sqrt(wk)
+
+      return
+      end
+@

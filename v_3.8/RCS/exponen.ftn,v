@@ -1,0 +1,164 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.20.16.41.28;	author armnphy;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!      Ce fichier contient 2 sous-programmes :
+!
+!		* exponen4 pour calculs en simple precision
+!		* exponen8 pour calculs en double precision
+!
+!      Exemples d'utilisation :
+!       
+!      do i=1,n
+!         x(i) = y(i)**z(i)
+!      end do
+!
+!      est equivalent a
+!
+!      call exponen4 (x,y,z,n,n,n)
+!
+!      Si y est une constante, alors
+!
+!      do i=1,n
+!         x(i) = y**z(i)
+!      end do
+!
+!      est equivalent a
+!
+!      call exponen4 (x,y,z,n,1,n)
+!
+!      Si z est une constante, alors
+!
+!      do i=1,n
+!         x(i) = y(i)**z)
+!      end do
+!
+!      est equivalent a
+!
+!      call exponen4 (x,y,z,n,n,1)
+!
+!
+!!!!!!!!!!!!
+!
+!      calcul d'exponentiations en simple precision
+!      x = y**z
+!      ny et nz sont les dimensions de y et z
+!      nx doit etre max(ny,nz)
+!
+       subroutine exponen4 (x,y,z,nx,ny,nz)
+       implicit none
+       integer i,nx,ny,nz
+       real   x (nx), y (ny), z (nz)
+       real*8 x8(nx), y8(ny), z8(nz)
+*
+*
+*
+
+#if !defined(AIX)
+
+       if (ny.gt.1) then
+          if (nz.gt.1) then
+             x = y**z
+          else if (nz.eq.1) then
+             do i=1,nx
+                x(i) = y(i)**z(1)
+             end do
+          endif
+       else
+          do i=1,nx
+             x(i) = y(1)**z(i)
+          end do 
+       endif
+
+#endif
+
+#if defined (AIX)
+
+       y8 = y
+       z8 = z
+       call exponen8 (x8,y8,z8,nx,ny,nz)
+       x = x8
+
+#endif
+*
+*
+       return
+       end
+
+!      calcul d'exponentiations en double precision
+!      x = y**z
+!      ny et nz sont les dimensions de y et z
+!      nx doit etre max(ny,nz)
+!
+       subroutine exponen8 (x,y,z,nx,ny,nz)
+       implicit none
+       integer i,nx,ny,nz
+       real*8 x(nx), y(ny), z(nz)
+*
+#if !defined(AIX)
+
+       if (ny.gt.1) then
+          if (nz.gt.1) then
+             x = y**z
+          else if (nz.eq.1) then
+             do i=1,nx
+                x(i) = y(i)**z(1)
+             end do
+          endif
+       else
+          do i=1,nx
+             x(i) = y(1)**z(i)
+          end do 
+       endif
+
+#endif
+
+#if defined (AIX)
+
+       if (ny.gt.1) then
+          call vlog(x,y,ny)
+       else
+          do i=1,nx
+             x(i) = dlog(y(1))
+          end do
+       endif
+*
+       if (nz.gt.1) then
+          x = z*x
+       else
+          do i=1,nx
+             x(i) = z(1)*x(i)
+          end do
+       endif
+*
+       call vexp (x,x,nx)
+
+#endif
+*
+       return
+       end
+@

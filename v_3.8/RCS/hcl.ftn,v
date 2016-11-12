@@ -1,0 +1,248 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@      subroutine hcl
+      write(6,'(A)') "SUBROUTINE HCL IS OBSOLETE"
+      call qqexit(1)
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@d1 5
+a5 199
+!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  HCL
+*
+      SUBROUTINE HCL ( H , KCL , SCL , E , Z , WC , S , M0 , M1 , M2 ,
+     X    BASE,A,
+     X                 N , NK )
+*
+#include "impnone.cdk"
+      INTEGER N, NK
+      REAL H(N)
+      REAL A(N)
+      REAL KCL(N)
+      REAL SCL(N),E(N,NK),Z(N,NK),WC(N),S(NK),M0(N),M1(N),M2(N)
+      REAL BASE (N)
+#if defined (CVMG)
+#include "cvmg.cdk"
+#endif
+*
+*Author
+*          J. Cote RPN (Oct.84)
+*
+*Revision
+* 001      J. Cote RPN(Nov 1984)SEF version documentation
+* 002      J. Cote RPN(Nov 1984)RHO factor
+* 003      J. Cote RPN(June 1985)threshold
+* 004      R.Benoit  Limit of H by base of condensation
+*                         if boundary layer is unstable
+* 005      M. Lepine  -  RFE model code revision project (Feb 87)
+* 006      J.Mailhot RPN(Sep 1987) Factor for unstable case
+*               Adaptation to revised code G.Pellerin (Oct87)
+* 007      J.Mailhot RPN(Jan1988)Limit the momentum by HMAX
+* 008      Y. Delage (May89) Revision of vertical diffusion
+* 009      B. Bilodeau  (August 1991)- Adaptation to UNIX
+*
+*Object
+*          to calculate the height of the boundary layer with a
+*          statistical method
+*
+*Arguments
+*
+*          - Output -
+* H        height of the boundary layer in metres
+* KCL      index of 1st level in the boundary layer - 3 (N)
+* SCL      height of the boundary layer in sigma
+*
+*          - Input -
+* E        turbulent energy
+* Z        geopotential/gravity heights
+* WC       convective speed scale
+* S        sigma levels
+* M0       work space
+* M1       work space
+* M2       work space
+* BASE
+* A        height of the boundary layer in the stable case
+* N        horizontal dimension
+* NK       vertical dimension
+*
+*Notes
+*          The weight function is RHO*E
+*
+*IMPLICITES
+*
+#include "clefcon.cdk"
+*
+*
+**
+*
+      REAL SEUILA,SEUILR,EJ
+      REAL HMIN
+      REAL RHODZ,ZSUR,ZSOUS,SSUR,SSOUS
+      REAL VAL
+#if defined (EXPORT)
+      REAL CVMGM,CVMGT
+#endif
+      INTEGER J,K
+*
+*     LES FACTEURS SONT CALIBRES POUR DONNER UNE REPONSE EXACTE POUR
+*     UNE DISTRIBUTION CARREE/EXPONENTIELLE DANS LE CAS INSTABLE/STABLE
+*     FACTI = SQRT(3)
+*     FACTS = (LN10-2)/SQRT(2)
+*
+      REAL FACT,FACTI,FACTS
+      REAL HMAX
+      SAVE FACTI,FACTS,HMAX,SEUILR
+*
+      DATA FACTI,FACTS /2.3, .21396/
+      DATA HMAX /4000.0/
+      DATA SEUILR / 0.01 /
+*
+*     MOMENTS DE Z
+*
+      SEUILA = 10. * ETRMIN
+      RHODZ = 0.5 * (S(2) - S(1))
+      HMIN=300.
+      DO 1 J=1,N
+*
+         H(J) = MAX( SEUILR * E(J,NK) , SEUILA )
+         EJ = E(J,1)
+         EJ = CVMGT( EJ , 0.0 , EJ.GE.H(J).AND.Z(J,1).LE.HMAX )
+*
+         M0(J) = RHODZ * EJ
+         M1(J) = M0(J) * Z(J,1)
+    1    M2(J) = M1(J) * Z(J,1)
+*
+      DO 2 K=2,NK-1
+         RHODZ = 0.5 * (S(K+1) - S(K-1))
+         DO 2 J=1,N
+*
+            EJ = E(J,K)
+            EJ = CVMGT( EJ , 0.0 , EJ.GE.H(J).AND.Z(J,K).LE.HMAX)
+*
+            M0(J) = M0(J) + RHODZ * EJ
+            M1(J) = M1(J) + RHODZ * EJ * Z(J,K)
+    2       M2(J) = M2(J) + RHODZ * EJ * Z(J,K)**2
+*
+      RHODZ = 0.5 * (S(NK) - S(NK-1))
+      DO 3 J=1,N
+*
+         M0(J) = M0(J) + RHODZ * E(J,NK)
+         M1(J) = M1(J) + RHODZ * E(J,NK) * Z(J,NK)
+    3    M2(J) = M2(J) + RHODZ * E(J,NK) * Z(J,NK)**2
+*
+*     M0 = E MOYEN
+*     M1 = Z MOYEN
+*     M2 = DZ MOYEN (ECART TYPE)
+*     H  = MIN ( MAX ( Z MOYEN + FACT * ECART TYPE , 150.0 ) , HMAX )
+*
+      DO 4 J=1,N
+         FACT = CVMGZ (FACTS , FACTI , WC(J))
+         M1(J) = M1(J)/M0(J)
+         M2(J) = SQRT ( MAX ( M2(J)/M0(J) - M1(J)**2 , 0.0 ) )
+         H(J)  = MIN ( MAX ( M1(J) + FACT * M2(J) , HMIN ) , HMAX )
+    4    M0(J) = M0(J)/H(J)
+*
+*  CONVERTIR BASE DE SIGMA A Z
+*    SI C.L. EST INSTABLE , (BASE)=-SIGMA
+*    SI C.L. EST   STABLE , CONVERTIR BASE A Z MAX = Z( , 1)
+*
+*  IMPOSER ENSUITE QUE  H .LE. BASE
+*
+*  M0 EST LIBRE . UTILISER POUR CES CALCULS
+      DO 41 J = 1 , N
+         M0 (J) = NK
+41    CONTINUE
+*
+      DO 42 K = NK-1 , 1 , -1
+         DO 43 J = 1 , N
+            M0 (J) = CVMGT (FLOAT(K),M0(J),
+     X                   ABS(BASE(J)).GE.S(K) .AND. M0(J).EQ.NK )
+43       CONTINUE
+42    CONTINUE
+*
+*  (M0) = INDICE DU 1ER NIVEAU AU-DESSUS DE "BASE"
+*          1 =<   <NK
+*
+      DO 44 J = 1 , N
+         K=MIN(NK-1,NINT(M0(J)))
+         ZSUR = Z(J,K)
+         ZSOUS = Z(J,K+1)
+         SSUR = S(K)
+         SSOUS = S(K+1)
+         VAL = ZSUR+(ABS(BASE(J))-SSUR)*(ZSOUS-ZSUR)/(SSOUS-SSUR)
+         BASE (J) = CVMGM ( VAL , Z(J,1) , BASE(J) )
+         BASE (J) = MAX (BASE(J) , HMIN )
+*
+         H (J) = MIN ( H(J) , BASE(J) )
+44    CONTINUE
+*
+      DO 7 J=1,N
+         DO 5 K=NK,1,-1
+            IF(Z(J,K).GT.H(J)) GO TO 6
+    5    CONTINUE
+         K = 1
+    6    IF (K.EQ.NK) THEN
+            ZSUR = Z(J,K-1)
+            ZSOUS = Z(J,K)
+            SSUR = S(K-1)
+            SSOUS = S(K)
+         ELSE
+            ZSUR = Z(J,K)
+            ZSOUS = Z(J,K+1)
+            SSUR = S(K)
+            SSOUS = S(K+1)
+         ENDIF
+*
+*     INDICE DU PREMIER NIVEAU DANS LA COUCHE LIMITE - 3
+*
+         KCL(J) = MAX ( FLOAT ( K-2 ) , 1.0 )
+*
+      H(J)=CVMGZ(H(J),A(J),A(J))
+*     CALCULER SIGMA(H) DANS SCL
+*
+         SCL(J) = SSUR + (H(J) - ZSUR) * (SSOUS - SSUR)/(ZSOUS - ZSUR)
+*
+    7 CONTINUE
+*
+      RETURN
+      END
+@

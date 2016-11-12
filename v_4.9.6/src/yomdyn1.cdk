@@ -1,0 +1,51 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+* Some control parameters set by the user when
+* running pilmc2. The information is carried out
+* to MC2 through tape31.
+*
+*      grtstar = basic state for the temperature field (K)
+*      grepsi  = uncentered time and spatial average parameter
+*                 (0.0 <= grepsi <= 1.0)
+*      grtf    = time-filter parameter
+*
+*      htop    = top of the model (m)
+*
+*      tzero_star   = surface temperature for the basic state (K)
+*      ttop_star    = surface temperature for the basic state (K)
+*      ntrop_star   = brunt-vaisala freq. of the basic state in the 
+*                     troposphere
+*      htrop_star   = height of the tropopause in the basic state
+*      nstrat_star  = brunt-vaisala freq. of the basic state in the 
+*                     stratosphere
+*
+*      iscal(1&2) = scaling heights for the decay of topography
+*                   in the vertical coordinate
+*
+*      hord_type  = "implicit" or "explicit" horizontal diffusion 
+*      hord_del   = second/fourth order horizontal diffusion
+*      hord_nu    = horizontal diffusion coefficient
+*      hord_nutop = horizontal diffusion coefficient (top)
+*      hord_zspng = number of vertical levels for the sponge layer
+*      hord_fuv   = multiplicative factor applied on hord_nu for UU/VV
+*      hord_fww   = multiplicative factor applied on hord_nu for SW
+*      hord_ftt   = multiplicative factor applied on hord_nu for TT
+*      hord_fhu   = multiplicative factor applied on hord_nu for HU
+*      hord_ftr   = multiplicative factor applied on hord_nu for TRACERS
+*
+      character*10 hord_type
+      integer gnnpbl,nktop,hord_zspng,hord_del,iscal(2),endyd1i
+      real grtstar,grepsi,grtf,htop,tzero_star,ttop_star,ntrop_star,
+     $     htrop_star,nstrat_star,hord_lnr,hord_nutop,hord_fuv,
+     $     hord_fww,hord_fhu,hord_ftt,hord_ftr,maxhh01_l,maxhh02_l,
+     $     maxhh01_h,maxhh02_h,grdx,grdy,grdt,grdtini,endyd1r
+*
+      common /yomdn1c/ hord_type
+      common /yomdn1i/ gnnpbl,nktop,hord_zspng,hord_del,
+     $                 iscal,endyd1i
+      common /yomdn1r/ grtstar,grepsi,grtf,htop,tzero_star,ttop_star,
+     $                 ntrop_star,htrop_star,nstrat_star,
+     $                 hord_lnr,hord_nutop,hord_fuv,hord_fww,
+     $                 hord_fhu,hord_ftt,hord_ftr,maxhh01_l,maxhh02_l,
+     $                 maxhh01_h,maxhh02_h,grdx,grdy,grdt,grdtini,endyd1r
+*

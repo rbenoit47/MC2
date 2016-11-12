@@ -1,0 +1,418 @@
+#! /bin/ksh
+#
+# set -x
+#
+cclargs    0$                     "[Faire une parties des diagnostiques requis par AMIP2]"\
+      -exp       ",,,," ",,,,"          "[Nom de l'experience, utilise dans les noms de fichiers diagnostiques]"\
+      -dt         1800   1200           "[Taille du pas de temps utilise dans l'experience]"\
+      -rep       "."    ",,,,"          "[Repertoire contenant les donnees]"\
+      -do_diag+  "OUI"  "NON"           "[On fait les diagnostiques tout de suite]"\
+      -gaussout+ "OUI"  "NON"           "[Les sorties ont deja ete interpolees sur des grilles gaussiennes]"\
+      -zoncal+   "OUI"  "NON"           "[Calculer les moyennes zonales des moyennes et variances temporelles]"\
+      -start     "NONE" "1978010100"    "[Date de validite de l'analyse de depart en YYYYMMJJHH]"\
+      -travail   "${BIG_TMPDIR}" ",,,," "[Repertoire de travail (BIG_TMPDIR)]"\
+      -repack+   "OUI"  "NON"           "[Demander a MV2CFS de recompacter les donnees en utilisant $npg bits]"\
+      -prefix    ""     ""              "[Prefix to be added to the input filenames]"\
+      -suffix    ""     ""              "[Suffix to be added to the output filenames, eg. _hi or _lo]"\
+      -npg        16     32             "[Compaction utilisee par mv2cfs]"\
+      -bnce+     "NON"  "OUI"           "[Transferer les donnees vers leur destination finale]"\
+      -archive+  "NON"  "OUI"           "[si bnce=NON, creer des archives contenant les donnees md et pr]"\
+      -b_mach    "cfs"  ""              "[Machine de destination finale, si requis]" \
+      -b_addres  "court_terme"   ",,,," "[Repertoire sur b_mach ou les donnees sont deposees]" \
+      -clean+    "NON"  "OUI"           "[Effacer les donnees apres leur transfert sur b_mach]"\
+      -debug+    "NON"  "OUI"           "[Activer le mode DEBUG]"\
+      ++ $* > ${BIG_TMPDIR}/cclargs_lancer_diag.out$$
+#
+. ${BIG_TMPDIR}/cclargs_lancer_diag.out$$ && /bin/rm -f ${BIG_TMPDIR}/cclargs_lancer_diag.out$$
+#
+# Description...
+#    Cette script effectue une premiere serie de diagnostiques requis par
+#    le protocole experimental AMIP2, tel que documente dans le lien suivant:
+#
+#    URL="http://www-pcmdi.llnl.gov/amip/OUTPUT/AMIP2/outlist.html"
+#
+# Auteur...
+#    Bernard Dugas
+#
+# Revisions...
+#    001 - fevrier   2001: version initiale
+#    002 - mars      2001: ajouter la cle "start"
+#                          ajouter la cle "travail"
+#                          definir $NOMVAR pour make_diag/make_mean
+#                          ajouter les cles "gaussout" et "npg"
+#                          verifier la disponibilite du CFS
+#                          ajouter la variable d'environnement VERY_NICE_DIAG
+#                          ajouter la cle "do_diag"
+#    003 - novembre  2001: ajouter la cle archive
+#    004 - dec/2001 @ fev/2002: adaptation a la version GEM/DM 2.3.1
+#    005 - june      2002: ajouter la cle "suffix" (Katja Winger)
+#    006 - aout      2002: ajouter la cle "zoncal" (Katja Winger)
+#    007 - septembre 2002: ajouter la cle "prefix"
+#    008 - janvier   2003: ajouter un appel a Climat_mdpr_clean et
+#                          modifier les deux appels a Climat_mv2cfs
+#                          en consequence
+#    009 - mai       2003: modifier l'appel a cclargs et verifier les codes
+#                          de retour des procedures externes
+#                          
+#
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+if [ ! -d ${rep} ]; then
+  echo ${ECHOARG} "\n Le repertoire de donnees initiale ${rep} n'existe pas \n"
+  exit 1
+fi
+#
+cd ${rep}
+rep=`true_path .`
+#
+# Si l'un des fichiers suivants existe, c'est une serieuse indication qu'on
+# est deja passe par ici et que les donnees de 06h et 18h on ete enlevees.
+#                       ====> On arrete tout <=====
+#
+if [ -s resultat_mdpr_clean -o -s resultat_mdpr_clean.Z ]; then
+  echo ${ECHOARG} "\n Il existe deja un fichier resultat_mdpr_clean* dans ${rep} \n"
+  exit 2
+fi
+#
+if [ ! -d ${travail} ]; then
+  mkdir ${travail}
+  nouveau_travail=OUI
+else
+  nouveau_travail=NON
+fi
+#
+cd ${travail}
+travail=`true_path .`
+cd ${rep}
+#
+if [ `hostname` = pollux ]; then export VERY_NICE_DIAG=non ; fi
+#
+export USE_BIG_TMPDIR=oui
+export BIG_TMPDIR=${travail}
+export ECHO_COMMAND_LINE=on
+export DIAGNOSTIC_EXIT=${BIG_TMPDIR}/DIAGNOSTIC_EXIT
+touch ${DIAGNOSTIC_EXIT}
+#
+liste=`ls ${prefix}pr* `
+nombre_pr=`echo ${liste} | grep 00 | wc -w `
+liste=`ls ${prefix}md* `
+nombre_md=`echo ${liste} | grep 00 | wc -w `
+#
+c1=`echo ${prefix}xx | wc -c`
+c2=$(( ${c1} + 9 ))
+#
+if [ ${start} = NONE ]; then
+  set ${liste}
+  indice=$#
+  dernier=pas_encore_trouve
+  while [ ${dernier} = pas_encore_trouve ]; do
+    courant=$1
+    if [ `echo ${courant} | grep 00 | wc -w ` -eq 1 ]; then
+      dernier=${courant}
+    elif [ ${indice} -gt 1 ]; then
+      shift
+      indice=$(( ${indice} - 1 ))
+    else
+      echo ${ECHOARG} "\n Argument start indisponible"
+      exit 3
+    fi
+  done
+  start=`echo ${dernier} | cut -d_ -f 1 | cut -c${c1}-${c2} `
+fi
+#
+annee=`echo ${start} | cut -c1-4 `
+#
+if [ ${nombre_md}  = 0 -o \
+     ${nombre_pr}  = 0 -o \
+     ${nombre_md} != ${nombre_pr} ]; then
+  echo ${ECHOARG} "\n Probleme avec les fichiers de donnees..."
+  echo " Trouve ${nombre_md} fichiers md${annee}* et"
+  echo "        ${nombre_pr} fichiers pr${annee}*"
+  echo ${ECHOARG} " dans ${rep} \n"
+  exit 4
+fi
+#
+# Conversions des arguments textuels de l'anglais au francais
+#
+if [ ${archive} = YES ]; then
+  archive=OUI
+elif [ ${archive} = NO ]; then
+  archive=NON
+fi
+#
+if [ ${bnce} = YES ]; then
+  bnce=OUI
+elif [ ${bnce} = NO ]; then
+  bnce=NON
+fi
+#
+if [ ${clean} = YES ]; then
+  clean=OUI
+elif [ ${clean} = NO ]; then
+  clean=NON
+fi
+#
+if [ ${debug} = YES ]; then
+  debug=OUI
+elif [ ${debug} = NO ]; then
+  debug=NON
+fi
+#
+if [ ${do_diag} = YES ]; then
+  do_diag=OUI
+elif [ ${do_diag} = NO ]; then
+  do_diag=NON
+fi
+#
+if [ ${gaussout} = YES ]; then
+  gaussout=OUI
+elif [ ${gaussout} = NO ]; then
+  gaussout=NON
+fi
+#
+if [ ${zoncal} = YES ]; then
+  zoncal=OUI
+elif [ ${zoncal} = NO ]; then
+  zoncal=NON
+fi
+#
+if [ ${repack} = YES ]; then
+  repack=OUI
+elif [ ${repack} = NO ]; then
+  repack=NON
+fi
+#
+r.echo " "
+r.echo " Climat_lancer_diag: BIG_TMPDIR     =${BIG_TMPDIR}"
+r.echo " Climat_lancer_diag: DIAGNOSTIC_EXIT=${DIAGNOSTIC_EXIT}"
+r.echo " Climat_lancer_diag: Starting at `date`"
+r.echo " "
+#
+if [ ${debug} = OUI ]; then set -x ; fi
+#
+# determiner l'interval d'archivage utilise dans ce repertoire.
+#
+compteur=0
+#
+c1=$(( ${c1} + 11 ))
+c2=$(( ${c2} + 9 ))
+#
+# get the times of the first three files
+for nom in ${liste} ; do
+  compteur=$(( ${compteur} + 1 ))
+  dernier_nom=${nom}
+  if [ ${compteur} = 1 ]; then
+    debut=`echo ${nom} | cut -c${c1}-${c2} `
+  elif [ ${compteur} = 2 ]; then
+    second=`echo ${nom} | cut -c${c1}-${c2} `
+  elif [ ${compteur} = 3 ]; then
+    troisieme=`echo ${nom} | cut -c${c1}-${c2} `
+  fi
+done
+#
+fin=`echo ${dernier_nom} | cut -c${c1}-${c2} `
+#
+# get the time difference (delta) between the three files
+#
+delta=0; delt1=0
+#
+if [ ${compteur} -ge 3 ]; then
+  delta=`expr ${troisieme} - ${second} `
+  delt1=`expr ${second}    - ${debut} `
+elif [ ${compteur} -ge 2 ] ; then 
+  delta=`expr ${second}    - ${debut} `
+fi
+#
+# find delta t in hours and seconds
+if [ ${delta} -gt 0 -a ${delt1} -gt 0 -a ${delta} -eq ${delt1} ]; then
+  deltas=$(( ${delt1} * ${dt} )) ; deltah=$(( ${deltas} / 3600 ))
+elif [ ${delta} -gt 0 ]; then
+  deltas=$(( ${delta} * ${dt} )) ; deltah=$(( ${deltas} / 3600 ))
+else
+  deltah=12
+  r.echo "valeur de deltah definit a ${deltah} par defaut dans ${rep}"
+fi
+#
+if [ ${do_diag} = OUI ]; then
+#
+# extraire les donnees qui doivent etre conservees sous forme de series temporelles
+#
+r.echo " "
+r.echo " Climat_series_temporelles -md md${start} -pr pr${start} -prefix ${prefix}"
+r.echo "                           -rep ${rep} -outnam ts${exp}${suffix} -deltah ${deltah}"
+#
+Climat_series_temporelles -md md${start} -pr pr${start} -prefix ${prefix} \
+                          -rep ${rep} -outnam ts${exp}${suffix} -deltah ${deltah}         1> resultat_make_ts 2>&1
+#
+exit_series_temporelles=$?
+#
+if [ -s ${DIAGNOSTIC_EXIT} ]; then
+  echo "Dans Climat_lancer_diag: Arret apres Climat_series_temporelles"
+  exit 99
+elif [ ${exit_series_temporelles} -ne 0 ] ; then
+  echo "Dans Climat_lancer_diag: exit ${exit_series_temporelles} de Climat_series_temporelles" | tee ${DIAGNOSTIC_EXIT}
+  exit 99
+fi
+#
+# faire les diagnostiques sur les niveaux modeles et les niveaux pressions separement
+#
+r.echo " "
+r.echo " NOMVAR=TT GZ HU UU VV WW W6 W7 X5 T5 T6 T7 T9 X2 X3 X4 W8 W9 UG V6 CA"
+r.echo " Climat_diag     -exp ${prefix}pr${start} -rep ${rep} -outnam pr${exp}${suffix}"
+r.echo "                 -vents NON -tri NON -gaussian ${gaussout} -zoncal ${zoncal}"
+r.echo "                 -debug ${debug} -travail ${BIG_TMPDIR}"
+#
+export NOMVAR="TT GZ HU UU VV WW W6 W7 X5 T5 T6 T7 T9 X2 X3 X4 W8 W9 UG V6 CA"
+Climat_diag     -exp ${prefix}pr${start} -rep ${rep} -outnam pr${exp}${suffix} \
+                -vents NON -tri NON  -gaussian ${gaussout} -zoncal ${zoncal} \
+                -debug ${debug} -travail ${BIG_TMPDIR}                                    1> resultat_make_diag 2>&1
+#
+exit_diag=$?
+#
+if [ -s ${DIAGNOSTIC_EXIT} ]; then
+  echo "Dans Climat_lancer_diag: Arret apres Climat_diag"
+  exit 99
+elif [ ${exit_diag} -ne 0 ] ; then
+  echo "Dans Climat_lancer_diag: exit ${exit_diag} de Climat_diag" | tee ${DIAGNOSTIC_EXIT}
+  exit 99
+fi
+#
+r.echo " "
+r.echo " Climat_diag_phy -exp ${prefix}md${start} -rep ${rep} -outnam md${exp}${suffix}"
+r.echo "                 -deltah ${deltah} -gaussian ${gaussout}"
+r.echo "                 -debug ${debug} -zoncal ${zoncal}"
+r.echo " "
+#
+Climat_diag_phy -exp ${prefix}md${start} -rep ${rep} -outnam md${exp}${suffix} \
+                -deltah ${deltah} -gaussian ${gaussout} \
+                -debug ${debug} -zoncal ${zoncal}                                         1> resultat_diag_phy  2>&1
+#
+exit_diag_phy=$?
+#
+if [ -s ${DIAGNOSTIC_EXIT} ]; then
+  echo "Dans Climat_lancer_diag: Arret apres Climat_diag_phy"
+  exit 99
+elif [ ${exit_diag} -ne 0 ] ; then
+  echo "Dans Climat_lancer_diag: exit ${exit_diag_phy} de Climat_diag_phy" | tee ${DIAGNOSTIC_EXIT}
+  exit 99
+fi
+#
+compress resultat_make_ts
+compress resultat_make_diag
+compress resultat_diag_phy
+#
+fi
+#
+if [ ${archive} = OUI -a ${bnce} = NON ]; then b_mach=`hostname` ; b_addres=. ; fi
+#
+if [ ${bnce} = OUI -o ${archive} = OUI ]; then
+  #
+  if [ ${do_diag} = NON -o ${delta} -ge 24 ]; then debut=0 ; fin=0 ; delta=0 ; fi
+  if [ ${do_diag} = NON                    ]; then repack=NON ; fi
+  #
+  if [ ${b_mach} != `hostname` ]; then
+    #
+    # verifier que ${b_mach} est (minimalement) disponible
+    #
+    rsh ${b_mach} -n ls 1> /dev/null 2>&1
+    cfs_status=$?
+    #
+  else
+    cfs_status=0
+  fi
+  #
+  if [ ${cfs_status} = 0 ]; then
+    #
+    if [ -s ${DIAGNOSTIC_EXIT} ]; then
+      if [ ${b_mach} = `hostname` ]; then
+        b_addres=.
+      else
+        b_addres=court_terme ; b_mach=cfs
+      fi
+      repack=NON ; debut=0 ; fin=0 ; delta=0
+      mv    ${DIAGNOSTIC_EXIT} \
+            ${DIAGNOSTIC_EXIT}_hold
+      touch ${DIAGNOSTIC_EXIT}
+      echo ${ECHOARG} "\n Problemes avec les diagnostiques..."
+      echo " Les donnees utilisees seront disponibles dans les"
+      echo " archives gemdm_${exp}_md${suffix}.ca et gemdm_${exp}_pr${suffix}.ca"
+      echo ${ECHOARG} " sur cfs:court_terme/ \n"
+    fi
+    #
+    #   modifier les echantillons pour qu'ils puissent etre
+    #   sauves avec un interval de 12 heures par Climat_mv2cfs
+    #
+    if [[ $(( ${dt} * ${delta} )) -eq 21600 ]]; then
+      Climat_mdpr_clean -exp ${exp} -start ${start} -dt ${dt} \
+                       -delta ${delta} -suffix ${suffix} -prefix ${prefix}                1> resultat_mdpr_clean  2>&1
+      if [ $? = 0 ]; then
+        fin=0 ; debut=0 ; delta=0
+      else
+        echo ${ECHOARG} "\n erreur Climat_mdpr_clean dans Climat_lancer_diag \n"
+        exit 5
+      fi
+      compress resultat_mdpr_clean
+    fi
+    #
+    #   on archive maintenant les donnees md et pr
+    #
+    Climat_mv2cfs -pref ${prefix}md${start} \
+           -arcnam ${b_addres}/gemdm_${exp}_md${suffix} \
+           -mach ${b_mach} -clean ${clean} -repack ${repack} \
+           -debut ${debut} -fin ${fin} -delta ${delta} \
+           -travail ${BIG_TMPDIR} -info -npg ${npg}
+    if [ $? != 0 ]; then
+      echo ${ECHOARG} "\n erreur Climat_mv2cfs ( gemdm_${exp}_md${suffix} ) dans Climat_lancer_diag \n"
+      exit 6
+    fi
+    #
+    Climat_mv2cfs -pref ${prefix}pr${start} \
+           -arcnam ${b_addres}/gemdm_${exp}_pr${suffix} \
+           -mach ${b_mach} -clean ${clean} -repack ${repack} \
+           -debut ${debut} -fin ${fin} -delta ${delta} \
+           -travail ${BIG_TMPDIR} -info -npg ${npg}
+    if [ $? != 0 ]; then
+      echo ${ECHOARG} "\n erreur Climat_mv2cfs ( gemdm_${exp}_pr${suffix} ) dans Climat_lancer_diag \n"
+      exit 7
+    fi
+    #
+    if [ -s ${DIAGNOSTIC_EXIT}_hold ]; then
+       mv ${DIAGNOSTIC_EXIT}_hold ${DIAGNOSTIC_EXIT}
+    fi
+    #
+  else
+    #
+    echo ${ECHOARG} "\n {b_mach} est indisponible..."
+    echo " les commandes suivantes devront etre executees plus tard:"
+    #
+    echo ${ECHOARG} "\n Climat_mv2cfs -pref ${prefix}md${start} \\"
+    echo " -arcnam ${b_addres}/gemdm_${exp}_md${suffix} \\"
+    echo " -mach ${b_mach} -clean ${clean} -repack ${repack} \\"
+    echo " -debut ${debut} -fin ${fin} -delta ${delta} \\"
+    echo " -travail ${BIG_TMPDIR} -info -npg ${npg}"
+    #
+    echo ${ECHOARG} "\n Climat_mv2cfs -pref ${prefix}pr${start} \\"
+    echo " -arcnam ${b_addres}/gemdm_${exp}_pr${suffix} \\"
+    echo " -mach ${b_mach} -clean ${clean} -repack ${repack} \\"
+    echo " -debut ${debut} -fin ${fin} -delta ${delta} \\"
+    echo " -travail ${BIG_TMPDIR} -info -npg ${npg}"
+    #
+    if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+       if [ ${nouveau_travail} = OUI ]; then rm -rf ${BIG_TMPDIR} ; fi
+       r.echo " Climat_lancer_diag: Ending at `date`"
+    fi
+    exit 8
+    #
+  fi
+  #
+fi
+#
+# faire le menage si tout a fonctionne
+#
+if [ ! -s ${DIAGNOSTIC_EXIT} ]; then
+   if [ ${nouveau_travail} = OUI ]; then rm -rf ${BIG_TMPDIR} ; fi
+   r.echo " Climat_lancer_diag: Ending at `date`"
+   exit 0
+fi
+#
+exit 9

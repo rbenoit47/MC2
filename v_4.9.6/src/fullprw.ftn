@@ -1,0 +1,95 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r fullprw
+*
+      subroutine fullprw ( prw, ht, ng, lnk, levtyp )
+      implicit none
+*
+      character* (*) levtyp
+      integer ng,lnk
+      real prw(ng,lnk), ht(ng,lnk)
+*
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "levels.cdk"
+#include "yomdyn1.cdk"
+*
+      integer i,j,k,ktop(ng*lnk),kbot(ng*lnk),ng,cnt
+      real posv(ng*lnk*2),hww(ng*(lnk+4)),tr1,tr2,
+     $     hm(ng,0:lnk),wk(ldni,ldnj,0:lnk),qs(ng,lnk),
+     $     ovts(ng,lnk),prt(ng,lnk),topo(ng,2),
+     $     dum1(ng*lnk),dum2(ng*lnk)
+      pointer (patr1, tr1(ldni,ldnj,*)),(patr2, tr2(ldni,ldnj,*))
+*
+*----------------------------------------------------------------------
+*
+      patr1 = loc(topo(1,1))
+      patr2 = loc(prw (1,1))
+*
+      do j = 1, ldnj
+      do i = 1, ldni
+         tr1(i,j,1) = hh0(i,j,1)
+         tr1(i,j,2) = hh0(i,j,2)
+      end do
+      end do
+*
+      call hauteur_omp ( ht, 'HT', topo, ng, 1, lnk )
+*
+      if (levtyp.eq.'P') then
+*
+         call hauteur_omp (hm(1,1) ,'HM', topo, ng, 1, lnk)
+         do i = 1, ng
+            hm(i,0) = topo(i,1)
+         end do
+*
+         do k = 0, lnk
+         do j = 1, ldnj
+         do i = 1, ldni
+            wk(i,j,k) = qpp(i,j,k) * orts(i,j,k)
+         end do
+         end do
+         end do
+*
+*     * Vertical cubic interpolation on thermo. level
+*
+         call posiz3   ( posv,hww,hm,ht,ktop,kbot,ng,lnk,lnk+1 )
+         call vertint3 ( prt,wk,posv,hww,ng,lnk,lnk+1 )
+*
+*     * Compute full pressure
+*
+         call qntstar ( qs,dum1,dum2,ovts,ht,ht,ng,1,lnk )
+*
+         do k = 2, lnk
+         do i = 1, ng
+            prw(i,k) = exp (qs(i,k-1) + prt(i,k-1)) 
+         end do            
+         end do
+*
+         do j = 1, ldnj
+         do i = 1, ldni
+            tr2(i,j,1) = exp(qstr(i,j,0) + wk(i,j,0))
+         end do
+         end do
+*
+      endif
+*
+      if (levtyp.eq.'H') then
+*
+         do k = lnk , 2, -1
+         do i = 1, ng
+            ht(i,k) = ht(i,k-1)
+         end do
+         end do     
+*
+         do i = 1, ng
+            ht(i,1) = topo(i,1)
+         end do
+*
+      endif
+*      
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+

@@ -1,0 +1,145 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine gridcfg (unrstrt,prout,status)
+      implicit none
+*
+      logical prout
+      integer unrstrt,status
+*
+*     ##########################################
+*     #  Initialization of grid configuration  #
+*     #  (see MC2 user guide for descriptions) #
+*     ##########################################
+*
+#include "mc2nml.cdk"
+#include "path.cdk"
+*
+      character*10 nmlname
+      integer unnml,pnerrdirf,pnflag1,pnflag2,longueur
+      data unnml /11/
+*
+*---------------------------------------------------------------------
+*
+      status  = -1
+      nmlname = 'grille'
+*
+      if (unrstrt.lt.0) then
+         Grd_ni  = 50
+         Grd_nj  = 40
+         Grd_iref= 25
+         Grd_jref= 20
+         Grd_latr= 32.1
+         Grd_lonr= 137.8
+         Grd_dx  = 50000.
+         Grd_proj_S= 'M'
+         Grd_phir= 22.5
+         Grd_dgrw= 135.
+         Grd_xlat1 = 0.
+         Grd_xlon1 = 180.
+         Grd_xlat2 = 0.
+         Grd_xlon2 = 270.
+*
+* *** Updating configuration with namelist grille
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $                form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9991
+         endif
+*
+         rewind ( unnml )
+         read (unnml, nml=grille, end = 9120)
+         write (6,601) nmlname
+
+         close (unnml)
+
+         print*
+         write (6, nml=grille)
+         print*
+*
+      else
+*
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $         'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+*
+      endif
+*
+      status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+*     Global grid dimensions (no halo at this stage)
+*
+      gni = Grd_ni-1
+      gnj = Grd_nj-1      
+*
+*---------------------------------------------------------------------
+*
+ 601  format (' CONFIGURATION UPDATED WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+      return
+      end
+*
+      subroutine rgridpar (un)
+      implicit none
+*
+      integer un
+*
+**
+#include "grd.cdk"
+*
+*----------------------------------------------------------------------
+*
+      read (un)  Grd_ni,Grd_nj,Grd_iref,Grd_jref,Grd_proj_S,
+     $           Grd_latr,Grd_lonr,Grd_dx,Grd_dgrw,Grd_phir,
+     $           Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine wgridpar (un)
+      implicit none
+*
+      integer un
+*
+**
+#include "grd.cdk"
+*
+*----------------------------------------------------------------------
+*
+      write (un) Grd_ni,Grd_nj,Grd_iref,Grd_jref,Grd_proj_S,
+     $           Grd_latr,Grd_lonr,Grd_dx,Grd_dgrw,Grd_phir,
+     $           Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2
+*----------------------------------------------------------------------
+      return
+      end
+@

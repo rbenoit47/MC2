@@ -1,0 +1,108 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine set_sor
+      implicit none
+*
+#include "rec.cdk"
+#include "grd.cdk"
+#include "cdate.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+*
+      integer ip1,fstdate,newdate,dat3,err
+      real*8 v1,v2,v3,zero,c1
+      data zero,c1 /0.0d0,2040.d0/
+*
+*------------------------------------------------------------------
+*  
+      if (Grd_proj_S.eq.'P') then
+         gtgrtyp = 'N'
+         call cxgaig (gtgrtyp,igs(1),igs(2),igs(3),igs(4),
+     $                               0.,0.,1000.,Grd_dgrw)
+      elseif (Grd_proj_S.eq.'M') then
+         gtgrtyp = 'E'
+         call cxgaig (gtgrtyp,igs(1),igs(2),igs(3),igs(4),
+     $            Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2)
+      elseif (Grd_proj_S.eq.'L') then
+         gtgrtyp = 'E'
+         call cxgaig (gtgrtyp,igs(1),igs(2),igs(3),igs(4),
+     $            Grd_xlat1,Grd_xlon1,Grd_xlat2,Grd_xlon2)
+      else
+         print *,' Wrong grid projection.  Grd_proj=[',Grd_proj_S,']'
+         call mc2stop(-1)
+      endif
+*
+      if (Grd_dx.lt.100.) then
+         v1 = 20. * Grd_dx
+      else if (Grd_dx.lt.10000.) then
+         v1 = .2  * Grd_dx
+      else
+         v1 =  0.0004 * Grd_dx - 4.
+      endif
+      if (Grd_ni.lt.1000) then
+         v2 = 2. * Grd_ni
+      else if (Grd_ni.lt.10000.) then
+         v2 = .2  * Grd_ni
+      else
+         v2 = .02 * Grd_ni
+      endif
+      if (Grd_nj.lt.1000) then
+         v3 = 2. * Grd_nj
+      else if (Grd_ni.lt.10000.) then
+         v3 = .2  * Grd_nj
+      else
+         v3 = .02 * Grd_nj
+      endif
+      v1 = min(c1,max(zero,v1))
+      v2 = min(c1,max(zero,v2))
+      v3 = min(c1,max(zero,v3))
+*
+      ip1 = -1
+      if (ip1.lt.0) ip1 = (v1 + v2 + v3 ) / 3.
+      Grd_ig1  = ip1
+      Grd_ig2  = ((igs(1)+igs(2)+igs(3)/321.+igs(4)/321.)/4.+v1+v2) / 3.
+      Grd_ig3  = (2700. +2.*v1 +2.*v3) / 3.
+      Grd_ig4  = 0
+      v1=25.d0*dble((g_ifp-g_idp+1)*(g_jfp-g_jdp+1))/dble(Grd_ni*Grd_nj)
+      v2=50.d0*dble((g_if -g_id +1)*(g_jf -g_jd +1))/dble(Grd_ni*Grd_nj)
+      Grd_ig1  = Grd_ig1 + v1 + v2
+      Grd_ig2  = Grd_ig2 + (v1 + v2) / 2.
+      Grd_ig1p = Grd_ig1 + 1
+      Grd_ig2p = Grd_ig2 + 1
+      Grd_ig3p = Grd_ig3 + 1
+      Grd_ig4p = 0
+      gttpvar= 'P'
+*
+      if (Grdc_ni*Grdc_nj.gt.0) then
+         v1 = 25.d0*dble((Grdc_gif-Grdc_gid+1)*(Grdc_gjf-Grdc_gjd+1))
+     $        /dble(Grdc_ni*Grdc_nj)
+      else
+         v1 = 0
+      endif
+      Grd_ig1c = Grd_ig1 + v1 + v2 + 2
+      Grd_ig2c = Grd_ig2 + (v1 + v2) / 2. + 2
+      Grd_ig3c = Grd_ig3 + 2
+      Grd_ig4c = 0
+*
+      call datp2f (fstdate,gcrunstrt)
+      err = newdate(fstdate,out_dat2,dat3,-3)
+      out_h0 = dat3/1000000
+*
+      call datp2f (out_dat0,gcrunstrt)
+*
+      out_lt      = 'cm'
+*
+      err = 0
+      if (Grdc_nsor.gt.0) err = gnstepno / Grdc_nsor
+      out_clostep = err * Grdc_nsor
+      out_unf     = 0
+*
+      papositdh= 0
+      pahuvd   = 0
+      pahttd   = 0
+      pahwwd   = 0
+      papositp = 0
+      pahwwp   = 0
+*------------------------------------------------------------------
+      return
+      end

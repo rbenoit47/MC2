@@ -1,0 +1,63 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.10;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+
+************************************************************************
+**  fonctions de couche de surface pour le cas stable                 **
+************************************************************************
+*
+      d  (unsl) = 4*AS*BETA*unsl
+      c  (hi)   = d(unsl)*hi - hi**2
+      b  (hi)   = d(unsl) - 2*hi
+      a  (z,hi) = sqrt(1 + b(hi)*z - c(hi)*z**2)
+      psi(z,hi) = 0.5 * (a(z,hi)-z*hi-alog(1+b(hi)*z*0.5+a(z,hi))-
+     +            b(hi)/(2*sqrt(c(hi)))*asin((b(hi)-2*c(hi)*z)/d(unsl)))
+*
+*   Limites de validite: unsl >= 0 (cas stable ou neutre)
+*                        c > 0 (hi < d)
+*                        z*hi < 1
+*   Ces 2 dernieres conditions imposees a l'aide du facteur 'factn'
+*
+*   Reference :  Y. Delage, BLM, 82 (p23-48) (Eq.33-37)
+************************************************************************
+*
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

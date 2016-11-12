@@ -1,0 +1,232 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P BLCLOUD2
+*
+#include "phy_macros_f.h"
+      SUBROUTINE BLCLOUD2 (U, V, T, TVE, QV, QC, FNN,
+     1                     S, PS, DUDZ2, RI, DTHV,
+     1                     N, M, NK)
+*
+#include "impnone.cdk"
+*
+*
+      INTEGER N, M, NK
+      REAL U(M,NK), V(M,NK), T(M,NK), TVE(N,NK), QV(M,NK)
+      REAL QC(N,NK), FNN(N,NK), S(N,NK), PS(N)
+      REAL DUDZ2(N,NK), RI(N,NK), DTHV(N,NK)
+*
+*Author
+*          J. Mailhot (Nov 2000)
+*
+*Revision
+* 001      A.-M. Leduc (Oct 2001) Automatic arrays
+* 002      J. Mailhot (Jun 2002) Change calling sequence and rename BLCLOUD1
+* 003      J. Mailhot (Feb 2003) Change calling sequence and rename BLCLOUD2
+
+*Object
+*          Calculate the boundary layer buoyancy parameters (virtual potential 
+*          temperature, buoyancy flux) and the vertical shear squared.
+*
+*Arguments
+*
+*          - Input -
+* U        east-west component of wind
+* V        north-south component of wind
+* T        temperature (thetal when ISTEP=2)
+* TVE      virtual temperature on 'E' levels
+* QV       specific humidity (total water content QW = QV + QC)
+* QC       boundary layer cloud water content
+* FNN      flux enhancement factor (fN) * cloud fraction (N)
+* S        sigma levels
+* PS       surface pressure (in Pa)
+*
+*
+*          - Output -
+* DUDZ2    vertical shear of the wind squared (on 'E' levels)
+* RI       Richardson number - in gradient form - (on 'E' levels)
+* DTHV     buoyancy flux term - in gradient form - (on 'E' levels)
+*
+*          - Input -
+* N        horizontal dimension
+* M        first dimension of U,V, T and QV
+* NK       vertical dimension
+*
+*
+*Notes
+*          Implicit (i.e. subgrid-scale) cloudiness scheme for unified
+*             description of stratiform and shallow, nonprecipitating
+*             cumulus convection appropriate for a low-order turbulence
+*             model based on Bechtold et al.:
+*            - Bechtold and Siebesma 1998, JAS 55, 888-895
+*            - Cuijpers and Bechtold 1995, JAS 52, 2486-2490
+*            - Bechtold et al. 1995, JAS 52, 455-463 
+*            - Bechtold et al. 1992, JAS 49, 1723-1744
+*          The boundary layer cloud properties (cloud fraction, cloud water
+*            content) are computed in the companion S/R CLSGS.
+*
+*
+*IMPLICITS
+*
+#include "consphy.cdk"
+*
+**
+*
+      INTEGER J, K, ITOTAL
+*
+* 
+*
+**********************************************************
+*     AUTOMATIC ARRAYS
+**********************************************************
+
+      AUTOMATIC ( THL       , REAL    , (N,NK)  )
+      AUTOMATIC ( QW        , REAL    , (N,NK)  )
+      AUTOMATIC ( ALPHA     , REAL    , (N,NK)  )
+      AUTOMATIC ( BETA      , REAL    , (N,NK)  )
+      AUTOMATIC ( A         , REAL    , (N,NK)  )
+      AUTOMATIC ( B         , REAL    , (N,NK)  )
+      AUTOMATIC ( C         , REAL    , (N,NK)  )
+      AUTOMATIC ( DZ        , REAL    , (N,NK)  )
+      AUTOMATIC ( DQWDZ     , REAL    , (N,NK)  )
+      AUTOMATIC ( DTHLDZ    , REAL    , (N,NK)  )
+      AUTOMATIC ( COEFTHL   , REAL    , (N,NK)  )
+      AUTOMATIC ( COEFQW    , REAL    , (N,NK)  )
+      AUTOMATIC ( FICELOCAL , REAL    , (N,NK)  )
+*
+**********************************************************
+*
+*
+*MODULES
+*
+      EXTERNAL DVRTDF,THERMCO2,FICEMXP
+*
+*------------------------------------------------------------------------
+*
+*
+*
+*       0.     Preliminaries
+*       --------------------
+*
+*
+      CALL FICEMXP(FICELOCAL,A,B,T,N,N,NK)
+*
+*
+*       1.     Thermodynamic coefficients
+*       ---------------------------------
+*
+*
+      CALL THERMCO2 (T, QV, QC, S, PS, T, FICELOCAL, FNN,
+     1               THL, QW, A, B, C, ALPHA, BETA,
+     1               0, .TRUE., N, M, NK)
+
+*
+*
+*       2.     Vertical derivative of THL and QW
+*       ----------------------------------------
+*
+      DO K=1,NK-1
+      DO J=1,N
+        DZ(J,K) = -RGASD*TVE(J,K)*ALOG( S(J,K+1)/S(J,K) ) / GRAV
+      END DO
+      END DO
+*
+      DO J=1,N
+        DZ(J,NK) = 0.0
+      END DO
+*
+      CALL DVRTDF ( DTHLDZ, THL, DZ, N, N, N, NK)
+      CALL DVRTDF ( DQWDZ, QW, DZ, N, N, N, NK)
+*
+*
+*       3.     The buoyant parameters, buoyancy flux and vertical shear squared
+*       -----------------------------------------------------------------------
+*
+*
+*                                              (cf. BS 1998 eq. 4)
+      DO K=1,NK
+      DO J=1,N
+*                                              put thv in DUDZ2 temporarily 
+        DUDZ2(J,K) = THL(J,K) + ALPHA(J,K)*QW(J,K) + BETA(J,K)*QC(J,K)
+        COEFTHL(J,K) = 1.0 + DELTA*QW(J,K)
+     1                           - BETA(J,K)*B(J,K)*FNN(J,K)
+        COEFQW(J,K) = ALPHA(J,K) + BETA(J,K)*A(J,K)*FNN(J,K)
+      END DO
+      END DO
+*
+*
+      DO K=1,NK-1
+      DO J=1,N
+*                                              coefficients on 'E' levels
+        COEFTHL(J,K) = 0.5*( COEFTHL(J,K) + COEFTHL(J,K+1) )
+        COEFQW(J,K) = 0.5*( COEFQW(J,K) + COEFQW(J,K+1) )
+*                                              buoyancy flux term (gradient form)
+        DTHV(J,K) = ( COEFTHL(J,K)*DTHLDZ(J,K)
+     1              + COEFQW(J,K)*DQWDZ(J,K) )
+     1            * ( GRAV / DUDZ2(J,K) )
+      END DO
+      END DO
+*
+      DO J=1,N
+        DTHV(J,NK) = 0.0
+      END DO
+*
+*                                              vertical shear squared
+      CALL DVRTDF ( A, U, DZ, N, N, M, NK)
+      CALL DVRTDF ( B, V, DZ, N, N, M, NK)
+*
+      DO K=1,NK
+      DO J=1,N
+        DUDZ2(J,K) = A(J,K)**2 + B(J,K)**2
+        RI(J,K) = 0.0
+        IF( DUDZ2(J,K) .GT. 0.0 ) RI(J,K) = DTHV(J,K)/DUDZ2(J,K)
+      END DO
+      END DO
+*
+      DO J=1,N
+        RI(J,NK) = 0.0
+      END DO
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

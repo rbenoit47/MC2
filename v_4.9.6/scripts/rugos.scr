@@ -1,0 +1,72 @@
+#!/bin/sh
+#
+eval `cclargs $0 -ni          "30"                                          \
+                 -nj          "30"                                          \
+                 -typgrid     "Z"                                           \
+                 -tictac      "tictactest.std"                              \
+                 -fileout     "champs_geo.std"                              \
+                 -filetopo    "topo_filtree.std"                            \
+                 -fileoutru   "rugos_out"                                ++ $*`
+#
+#
+# ---------------------------------------------------------------------------#
+#                                                                            #
+#                                 RUGOS V1.0                                  #
+#                                                                            #
+# ---------------------------------------------------------------------------#
+#
+#                               MODE D'EMPLOI
+#  
+#  
+#   Ce script permet de generer la longueur de rugosite sur n'importe quel
+#   type de grille a n'importe quelle resolution.  Les champs produits 
+#   avec RUGOS sont : Z0 (longueur de rugosite), ZP (logarithme de la longueur
+#   de rugosite), LH (launching height).  La longueur de rugosite est obtenue
+#   par la formule de Grant et Mason (1990).
+#
+#____ Repertoire ou se trouve les donnees sources.  Pour l'instant, elles
+#____ resident sur morgane
+#
+
+rep=/data/cmda/genesis/donnees/topo
+
+#
+#____ Nom du fichier contenant les enregistrements crochets pour une grille de type Z
+#
+nomd=`pwd`/$fileoutru
+#
+$EDITFST -s $tictac -d $nomd <<EOF
+ desire(-1,['^^','>>'])
+EOF
+#
+r.filetype $tictac
+r.filetype $nomd
+echo $GENRUGO
+which $GENRUGO
+#
+$GENRUGO    -ixy ${tictac}          \
+               -i $ni               \
+               -j $nj               \
+               -var ME              \
+               -gtyp $typgrid       \
+               -fichme $filetopo    \
+               -fichvg $fileout     \
+               -infich ${rep}/top_us    \
+                       ${rep}/top_ncar  \
+                       ${rep}/top_crc   \
+                       ${rep}/top_usgs_can \
+                       ${rep}/top_usgs_euma \
+                       ${rep}/top_usgs_nord \
+                       ${rep}/top_globe_estsud \
+                       ${rep}/top_globe_ouestsud \
+                       ${rep}/top_globe_e0065n0049 \
+                       ${rep}/top_globe_e66155n0049 \
+                       ${rep}/top_globe_estn5069    \
+                       ${rep}/top_globe_estn7074    \
+                       ${rep}/top_globe_estn7579    \
+                       ${rep}/top_globe_estn8081    \
+               -out $nomd 
+
+
+
+

@@ -1,0 +1,1331 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***** S/P CLASS271
+*
+#include "phy_macros_f.h"
+      SUBROUTINE CLASS271 (F,LONCLEF,V,VSIZ,
+     +                  UGCM,VGCM,TTA,QA,PRESSG,SG,SELOC,
+     +                  GAMAZA,ILG,NK,IL1,IL2,JL,DT,KOUNT) 
+
+#include "impnone.cdk"
+*           
+      REAL GAMAZA(ILG)
+      INTEGER LONCLEF,VSIZ,ILG,NK,IL1,IL2,JL,KOUNT
+      REAL F(LONCLEF),V(VSIZ),UGCM(ILG),VGCM(ILG),TTA(ILG),
+     +     QA(ILG),PRESSG(ILG),SG(ILG),SELOC(ILG,NK)
+      REAL DT
+*
+*Author
+*          Y. Delage / J.-M. Belanger (May 1995)
+*Revisions
+* 001      M. Desgagne (Nov 1995) - Unified physics interface
+* 002      Y. Delage (Apr 1997) - Call to CLASSPAR
+* 003      Y. Delage (May 1997) - Choice of evaporation scheme from bare soil
+* 004      J. Mailhot (Oct 1998) - New SURFACE interface
+* 005      B. Bilodeau (Nov 1998) - Merge phyexe and param4
+* 006      J. Mailhot (Feb 1999) - Change name from CLASS270 to CLASS271 due to
+*                                  changes in calling sequence
+*
+*Object
+*          Connection to CLASS, version 2.6
+*
+*Arguments
+*
+*          - Input/Output -
+* F        field of permanent physics variables
+* V        volatile bus
+*
+*          - Input -
+* LONCLEF  dimension of F
+* VSIZ     dimension of V
+* UGCM     U component of wind vector at 1st level above ground (t-dt) 
+* VGCM     V component of wind vector at 1st level above ground (t-dt) 
+* TTA      Air temperature at 1st level above ground (t-dt) 
+* QA       Specific air humidity at 1st level above ground (t-dt) 
+* PRESSG   Surface pressure (t-dt) 
+* SG       Local sigma values of 1st level above ground
+* SELOC    Local sigma values of staggered levels
+*
+*          - Input -
+* GAMAZA   adiabatic temperature displacement
+* ILG      Maximum number of horizontal points in a slice     
+* NK       Number of vertical levels
+* IL1      Lower limit of horizontal points to be treated by CLASS 
+* IL2      Upper limit of horizontal points to be treated by CLASS
+* JL       Actual slice number  
+* DT       Model timestep
+* KOUNT    Actual timestep number
+*
+*IMPLICITES
+#include "options.cdk"
+#include "consphy.cdk"
+#include "phybus.cdk"
+*
+*MODULES
+      EXTERNAL CLASSA,CLASST,CLASSW,CLASSPAR,STKMEMW,UNSTAKW
+*
+**
+*     ic   : Number of vegetation types considered in CLASS
+*            {Needleleaf,Broadleaf,Crops,Grasslands}
+*     icp1 : Number of vegetation types + urban area
+*     ig   : Number of soil levels
+*     is   : Number of soil textural indices
+*            {Sand index, Clay index, % Organic matter)
+*     ib   : Number of other soil properties
+*            {Colour, Bottom drainage efficiency factor} 
+
+      integer ic,icp1,ig,is,ib,igp1,igp2,idisp,ilw
+      parameter (ic=4,icp1=5,ig=3,is=3,ib=2,igp1=4,igp2=5)
+
+*     Energy budget solved with QLWIN taken as incoming longwave
+*     radiation at the surface in TSOLVE/TSOLVC.
+      parameter (ilw=1)
+
+*     Control of the displacement height calculations in APREP.
+      parameter (idisp=0)
+
+*
+      real qswv,qswi,pcpr,qswinv,qswini,ta,coszs,qswd
+      real alvsbar,alirbar,cdmbar,qsens,qevap
+      real su,sv,st,sq
+      pointer (pata, ta(ilg))
+      pointer (pacoszs,coszs(ilg)), (paqswd,qswd(ilg))
+      pointer (paqwv  , qswv(ilg)), (paqwi, qswi(ilg))
+      pointer (papcpr ,  pcpr(ilg))
+      pointer (paqinv ,qswinv(ilg)), (paqini ,qswini(ilg))
+
+      pointer (paalvsbar,  alvsbar(ilg)), (paalirbar ,  alirbar(ilg))
+      pointer (paqsens, qsens(ilg)), (paqevap, qevap(ilg))
+      pointer (pacdmbar, cdmbar(ilg))
+      pointer (pasq, sq(ilg)), (past, st(ilg))
+      pointer (pasu, su(ilg)), (pasv, sv(ilg))
+
+*     Declaration of internal working arrays and gathered diagnostics
+*     arrays for CLASS
+
+      INTEGER ILAND,ILSL
+*
+      REAL*8 ALVSG,ALIRG,ALVSCS,ALVSSN,TRVSCN,TRIRCN,ALIRCS,TRVSCS,
+     +       ZSNOW,FFC,FG,FCS,FGS,FSVF,FSVFS,FRAINC,FSNOWC,RAICAN,
+     +       SNOCAN,RAICNS,CWCAP,CWCAPS,DISP,DISPS,ZOMLNC,ZOELNC,ZOELNG,
+     +       ZOMLCS,ZOELCS,ZOELNS,RCMIN,RCMINS,CMASSC,CMASCS,EVAPB,
+     +       G12C,G12G,G12CS,G23G,G23CS,G23GS,QFREZC,QFREZG,QMELTC,
+     +       QMELTG,EVAPC,EVAPCG,EVAPG,EVPCSG,EVAPGS,TCANO,ZPOND,
+     +       TPONDC,TPONDG,TPNDCS,TSNOGS,WL,WF,TH,
+     +       GZROCS,ALIRCN,TCANS,FROOT,TBARC,TBARG,TBARCS,TBARGS,
+     +       THLIQC,THLIQG,THICEG,HCPC,HCPG,RMAT,AILCNS,AILCAN,CWCPAV,
+     +       ZPLIMCS,ZPLIMGS,ZPLIMC,ZPLIMG,RRESID,
+     +       CDMEFFCS,CDMEFFGS,CDMEFFC,CDMEFFG,
+     +       CDHEFFCS,CDHEFFGS,CDHEFFC,CDHEFFG,
+     +       THFC,Z0EFFGS,Z0EFFC,Z0EFFG
+
+      REAL*8 TRSNOW,SNOCNS,ZOMLNS,G23C,EVAPCS,ALVSCN,THICEC,G12GS,
+     +       GZROGS,ALIRSN,TRIRCS,ZOMLNG,CHCAP,CHCAPS,TSNOCS,
+     +       GZEROC,GZEROG,TPNDGS,HH,HHS,AIL,AILS,FCAN,FCANS,FSNOW,
+     +       FCLOUD,GROWA,GROWN,GROWB,SRESID,THLGAT,ULGAT,VLGAT,TSGAT,
+     +       QSGAT,PREGAT,COLRGAT,ALSWGAT,ALLWGAT,FSVGAT,FSIGAT,FSFGAT,
+     +       FDLGAT,FSVHGAT,FSIHGAT,CSZGAT,PRESGAT,GTGAT,QGGAT,
+     +       SNOGAT,ALBSGAT,RHOSGAT,TSNOGAT,TTGAT,TCANGAT,WCANGAT,
+     +       SCANGAT,HFSGAT,QFSGAT,QFGGAT,ROFGAT,FORGGAT,
+     +       QEVPGAT,CDHGAT,CDMGAT,TFXGAT,QFXGAT,SFCTGAT,SFCUGAT,
+     +       SFCVGAT,SFCQGAT,EFGAT,WLGAT,WFGAT,LAMXGAT,LAMNGAT,CMASGAT,
+     +       ROOTGAT,FCANGAT,ALVCGAT,ALICGAT,LNZ0GAT,TBARGAT,THLQGAT,
+     +       THICGAT,DLONGAT,DLATGAT,CMAIGAT,Z0TOPGAT,XDRNGAT
+
+      real*8 tsol3,tsubreg,tsol1,txfer,tinf,tsolbnd
+      integer itsol1
+
+      REAL*8 FSGVGAT,FSGGGAT,FLGVGAT,FLGGGAT,HFSCGAT,HFSGGAT,
+     +       HMFCGAT,HTCSGAT,HTCGAT, 
+     +       PCFCGAT,PCLCGAT,PCPNGAT,PCPGGAT,QFCFGAT,QFCLGAT,
+     +       QFNGAT, QFCGAT, HMFGGAT,HMFNGAT,
+     +       WTRCGAT,WTRSGAT,WTRGGAT,ROFCGAT,ROFNGAT,OVERFGAT,ZREFGAT,
+     +       HTCCGAT,FSGSGAT,FLGSGAT,HFSSGAT,HEVCGAT,HEVSGAT,HEVGGAT
+      INTEGER ISNDGAT,ICLYGAT
+
+*
+*     Scattered variables for time series extraction
+*
+      real
+     +        xxtcan,xxtbar,xxsnow,xxrhosno,xxgrowth,xxrcan,xxscan,
+     +        xxtsnow,xxthliq,xxthice,xxalbsno,
+     +        xxalirbar,xxalvsbar,xxcdh,xxcdm,xxgt,xxqg,xxsurfq,
+     +        xxsurft,xxsurfu,xxsurfv,xxcmai,xxfsgv,xxfsgs,xxfsgg,
+     +        xxflgv,xxflgs,xxflgg,xxhfsc,xxhfss,xxhfsg,
+     +        xxhevc,xxhevs,xxhevg,xxevap,xxrunoff,xxovrflo,xxtransp,
+     +        xxqfcf,xxqfcl,xxqfg,xxqfn,xxpcfc,xxpclc,xxpcpg,xxpcpn,
+     +        xxrofc,xxrofn,xxwtrc,xxwtrs,xxwtrg,xxbetaf,xxfcs,
+     +        xxfgs,xxfc,xxfg
+
+*************** CLASS internal variables *******************
+      POINTER (IA1,ILAND(ILG)),   (IA2,ILSL(ILG))
+
+      POINTER(G1,ALVSG(ILG)),    (G2,ALIRG(ILG)),   (G3,ALVSCS(ILG)),
+     +       (G4,ALVSSN(ILG)),   (G5,ALIRSN(ILG)),  (G6,TRVSCN(ILG)),
+     +       (G7,TRIRCN(ILG)),   (G8,ALIRCS(ILG)),  (G9,TRVSCS(ILG)),
+     +       (G10,TRIRCS(ILG)),  (G11,ZSNOW(ILG)),  (G12,TRSNOW(ILG)),
+     +       (G13,FFC(ILG)),     (G14,FG(ILG)),     (G15,FCS(ILG)),
+     +       (G16,FGS(ILG)),     (G17,FSVF(ILG)),   (G18,FSVFS(ILG)),
+     +       (G19,FRAINC(ILG)),  (G20,FSNOWC(ILG)), (G21,RAICAN(ILG)),
+     +       (G22,SNOCAN(ILG)),  (G23,RAICNS(ILG)), (G24,SNOCNS(ILG)),
+     +       (G25,CWCAP(ILG)),   (G26,CWCAPS(ILG)), (G27,DISP(ILG)),
+     +       (G28,DISPS(ILG)),   (G29,ZOMLNC(ILG)), (G30,ZOELNC(ILG)),
+     +       (G31,ZOMLNG(ILG)),  (G32,ZOELNG(ILG)), (G33,ZOMLCS(ILG)),
+     +       (G34,ZOELCS(ILG)),  (G35,ZOMLNS(ILG)), (G36,ZOELNS(ILG)),
+     +       (G37,RCMIN(ILG)),   (G38,RCMINS(ILG)), (G39,CMASSC(ILG)),
+     +       (G40,CMASCS(ILG)),  (G41,CHCAP(ILG)),  (G42,CHCAPS(ILG)), 
+     +       (G43,EVAPB(ILG)),   (G44,G12C(ILG)),   (G45,G12G(ILG)),
+     +       (G46,G12CS(ILG)),   (G47,G12GS(ILG)),  (G48,G23C(ILG)),
+     +       (G49,G23G(ILG)),    (G50,G23CS(ILG)),  (G51,G23GS(ILG)),
+     +       (G52,QFREZC(ILG)),  (G53,QFREZG(ILG)), (G54,QMELTC(ILG)),
+     +       (G55,QMELTG(ILG)),  (G56,EVAPC(ILG)),  (G57,EVAPCG(ILG)),
+     +       (G58,EVAPCS(ILG)),  (G59,EVAPG(ILG)),  (G60,EVPCSG(ILG)),
+     +       (G61,EVAPGS(ILG)),  (G62,TCANO(ILG)),  (G63,ZPOND(ILG)),
+     +       (G64,TPONDC(ILG)),  (G65,TPONDG(ILG)), (G66,TPNDCS(ILG)),
+     +       (G67,TPNDGS(ILG)),  (G68,TSNOCS(ILG)), (G69,TSNOGS(ILG)),
+     +       (G70,WL(ILG)),      (G71,WF(ILG)),     (G72,TH(ILG)), 
+     +       (G73,GZEROC(ILG)),  (G74,GZEROG(ILG)), (G75,GZROCS(ILG)),
+     +       (G76,GZROGS(ILG)),  (G77,ALVSCN(ILG)), (G78,ALIRCN(ILG)), 
+     +       (G79,TCANS(ILG)),  (G80,CDMEFFCS(ILG)),(G81,CDMEFFGS(ILG)),
+     +       (G82,CDMEFFC(ILG)),(G83,CDMEFFG(ILG)),(G84,CDHEFFCS(ILG)),
+     +       (G85,CDHEFFGS(ILG)),(G86,CDHEFFC(ILG)),(G87,CDHEFFG(ILG)),
+     +       (G88,THFC(ILG)), (G89,Z0EFFGS(ILG)),(G90,Z0EFFC(ILG)),
+     +       (G91,Z0EFFG(ILG))
+
+      POINTER (GG1,FROOT(ILG,IG)),   (GG2,TBARC(ILG,IG)),
+     +        (GG3,TBARG(ILG,IG)),   (GG4,TBARCS(ILG,IG)),
+     +        (GG5,TBARGS(ILG,IG)),  (GG6,THLIQC(ILG,IG)),
+     +        (GG7,THLIQG(ILG,IG)),  (GG8,THICEC(ILG,IG)),
+     +        (GG9,THICEG(ILG,IG)),  (GG10,HCPC(ILG,IG)),
+     +        (GG11,HCPG(ILG,IG)),   (GG12,QFCGAT(ILG,IG)),
+     +        (GG13,HMFGGAT(ILG,IG)),(GG14,HTCGAT(ILG,IG))
+
+      POINTER (A1,SRESID(ILG)),  (A2,FSNOW(ILG)),   (A3,FCLOUD(ILG)),  
+     +        (A4,GROWA(ILG)),   (A5,GROWN(ILG)),   (A6,GROWB(ILG)),
+     +        (A7,CWCPAV(ILG)),  (A8,AILCAN(ILG)),  (A9,AILCNS(ILG)),
+     +        (A10,RRESID(ILG)), (A11,ZPLIMCS(ILG)),(A12,ZPLIMGS(ILG)),
+     +        (A13,ZPLIMC(ILG)), (A14,ZPLIMG(ILG))
+
+      POINTER (AC1,HH(ILG,IC)),  (AC2,HHS(ILG,IC)), (AC3,AIL(ILG,IC)),
+     +        (AC4,AILS(ILG,IC)),(AC5,FCAN(ILG,IC)),(AC6,FCANS(ILG,IC))
+
+      POINTER (AX1,RMAT(ILG,IC,IG))
+
+*************** End of CLASS internal variables *************
+     
+      POINTER (X1,ISNDGAT(ILG,IG))
+      POINTER (X2,ICLYGAT(ILG,IG))
+      POINTER (X3,FORGGAT(ILG,IG))
+
+      POINTER (GAT1,THLGAT(ILG)),  (GAT2,ULGAT(ILG)), 
+     +        (GAT3,VLGAT(ILG)),   (GAT4,TSGAT(ILG)),
+     +        (GAT5,QSGAT(ILG)),   (GAT6,PREGAT(ILG)),
+     +        (GAT7,COLRGAT(ILG)), (GAT8,ALSWGAT(ILG)),
+     +        (GAT9,ALLWGAT(ILG)), (GAT10,FSVGAT(ILG)),
+     +        (GAT11,FSIGAT(ILG)), (GAT12,FSFGAT(ILG)),
+     +        (GAT13,FDLGAT(ILG)), (GAT14,FSVHGAT(ILG)),
+     +        (GAT15,FSIHGAT(ILG)),(GAT16,CSZGAT(ILG)),
+     +        (GAT17,PRESGAT(ILG)),(GAT18,GTGAT(ILG)),
+     +        (GAT19,QGGAT(ILG)),
+     +        (GAT20,SNOGAT(ILG)), (GAT21,ALBSGAT(ILG)),
+     +        (GAT22,RHOSGAT(ILG)),(GAT23,TSNOGAT(ILG)),
+     +        (GAT24,TTGAT(ILG)),  (GAT25,TCANGAT(ILG)),
+     +        (GAT26,WCANGAT(ILG)),(GAT27,SCANGAT(ILG)),
+     +        (GAT28,HFSGAT(ILG)), (GAT29,QFSGAT(ILG)),
+     +        (GAT30,QFGGAT(ILG)), (GAT31,ROFGAT(ILG)),
+     +        (GAT32,QEVPGAT(ILG)),(GAT33,CDHGAT(ILG)),
+     +        (GAT34,CDMGAT(ILG)), (GAT35,TFXGAT(ILG)),
+     +        (GAT36,QFXGAT(ILG)), (GAT37,SFCTGAT(ILG)),
+     +        (GAT38,SFCUGAT(ILG)),(GAT39,SFCVGAT(ILG)),
+     +        (GAT40,SFCQGAT(ILG)),(GAT41,EFGAT(ILG)),
+     +        (GAT42,WLGAT(ILG)),  (GAT43,WFGAT(ILG)),
+     +        (GAT44,FSGVGAT(ILG)),(GAT45,FSGGGAT(ILG)),
+     +        (GAT46,FLGVGAT(ILG)),(GAT47,FLGGGAT(ILG)),
+     +        (GAT48,HFSCGAT(ILG)),(GAT49,HFSGGAT(ILG)),
+     +        (GAT50,HMFCGAT(ILG)),(GAT51,HTCSGAT(ILG)),
+     +        (GAT52,XDRNGAT(ILG)),(GAT53,PCFCGAT(ILG)),
+     +        (GAT54,PCLCGAT(ILG)),(GAT55,PCPNGAT(ILG)),
+     +        (GAT56,PCPGGAT(ILG)),(GAT57,QFCFGAT(ILG)),
+     +        (GAT58,QFCLGAT(ILG)),(GAT59,QFNGAT(ILG)),
+     +        (GAT60,HMFNGAT(ILG)),(GAT61,HTCCGAT(ILG)),
+     +        (GAT62,ZREFGAT(ILG)),(GAT63,FSGSGAT(ILG)),
+     +        (GAT64,FLGSGAT(ILG)),(GAT65,HFSSGAT(ILG)),
+     +        (GAT66,ROFNGAT(ILG)),(GAT67,ROFCGAT(ILG)),
+     +        (GAT68,WTRCGAT(ILG)),(GAT69,WTRSGAT(ILG)),
+     +        (GAT70,WTRGGAT(ILG)),(GAT71,OVERFGAT(ILG)),
+     +        (GAT72,DLONGAT(ILG)),(GAT73,DLATGAT(ILG)),
+     +        (GAT74,HEVCGAT(ILG)),(GAT75,HEVSGAT(ILG)),
+     +        (GAT76,HEVGGAT(ILG)),(GAT77,CMAIGAT(ILG))
+
+      POINTER (GC1,LAMXGAT(ILG,IC)),(GC2,LAMNGAT(ILG,IC)),
+     +        (GC3,CMASGAT(ILG,IC)),(GC4,ROOTGAT(ILG,IC))
+
+      POINTER (GCP1,FCANGAT(ILG,ICP1)),(GCP2,ALVCGAT(ILG,ICP1)),
+     +        (GCP3,ALICGAT(ILG,ICP1)),(GCP4,LNZ0GAT(ILG,ICP1))
+
+      POINTER (GDIR,Z0TOPGAT(ILG)) 
+
+      POINTER (GIG1,TBARGAT(ILG,IG)),(GIG2,THLQGAT(ILG,IG)),
+     +        (GIG3,THICGAT(ILG,IG))
+
+*     Pointers for time series extraction of scattered fields.
+
+      pointer (gx1,xxtcan(ilg)),   (gx2,xxtbar(ilg,ig)),
+     +        (gx3,xxthliq(ilg,ig)),(gx4,xxthice(ilg,ig)),
+     +        (gx5,xxsnow(ilg)),   (gx6,xxrhosno(ilg)),
+     +        (gx7,xxtsnow(ilg)),  (gx8,xxalbsno(ilg)),
+     +        (gx9,xxrcan(ilg)),   (gx10,xxscan(ilg)),   
+     +        (gx11,xxgrowth(ilg)), (gx12,xxalirbar(ilg)),
+     +        (gx13,xxalvsbar(ilg)),(gx14,xxcdh(ilg)),
+     +        (gx15,xxcdm(ilg)),   (gx16,xxgt(ilg)),
+     +        (gx17,xxqg(ilg)),    (gx18,xxsurfq(ilg)),
+     +        (gx19,xxsurft(ilg)), (gx20,xxsurfu(ilg)),
+     +        (gx21,xxsurfv(ilg)), (gx22,xxcmai(ilg)),
+     +        (gx23,xxfsgv(ilg)),  (gx24,xxfsgs(ilg)),
+     +        (gx25,xxfsgg(ilg)),  (gx26,xxflgv(ilg)),
+     +        (gx27,xxflgs(ilg)),  (gx28,xxflgg(ilg)),
+     +        (gx29,xxhfsc(ilg)),  (gx30,xxhfss(ilg)),
+     +        (gx31,xxhfsg(ilg)),  (gx32,xxhevc(ilg)),
+     +        (gx33,xxhevs(ilg)),  (gx34,xxhevg(ilg)),
+     +        (gx35,xxevap(ilg)),  (gx36,xxrunoff(ilg)),
+     +        (gx37,xxovrflo(ilg)),(gx38,xxtransp(ilg,ig)),
+     +        (gx39,xxqfcf(ilg)),  (gx40,xxqfcl(ilg)),
+     +        (gx41,xxqfg(ilg)),   (gx42,xxqfn(ilg)),
+     +        (gx43,xxpcfc(ilg)),  (gx44,xxpclc(ilg)),
+     +        (gx45,xxpcpg(ilg)),  (gx46,xxpcpn(ilg)),
+     +        (gx47,xxrofc(ilg)),  (gx48,xxrofn(ilg)),
+     +        (gx49,xxwtrc(ilg)),  (gx50,xxwtrs(ilg)),
+     +        (gx51,xxwtrg(ilg)),  (gx52,xxbetaf(ilg)),
+     +        (gx53,xxfcs(ilg)),   (gx54,xxfgs(ilg)),
+     +        (gx55,xxfc(ilg)),    (gx56,xxfg(ilg))
+
+*     Workspace pointers for 64 bits real variables
+      POINTER (TRV1,tsol3  (ilg*ig,       *))
+      POINTER (TRV2,tsubreg(ilg*4,        *))
+      POINTER (TRV3,tsol1  (ilg,          *))
+      POINTER (TRV4,txfer  (ilg*igp1*igp2,*))
+      POINTER (TRV5,tinf   (ilg*igp2,     *))
+      POINTER (TRV6,tsolbnd(ilg*igp1,     *))
+*     Workspace pointers for integer variables
+      POINTER (ITRV1,itsol1 (ilg,          *))
+
+**************************************************************
+      REAL  FRV, SC, HZ
+
+      REAL*8 DELZ(IG), ZBOT(IG), ZORAT(IC)
+
+      REAL*8 DDELT,TFREZ
+*
+C     * THE FOLLOWING COMMON BLOCKS ARE DEFINED SPECIFICALLY FOR USE 
+C     * IN CLASS.
+
+      COMMON /CLASS1/ DDELT,TFREZ
+*
+#include "classcom.cdk"
+*
+      INTEGER I,J,JYES,NLAND,IL,K,L
+      INTEGER NLANDC,NLANDCS,NLANDG,NLANDGS
+      INTEGER IDAY,LL,II
+      REAL PSKI
+
+      INTEGER TWO
+      PARAMETER (TWO=2)
+
+      integer msol1,msol3,msubreg,msolbnd,minf,mxfer
+
+*******************************************************************
+*     Data section
+
+      DATA  DELZ    /0.10,0.25,3.75/ 
+      DATA  ZBOT    /0.10,0.35,4.10/ 
+*     
+      DATA    TFREZ      / 273.15 /
+      DATA ZORAT    /2.0,2.0,7.0,12.0/
+
+      DATA FRV /0.5/
+      SAVE FRV,ZORAT,DELZ,ZBOT
+
+*     INITIALISATION OF PARAMETERS IN CLASS COMMONS
+      CALL CLASSPAR
+
+*     CHOICE OF EVAPORATION SCHEME FOR BARE SOIL AND UNDER THE CANOPY
+*     IBSEVAP = 0  : NO EVAPORATION
+*     IBSEVAP = 1  : ALPHA SCHEME USING FIELD CAPACITY (THFC)
+*     IBSEVAP = 2  : BETA SCHEME USING FIELD CAPACITY (THFC)
+*     IBSEVAP = 3  : ALPHA SCHEME USING ORIGINAL PHILIP'S FORMULA
+
+      IBSEVAP = 2
+*
+      PPI=PI
+*----------------------------------------------------------------------
+*
+      msol3=ilg*ig
+      msubreg=ilg*4
+      msolbnd=ilg*igp1
+      minf=ilg*igp2
+      mxfer=ilg*igp1*igp2
+      msol1=ilg
+
+      call stkmemw(ilg,pata)
+      call stkmemw(ilg,paqwv)
+      call stkmemw(ilg,paqwi)
+      call stkmemw(ilg,papcpr)
+      call stkmemw(ilg,paqinv)
+      call stkmemw(ilg,paqini)
+      call stkmemw(ilg,pacoszs)
+      call stkmemw(ilg,paqswd)
+      call stkmemw(ilg,paalvsbar)
+      call stkmemw(ilg,paalirbar)
+      call stkmemw(ilg,paqsens)
+      call stkmemw(ilg,paqevap)
+      call stkmemw(ilg,pacdmbar)
+
+      pasu= loc(f(udiag)) 
+      pasv= loc(f(vdiag)) 
+      past= loc(f(tdiag)) 
+      pasq= loc(f(qdiag)) 
+
+      do j = 1, ilg
+         alvsbar(j) =0.0
+         alirbar(j) =0.0
+         cdmbar(j)  =0.0
+         qsens(j)   =0.0
+         qevap(j)   =0.0
+         qa(j)      =max(qa(j),1.e-7)
+         qswv(j)    =1.0
+         qswi(j)    =0.0
+         f(fdsi+j-1)=max(160.,f(fdsi+j-1))
+         qswinv(j)  =frv*f(fdss+j-1)/(1.-f(alvis+j-1))
+         qswini(j)  =(1.-frv)*f(fdss+j-1)/(1.-f(alvis+j-1))
+         pcpr(j)    =v(rt+j-1)*rauw
+         ta(j)      =tta(j)*sg(j)**(-cappa)
+      end do
+*
+*     CALCUL DU COSINUS DE L'ANGLE ZENITHAL
+      hz = mod( date(5) +(float(kount)*delt )/3600. , 24.)
+      call suncos( coszs,ilg,f(dlat),f(dlon),hz,0.,date )
+*
+*     CALCUL DE LA FRACTION DIFFUSE DU FLUX SOLAIRE AU SOL
+      do j=1,ilg
+         qswd(j)=1.
+      end do
+      do k=1,nk-1
+         do j=1,ilg
+            qswd(j) = qswd(j) * (1. - f(ccn+(k-1)*ilg+j-1))
+         end do
+      end do
+      do i=1,ilg
+         qswd(i)=1.-qswd(i)
+      enddo
+*
+      IDAY=NINT(30.44*(DATE(2)-1)+DATE(3))
+*
+      CALL STKMEMW(2*ILG,IA1)
+      IA2 = LOC(ILAND(ILG+1))
+
+      CALL STKMEMW(TWO*14*ILG,A1)
+      A2 = LOC(SRESID(ILG+1))
+      A3 = LOC(FSNOW(ILG+1))
+      A4 = LOC(FCLOUD(ILG+1))
+      A5 = LOC(GROWA(ILG+1))
+      A6 = LOC(GROWN(ILG+1))
+      A7 = LOC(GROWB(ILG+1))
+      A8 = LOC(CWCPAV(ILG+1))
+      A9 = LOC(AILCAN(ILG+1))
+      A10= LOC(AILCNS(ILG+1))
+      A11= LOC(RRESID(ILG+1))
+      A12= LOC(ZPLIMCS(ILG+1))
+      A13= LOC(ZPLIMGS(ILG+1))
+      A14= LOC(ZPLIMC(ILG+1))
+
+      CALL STKMEMW(TWO*6*ILG*IC,AC1)
+      AC2 = LOC(HH(ILG+1,IC))
+      AC3 = LOC(HHS(ILG+1,IC))
+      AC4 = LOC(AIL(ILG+1,IC))
+      AC5 = LOC(AILS(ILG+1,IC))
+      AC6 = LOC(FCAN(ILG+1,IC))
+      
+      CALL STKMEMW(TWO*ILG*IC*IG,AX1)
+
+      CALL STKMEMW(ILG*IG,X1)
+      CALL STKMEMW(ILG*IG,X2)
+      CALL STKMEMW(TWO*ILG*IG,X3)
+
+      CALL STKMEMW(TWO*77*ILG,GAT1)
+      GAT2 = LOC(THLGAT(ILG+1))
+      GAT3 = LOC(ULGAT(ILG+1))
+      GAT4 = LOC(VLGAT(ILG+1))
+      GAT5 = LOC(TSGAT(ILG+1))
+      GAT6 = LOC(QSGAT(ILG+1))
+      GAT7 = LOC(PREGAT(ILG+1))
+      GAT8 = LOC(COLRGAT(ILG+1))
+      GAT9 = LOC(ALSWGAT(ILG+1))
+      GAT10= LOC(ALLWGAT(ILG+1))
+      GAT11= LOC(FSVGAT(ILG+1))
+      GAT12= LOC(FSIGAT(ILG+1))
+      GAT13= LOC(FSFGAT(ILG+1))
+      GAT14= LOC(FDLGAT(ILG+1))
+      GAT15= LOC(FSVHGAT(ILG+1))
+      GAT16= LOC(FSIHGAT(ILG+1))
+      GAT17= LOC(CSZGAT(ILG+1))
+      GAT18= LOC(PRESGAT(ILG+1))
+      GAT19= LOC(GTGAT(ILG+1))
+      GAT20= LOC(QGGAT(ILG+1))
+      GAT21= LOC(SNOGAT(ILG+1))
+      GAT22= LOC(ALBSGAT(ILG+1))
+      GAT23= LOC(RHOSGAT(ILG+1))
+      GAT24= LOC(TSNOGAT(ILG+1))
+      GAT25= LOC(TTGAT(ILG+1))
+      GAT26= LOC(TCANGAT(ILG+1))
+      GAT27= LOC(WCANGAT(ILG+1))
+      GAT28= LOC(SCANGAT(ILG+1))
+      GAT29= LOC(HFSGAT(ILG+1))
+      GAT30= LOC(QFSGAT(ILG+1))
+      GAT31= LOC(QFGGAT(ILG+1))
+      GAT32= LOC(ROFGAT(ILG+1))
+      GAT33= LOC(QEVPGAT(ILG+1))
+      GAT34= LOC(CDHGAT(ILG+1))
+      GAT35= LOC(CDMGAT(ILG+1))
+      GAT36= LOC(TFXGAT(ILG+1))
+      GAT37= LOC(QFXGAT(ILG+1))
+      GAT38= LOC(SFCTGAT(ILG+1))
+      GAT39= LOC(SFCUGAT(ILG+1))
+      GAT40= LOC(SFCVGAT(ILG+1))
+      GAT41= LOC(SFCQGAT(ILG+1))
+      GAT42= LOC(EFGAT(ILG+1))
+      GAT43= LOC(WLGAT(ILG+1))
+      GAT44= LOC(WFGAT(ILG+1))
+      GAT45= LOC(FSGVGAT(ILG+1))
+      GAT46= LOC(FSGGGAT(ILG+1))
+      GAT47= LOC(FLGVGAT(ILG+1))
+      GAT48= LOC(FLGGGAT(ILG+1))
+      GAT49= LOC(HFSCGAT(ILG+1))
+      GAT50= LOC(HFSGGAT(ILG+1))
+      GAT51= LOC(HMFCGAT(ILG+1))
+      GAT52= LOC(HTCSGAT(ILG+1))
+      GAT53= LOC(XDRNGAT(ILG+1))
+      GAT54= LOC(PCFCGAT(ILG+1))
+      GAT55= LOC(PCLCGAT(ILG+1))
+      GAT56= LOC(PCPNGAT(ILG+1))
+      GAT57= LOC(PCPGGAT(ILG+1))
+      GAT58= LOC(QFCFGAT(ILG+1))
+      GAT59= LOC(QFCLGAT(ILG+1))
+      GAT60= LOC(QFNGAT(ILG+1))
+      GAT61= LOC(HMFNGAT(ILG+1))
+      GAT62= LOC(HTCCGAT(ILG+1))
+      GAT63= LOC(ZREFGAT(ILG+1))
+      GAT64= LOC(FSGSGAT(ILG+1))
+      GAT65= LOC(FLGSGAT(ILG+1))
+      GAT66= LOC(HFSSGAT(ILG+1))
+      GAT67= LOC(ROFNGAT(ILG+1))
+      GAT68= LOC(ROFCGAT(ILG+1))
+      GAT69= LOC(WTRCGAT(ILG+1))
+      GAT70= LOC(WTRSGAT(ILG+1))
+      GAT71= LOC(WTRGGAT(ILG+1))
+      GAT72= LOC(OVERFGAT(ILG+1))
+      GAT73= LOC(DLONGAT(ILG+1))
+      GAT74= LOC(DLATGAT(ILG+1))
+      GAT75= LOC(HEVCGAT(ILG+1))
+      GAT76= LOC(HEVSGAT(ILG+1))
+      GAT77= LOC(HEVGGAT(ILG+1))
+
+      CALL STKMEMW(TWO*4*ILG*IC,GC1)
+      GC2= LOC(LAMXGAT(ILG+1,IC))
+      GC3= LOC(LAMNGAT(ILG+1,IC))
+      GC4= LOC(CMASGAT(ILG+1,IC))
+
+      CALL STKMEMW(TWO*4*ILG*ICP1,GCP1)
+      GCP2= LOC (FCANGAT(ILG+1,ICP1))
+      GCP3= LOC (ALVCGAT(ILG+1,ICP1))
+      GCP4= LOC (ALICGAT(ILG+1,ICP1))
+
+      CALL STKMEMW(TWO*1*ILG,GDIR)
+
+      CALL STKMEMW(TWO*3*ILG*IG,GIG1)
+      GIG2= LOC(TBARGAT(ILG+1,IG))
+      GIG3= LOC(THLQGAT(ILG+1,IG))
+
+      CALL STKMEMW(TWO*14*ILG*IG,GG1)
+      GG2 = LOC (FROOT(ILG+1,IG))
+      GG3 = LOC (TBARC(ILG+1,IG))
+      GG4 = LOC (TBARG(ILG+1,IG))
+      GG5 = LOC (TBARCS(ILG+1,IG))
+      GG6 = LOC (TBARGS(ILG+1,IG))
+      GG7 = LOC (THLIQC(ILG+1,IG))
+      GG8 = LOC (THLIQG(ILG+1,IG))
+      GG9 = LOC (THICEC(ILG+1,IG))
+      GG10= LOC (THICEG(ILG+1,IG))
+      GG11= LOC (HCPC(ILG+1,IG))
+      GG12= LOC (HCPG(ILG+1,IG))
+      GG13= LOC (QFCGAT(ILG+1,IG))
+      GG14= LOC (HMFGGAT(ILG+1,IG))
+ 
+      CALL STKMEMW(TWO*91*ILG,G1)
+      G2  = LOC (ALVSG(ILG+1))
+      G3  = LOC (ALIRG(ILG+1))
+      G4  = LOC (ALVSCS(ILG+1))
+      G5  = LOC (ALVSSN(ILG+1))
+      G6  = LOC (ALIRSN(ILG+1))
+      G7  = LOC (TRVSCN(ILG+1))
+      G8  = LOC (TRIRCN(ILG+1))
+      G9  = LOC (ALIRCS(ILG+1))
+      G10 = LOC (TRVSCS(ILG+1))
+      G11 = LOC (TRIRCS(ILG+1))
+      G12 = LOC (ZSNOW(ILG+1))
+      G13 = LOC (TRSNOW(ILG+1))
+      G14 = LOC (FFC(ILG+1))
+      G15 = LOC (FG(ILG+1))
+      G16 = LOC (FCS(ILG+1))
+      G17 = LOC (FGS(ILG+1))
+      G18 = LOC (FSVF(ILG+1))
+      G19 = LOC (FSVFS(ILG+1))
+      G20 = LOC (FRAINC(ILG+1))
+      G21 = LOC (FSNOWC(ILG+1))
+      G22 = LOC (RAICAN(ILG+1))
+      G23 = LOC (SNOCAN(ILG+1))
+      G24 = LOC (RAICNS(ILG+1))
+      G25 = LOC (SNOCNS(ILG+1))
+      G26 = LOC (CWCAP(ILG+1))
+      G27 = LOC (CWCAPS(ILG+1))
+      G28 = LOC (DISP(ILG+1))
+      G29 = LOC (DISPS(ILG+1))
+      G30 = LOC (ZOMLNC(ILG+1))
+      G31 = LOC (ZOELNC(ILG+1))
+      G32 = LOC (ZOMLNG(ILG+1))
+      G33 = LOC (ZOELNG(ILG+1))
+      G34 = LOC (ZOMLCS(ILG+1))
+      G35 = LOC (ZOELCS(ILG+1))
+      G36 = LOC (ZOMLNS(ILG+1))
+      G37 = LOC (ZOELNS(ILG+1))
+      G38 = LOC (RCMIN(ILG+1))
+      G39 = LOC (RCMINS(ILG+1))
+      G40 = LOC (CMASSC(ILG+1))
+      G41 = LOC (CMASCS(ILG+1))
+      G42 = LOC (CHCAP(ILG+1))
+      G43 = LOC (CHCAPS(ILG+1))
+      G44 = LOC (EVAPB(ILG+1))
+      G45 = LOC (G12C(ILG+1))
+      G46 = LOC (G12G(ILG+1))
+      G47 = LOC (G12CS(ILG+1))
+      G48 = LOC (G12GS(ILG+1))
+      G49 = LOC (G23C(ILG+1))
+      G50 = LOC (G23G(ILG+1))
+      G51 = LOC (G23CS(ILG+1))
+      G52 = LOC (G23GS(ILG+1))
+      G53 = LOC (QFREZC(ILG+1))
+      G54 = LOC (QFREZG(ILG+1))
+      G55 = LOC (QMELTC(ILG+1))
+      G56 = LOC (QMELTG(ILG+1))
+      G57 = LOC (EVAPC(ILG+1))
+      G58 = LOC (EVAPCG(ILG+1))
+      G59 = LOC (EVAPCS(ILG+1))
+      G60 = LOC (EVAPG(ILG+1))
+      G61 = LOC (EVPCSG(ILG+1))
+      G62 = LOC (EVAPGS(ILG+1))
+      G63 = LOC (TCANO(ILG+1))
+      G64 = LOC (ZPOND(ILG+1))
+      G65 = LOC (TPONDC(ILG+1))
+      G66 = LOC (TPONDG(ILG+1))
+      G67 = LOC (TPNDCS(ILG+1))
+      G68 = LOC (TPNDGS(ILG+1))
+      G69 = LOC (TSNOCS(ILG+1))
+      G70 = LOC (TSNOGS(ILG+1))
+      G71 = LOC (WL(ILG+1))
+      G72 = LOC (WF(ILG+1))
+      G73 = LOC (TH(ILG+1))
+      G74 = LOC (GZEROC(ILG+1))
+      G75 = LOC (GZEROG(ILG+1))
+      G76 = LOC (GZROCS(ILG+1))
+      G77 = LOC (GZROGS(ILG+1))
+      G78 = LOC (ALVSCN(ILG+1))
+      G79 = LOC (ALIRCN(ILG+1))
+      G80 = LOC (TCANS(ILG+1))
+      G81 = LOC (CDMEFFCS(ILG+1))
+      G82 = LOC (CDMEFFGS(ILG+1))
+      G83 = LOC (CDMEFFC(ILG+1))
+      G84 = LOC (CDMEFFG(ILG+1))
+      G85 = LOC (CDHEFFCS(ILG+1))
+      G86 = LOC (CDHEFFGS(ILG+1))
+      G87 = LOC (CDHEFFC(ILG+1))
+      G88 = LOC (CDHEFFG(ILG+1))
+      G89 = LOC (THFC(ILG+1))
+      G90 = LOC (Z0EFFGS(ILG+1))
+      G91 = LOC (Z0EFFC(ILG+1))
+
+*     For time series extraction (32 bits)
+      call stkmemw(64*ilg,gx1)
+      gx2  = LOC (xxtcan(ILG+1))
+      gx3  = LOC (xxtbar(ILG+1,IG))
+      gx4  = LOC (xxthliq(ILG+1,IG))
+      gx5  = LOC (xxthice(ILG+1,IG))
+      gx6  = LOC (xxsnow(ILG+1))
+      gx7  = LOC (xxrhosno(ILG+1))
+      gx8  = LOC (xxtsnow(ILG+1))
+      gx9  = LOC (xxalbsno(ILG+1))
+      gx10 = LOC (xxrcan(ILG+1))
+      gx11 = LOC (xxscan(ILG+1))
+      gx12 = LOC (xxgrowth(ILG+1))
+      gx13 = LOC (xxalirbar(ILG+1))
+      gx14 = LOC (xxalvsbar(ILG+1))
+      gx15 = LOC (xxcdh(ILG+1))
+      gx16 = LOC (xxcdm(ILG+1))
+      gx17 = LOC (xxgt(ILG+1))
+      gx18 = LOC (xxqg(ILG+1))
+      gx19 = LOC (xxsurfq(ILG+1))
+      gx20 = LOC (xxsurft(ILG+1))
+      gx21 = LOC (xxsurfu(ILG+1))
+      gx22 = LOC (xxsurfv(ILG+1))
+      gx23 = LOC (xxcmai(ILG+1))
+      gx24 = LOC (xxfsgv(ILG+1))
+      gx25 = LOC (xxfsgs(ILG+1))
+      gx26 = LOC (xxfsgg(ILG+1))
+      gx27 = LOC (xxflgv(ILG+1))
+      gx28 = LOC (xxflgs(ILG+1))
+      gx29 = LOC (xxflgg(ILG+1))
+      gx30 = LOC (xxhfsc(ILG+1))
+      gx31 = LOC (xxhfss(ILG+1))
+      gx32 = LOC (xxhfsg(ILG+1))
+      gx33 = LOC (xxhevc(ILG+1))
+      gx34 = LOC (xxhevs(ILG+1))
+      gx35 = LOC (xxhevg(ILG+1))
+      gx36 = LOC (xxevap(ILG+1))
+      gx37 = LOC (xxrunoff(ILG+1))
+      gx38 = LOC (xxovrflo(ILG+1))
+      gx39 = LOC (xxtransp(ILG+1,IG))
+      gx40 = LOC (xxqfcf(ILG+1))
+      gx41 = LOC (xxqfcl(ILG+1))
+      gx42 = LOC (xxqfg(ILG+1))
+      gx43 = LOC (xxqfn(ILG+1))
+      gx44 = LOC (xxpcfc(ILG+1))
+      gx45 = LOC (xxpclc(ILG+1))
+      gx46 = LOC (xxpcpg(ILG+1))
+      gx47 = LOC (xxpcpn(ILG+1))
+      gx48 = LOC (xxrofc(ILG+1))
+      gx49 = LOC (xxrofn(ILG+1))
+      gx50 = LOC (xxwtrc(ILG+1))
+      gx51 = LOC (xxwtrs(ILG+1))
+      gx52 = LOC (xxwtrg(ILG+1))
+      gx53 = LOC (xxbetaf(ILG+1))
+      gx54 = LOC (xxfcs(ILG+1))
+      gx55 = LOC (xxfgs(ILG+1))
+      gx56 = LOC (xxfc(ILG+1))
+
+***************************************************************
+      RRGASD=RGASD
+      RRGASV=RGASV
+      GGRAV=GRAV
+      DDELT=DT
+      SPHAIR=CPD
+
+      DO 20 I=IL1,IL2
+        TH(I)=TA(I)
+        fcs(i)=-1.0
+        fgs(i)=-1.0
+        ffc(i)=-1.0
+        fg(i) =-1.0
+        zrefgat(i)=-(rgasd/grav)*tta(i)*(1.0+0.61*qa(i))*alog(sg(i))
+   20 CONTINUE
+
+      CALL SERXST (ta,          'M1',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (qa,          'M2',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (ugcm,        'M3',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (vgcm,        'M4',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (pressg,      'M5',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (qswinv,      'M6',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (qswini,      'M7',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (f(fdsi),     'M8',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (pcpr,        'M9',JL,ILG,0.,     1.,-1   )      
+
+*     Taking a copy of surface diagnostics for U,V,T,Q to
+*     complete the ones computed by CLASS over land points. 
+
+      do i=1,ilg
+        f(udiag+i-1) = su(i)
+        f(vdiag+i-1) = sv(i)
+        f(tdiag+i-1) = st(i) 
+        f(qdiag+i-1) = sq(i)
+      end do
+
+C*****************  GATHER REQUIRED FIELDS. ***********************
+
+      JYES=0
+
+      DO 440 IL=IL1,IL2
+        ILSL(IL)=IL
+        IF (f(gc+il-1).LE.-0.5) THEN
+          JYES = JYES + 1
+          ILAND(JYES) = IL
+        ENDIF
+ 440  CONTINUE
+
+      NLAND=JYES
+
+      DO 445 K=1,NLAND
+*     Model fields.
+         THLGAT (K) = TA    (ILAND(K))
+         PREGAT (K) = PCPR  (ILAND(K))  
+         QSGAT  (K) = QA    (ILAND(K))
+         ULGAT  (K) = UGCM  (ILAND(K))
+         VLGAT  (K) = VGCM  (ILAND(K))
+         TSGAT  (K) = TA    (ILAND(K))
+         FSVGAT (K) = QSWV  (ILAND(K))
+         FSIGAT (K) = QSWI  (ILAND(K))
+         FSFGAT (K) = QSWD  (ILAND(K))
+         FDLGAT (K) = f(fdsi+ILAND(K)-1)
+         FSVHGAT(K) = QSWINV(ILAND(K))
+         FSIHGAT(K) = QSWINI(ILAND(K))
+         CSZGAT (K) = COSZS (ILAND(K))
+         PRESGAT(K) = PRESSG(ILAND(K))
+         dlongat(k) = f(dlon+iland(k)-1)
+         dlatgat(k) = f(dlat+iland(k)-1)
+*     Reference field. 
+         z0topgat(k)= f(z0+iland(k)-1)
+*     Prognostic fields.
+         SNOGAT (K) = f(snoma+iland(k)-1)
+         ALBSGAT(K) = f(snoal+iland(k)-1)
+         RHOSGAT(K) = f(snoro+iland(k)-1)
+         TSNOGAT(K) = f(tsno+iland(k)-1)
+         TTGAT  (K) = f(vegro+iland(k)-1)
+         TCANGAT(K) = f(tveg+ILAND(K)-1)
+         WCANGAT(K) = f(wveg+iland(k)-1)
+         SCANGAT(K) = f(iveg+iland(k)-1)
+         CMAIGAT(K) = v(cmai+iland(k)-1)
+ 445  CONTINUE
+
+*     New definition of soil properties since CLASSv2.4
+*     Imposing vertical uniformity of soil properties.
+
+      do k=1,ig
+        do ll=1,nland
+          ii=iland(ll)
+          ISNDGAT(ll,k)=nint(f(sand+ii-1))
+          ICLYGAT(ll,k)=nint(f(clay+ii-1))
+          FORGGAT(ll,k)=0.0
+        end do  
+      end do
+
+      do ll=1,nland
+        ii=iland(ll)
+        COLRGAT(ll)=f(color+ii-1)   
+        XDRNGAT(ll)=f(drain+ii-1)   
+      end do  
+
+
+      DO 447 L=1,IC
+         DO 447 K=1,NLAND
+*       Reference fields.
+            FCANGAT(K,L)=f(vegfrac+(l-1)*ilg+iland(k)-1)
+            ALVCGAT(K,L)=f(alvis+(l-1)*ilg+iland(k)-1)
+            ALICGAT(K,L)=f(alnir+(l-1)*ilg+iland(k)-1)
+            LNZ0GAT(K,L)=f(z0+(l-1)*ilg+iland(k)-1)
+            LAMXGAT(K,L)=f(laimax+(l-1)*ilg+iland(k)-1)
+            LAMNGAT(K,L)=f(laimin+(l-1)*ilg+iland(k)-1)
+            CMASGAT(K,L)=f(vegma+(l-1)*ilg+iland(k)-1)
+            ROOTGAT(K,L)=f(rootdp+(l-1)*ilg+iland(k)-1)
+ 447  CONTINUE
+
+      L=IC+1
+
+      DO 450 K=1,NLAND
+*       Reference fields.
+         FCANGAT(K,L)=f(vegfrac+(l-1)*ilg+iland(k)-1)
+         ALVCGAT(K,L)=f(alvis+(l-1)*ilg+iland(k)-1)
+         ALICGAT(K,L)=f(alnir+(l-1)*ilg+iland(k)-1)
+         LNZ0GAT(K,L)=f(z0+(l-1)*ilg+iland(k)-1)
+         THFC(K)=THPOR(ISNDGAT(K,1))*FTHFC
+ 450  CONTINUE
+
+      DO 452 L=1,IG
+         DO 452 K=1,NLAND
+*       Prognostic fields.
+            TBARGAT(K,L) = f(tsoil+(l-1)*ilg+iland(k)-1)
+            THLQGAT(K,L) = f(wsoil+(l-1)*ilg+iland(K)-1)
+            THICGAT(K,L) = f(isoil+(l-1)*ilg+iland(k)-1)
+ 452  CONTINUE
+
+c****************** END OF GATHERING ************************
+
+      call stkmemw(two*3*msol3   ,trv1) 
+
+      CALL   CLASSA    (ALSWGAT,ALLWGAT,WCANGAT,SCANGAT,FFC,     FG,
+     1                  FCS,    FGS,    RAICAN, RAICNS, SNOCAN, SNOCNS,
+     2                  DISP,   DISPS,  CHCAP,  CHCAPS, ZOMLNC, ZOMLCS,
+     3                  ZOELNC, ZOELCS, ZOMLNG, ZOMLNS, ZOELNG, ZOELNS,
+     4                  RCMIN,  RCMINS, CMASSC, CMASCS, FSVF,   FSVFS,
+     5                  CWCAP,  CWCAPS, FRAINC, FSNOWC, ALVSCN, ALIRCN,
+     6                  ALVSG,  ALIRG,  ALVSCS, ALIRCS, ALVSSN, ALIRSN,
+     7                  TRVSCN, TRIRCN, TRVSCS, TRIRCS, TRSNOW, ZSNOW,
+     8                  FROOT,  cmaigat,htccgat,htcsgat,htcgat, wtrcgat,
+     9                  wtrsgat,wtrggat,
+     8                  zplimc, zplimg, zplimcs, zplimgs,
+     9                  FCANGAT,LNZ0GAT,ALVCGAT,ALICGAT,LAMXGAT,LAMNGAT,
+     A                  CMASGAT,ROOTGAT,THLQGAT,THICGAT,CSZGAT, FSFGAT,
+     B                  FSIGAT, FSVGAT, COLRGAT,SNOGAT,RHOSGAT,
+     B                  ALBSGAT, TTGAT,tcangat,tsnogat,tbargat,tsgat,
+     C                  dlatgat,dlongat, ILAND, ILSL, ILG,
+     D                  ZORAT,  DELZ,   ZBOT,
+     E                  IDAY,ILG,1,NLAND,JL,IC,ICP1,IG,is,idisp,
+     F                  RMAT,   HH,      HHS,     AIL,    AILS,
+     G                  FCAN,   FCANS,  CWCPAV, AILCAN, AILCNS,
+     H                  FSNOW,  FCLOUD, GROWA,  GROWN,  GROWB,
+     I                  rresid,SRESID, ISNDGAT, ICLYGAT,FORGGAT,
+     J                  tsol3(1, 1),tsol3(1, 2),z0topgat)
+
+      call unstakw(trv1) 
+
+      NLANDC =0
+      NLANDCS=0
+      NLANDG =0
+      NLANDGS=0
+
+      DO 454 I=1,NLAND
+         IF(FFC (I).NE.0.)           NLANDC =NLANDC +1
+         IF(FCS(I).NE.0.)            NLANDCS=NLANDCS+1
+         IF(FG (I).NE.0.)            NLANDG =NLANDG +1
+         IF(FGS(I).NE.0.)            NLANDGS=NLANDGS+1
+ 454  CONTINUE
+
+      call stkmemw(two*8*msol3   ,trv1) 
+      call stkmemw(two*13*msubreg,trv2)
+      call stkmemw(two*76*msol1  ,trv3)
+      call stkmemw(4*msol1       ,itrv1)
+
+      CALL  CLASST (TBARC, TBARG, TBARCS, TBARGS, THLIQC, THLIQG,
+     1              THICEC, THICEG, HCPC, HCPG, FROOT, HFSGAT, TFXGAT,
+     2              QEVPGAT,QFSGAT, QFXGAT, EFGAT, CDHGAT, CDMGAT, 
+     3              GZEROC, GZEROG, GZROCS, GZROGS, G12C, G12G, G12CS,
+     4              G12GS, G23C, G23G, G23CS, G23GS, QFREZC, QFREZG, 
+     5              QMELTC, QMELTG, EVAPC, EVAPCG, EVAPG, EVAPCS,EVPCSG,
+     6              EVAPGS, TCANO, TCANS, ZPOND, TPONDC, TPONDG, TPNDCS,
+     7              TPNDGS, TSNOCS, TSNOGS, GTGAT, QGGAT, WLGAT,
+     8              WFGAT, SFCTGAT, SFCUGAT, SFCVGAT, SFCQGAT, FSGVGAT,
+     9              fsgsgat, FSGGGAT, FLGVGAT, flgsgat, FLGGGAT,
+     A              HFSCGAT, hfssgat, HFSGGAT, hevcgat, hevsgat, 
+     B              hevggat, HMFCGAT, HTCCGAT, HTCSGAT,htcgat,
+     B              TBARGAT, THLQGAT, THICGAT, idisp,
+     C              FSVHGAT, FSIHGAT, FDLGAT, ULGAT, VLGAT, TSGAT,
+     D              QSGAT, PRESGAT, THLGAT, 
+     E              FFC, FG, FCS, FGS, FSVF, FSVFS, ALVSCN, ALIRCN, 
+     F              ALVSG, ALIRG, ALVSCS, ALIRCS, ALVSSN, ALIRSN, 
+     G              TRVSCN, TRIRCN, TRVSCS, TRIRCS, RCMIN, RCMINS, 
+     H              FRAINC, FSNOWC, RAICAN, SNOCAN, RAICNS, SNOCNS, 
+     I              CHCAP, CHCAPS, CMASSC, CMASCS, DISP, DISPS, ZOMLNC,
+     J              ZOELNC, ZOMLNG, ZOELNG, ZOMLCS, ZOELCS, ZOMLNS, 
+     K              ZOELNS, TCANGAT, TSNOGAT, ZSNOW, TRSNOW, RHOSGAT,
+     L              zrefgat,DELZ, ZBOT, ilw, ILG, IL1, NLAND, JL, IC,
+     M              IG, is, NLANDCS,NLANDGS,NLANDC, NLANDG,
+     1     tsol3(1, 1),tsol3(1, 2),FORGGAT,
+     2     tsubreg(1, 1),tsubreg(1, 2),tsubreg(1, 3),tsubreg(1, 4),
+     2     tsubreg(1, 5),tsubreg(1, 6),tsubreg(1, 7),tsubreg(1, 8),
+     2     tsubreg(1, 9),tsubreg(1,10),tsubreg(1,11),tsubreg(1,12),
+     2     tsubreg(1,13),
+     3     tsol1(1, 1),tsol1(1, 2),tsol1(1, 3),tsol1(1, 4),tsol1(1, 5), 
+     3     tsol1(1, 6),tsol1(1, 7),tsol1(1, 8),tsol1(1, 9),tsol1(1,10), 
+     3                             tsol1(1,13),tsol1(1,14),tsol1(1,15), 
+     3     tsol1(1,16),tsol1(1,17),tsol1(1,18),tsol1(1,19),tsol1(1,20), 
+     3     tsol1(1,21),tsol1(1,22),tsol1(1,23),tsol1(1,24),tsol1(1,25), 
+     3     tsol1(1,26),tsol1(1,27),tsol1(1,28),tsol1(1,29),tsol1(1,30), 
+     3     tsol1(1,31),tsol1(1,32),tsol1(1,33),tsol1(1,34),tsol1(1,35), 
+     3     tsol1(1,36),tsol1(1,37),tsol1(1,38),tsol1(1,39),tsol1(1,40),
+     3     tsol1(1,41),ISNDGAT,ICLYGAT,itsol1(1, 1),
+     3     itsol1(1, 2),tsol3(1, 4),tsol3(1, 5),tsol3(1,6),
+     3     tsol3(1, 7),tsol3(1, 8),tsol1(1,42),
+     3     tsol1(1,43),tsol1(1,44),tsol1(1,45),tsol1(1,46),tsol1(1,47),
+     3     tsol1(1,48),tsol1(1,49),tsol1(1,50),tsol1(1,51),tsol1(1,52), 
+     3     tsol1(1,53),tsol1(1,54),tsol1(1,55),tsol1(1,56),tsol1(1,57), 
+     3     tsol1(1,58),tsol1(1,59),tsol1(1,60),tsol1(1,61),tsol1(1,62),
+     3     tsol1(1,63),tsol1(1,64),tsol1(1,65),tsol1(1,66),tsol1(1,67),
+     3     tsol1(1,68),tsol1(1,69),tsol1(1,70),tsol1(1,71),tsol1(1,72),
+     3     tsol1(1,73),tsol1(1,74),tsol1(1,75),tsol1(1,76),itsol1(1, 3),
+     3     itsol1(1, 4)   )
+
+      call unstakw(trv1) 
+      call unstakw(trv2)
+      call unstakw(trv3)
+      call unstakw(itrv1)
+
+
+      call stkmemw(two*29*msol3  ,trv1)
+      call stkmemw(two*12*msubreg,trv2)
+      call stkmemw(two*46*msol1  ,trv3)
+      call stkmemw(two*1*mxfer   ,trv4)
+      call stkmemw(two*2*minf    ,trv5)
+      call stkmemw(two*13*msolbnd,trv6)
+      call stkmemw(12*msol1      ,itrv1)
+
+      CALL CLASSW   (THLQGAT,THICGAT,TBARGAT,TCANGAT,WCANGAT,SCANGAT,
+     1               ROFGAT, SNOGAT, TSNOGAT,RHOSGAT,ALBSGAT,TTGAT,
+     2               PCFCGAT,PCLCGAT,PCPNGAT,PCPGGAT,QFCFGAT,QFCLGAT,
+     3               QFNGAT, QFGGAT, QFCGAT, HMFCGAT,HMFGGAT,HMFNGAT,
+     4               HTCCGAT,HTCSGAT,HTCGAT,rofcgat,rofngat,overfgat,
+     +               wtrsgat,wtrggat,
+     2               TBARC,  TBARG,  TBARCS, TBARGS, THLIQC, THLIQG,
+     3               THICEC, THICEG, HCPC,   HCPG,   
+     4               FFC,     FG,     FCS,    FGS,    TPONDC, TPONDG,
+     5               TPNDCS, TPNDGS, EVAPC,  EVAPCG, EVAPG,  EVAPCS,
+     6               EVPCSG, EVAPGS, QFREZC, QFREZG, QMELTC, QMELTG,
+     7               RAICAN, SNOCAN, RAICNS, SNOCNS, qfsgat, FROOT,
+     8               FSVF,   FSVFS,  CWCAP,  CWCAPS, TCANO,  TCANS,
+     9               CHCAP,  CHCAPS, CMASSC, CMASCS, ZSNOW,  ZPOND,
+     A               GZEROC, GZEROG, GZROCS, GZROGS, G12C,   G12G,
+     B               G12CS,  G12GS,  G23C,   G23G,   G23CS,  G23GS,
+     C               TSNOCS, TSNOGS, zplimc, zplimg, zplimcs, zplimgs,
+     D               PREGAT, TSGAT, DELZ, ZBOT,
+     E               ILG,1,NLAND,JL,IC,IG,IGP1,IGP2,is,
+     F               NLANDCS,NLANDGS,NLANDC, NLANDG,
+     1     tsol3(1, 1),tsol3(1, 2),tsol3(1, 3),tsol3(1, 4),tsol3(1, 5),
+     1     tsol3(1, 6),tsol3(1, 7),tsol3(1, 7),tsol3(1, 9),tsol3(1,10),
+     1     tsol3(1,11),tsol3(1,12),tsol3(1,13),tsol3(1,14),tsol3(1,15),
+     1     tsol3(1,16),tsol3(1,17),tsol3(1,18),tsol3(1,19),tsol3(1,20),
+     1     tsol3(1,21),tsol3(1,22),tsol3(1,23),FORGGAT,
+     2     tsubreg(1, 1),tsubreg(1, 2),tsubreg(1, 3),tsubreg(1, 4),
+     2     tsubreg(1, 5),tsubreg(1, 6),tsubreg(1, 7),tsubreg(1, 8),
+     2     tsubreg(1, 9),tsubreg(1,10),tsubreg(1,11),tsubreg(1,12),
+     3     tsol1(1, 1),tsol1(1, 2),tsol1(1, 3),tsol1(1, 4), 
+     3     tsol1(1, 5),tsol1(1, 6),tsol1(1, 7),tsol1(1, 8),tsol1(1,9), 
+     3     tsol1(1,10),tsol1(1,11), tsol1(1,12),XDRNGAT,
+     3     tsol1(1,14),tsol1(1,15),tsol1(1,16),COLRGAT, 
+     1     ISNDGAT,ICLYGAT,
+     3     itsol1(1, 1),itsol1(1, 2), 
+     4     txfer(1, 1),
+     5     tinf(1, 1),tinf(1, 2),
+     3     tsolbnd(1, 1),tsolbnd(1, 2),tsolbnd(1, 3),tsolbnd(1, 4),
+     3     tsolbnd(1, 5),tsolbnd(1, 6),tsolbnd(1, 7),tsolbnd(1, 8),
+     3     tsolbnd(1, 9),tsolbnd(1,10),tsolbnd(1,11),tsolbnd(1,12),
+     3     tsolbnd(1,13),
+     1     tsol3(1,25),tsol3(1,26),tsol3(1,27),tsol3(1,28),tsol3(1,29),
+     3     tsol1(1,18),tsol1(1,19),tsol1(1,20),tsol1(1,21),tsol1(1,22), 
+     3     tsol1(1,23),tsol1(1,24),tsol1(1,25),tsol1(1,26),tsol1(1,27), 
+     3     tsol1(1,28),tsol1(1,29),tsol1(1,30),tsol1(1,31),tsol1(1,32), 
+     3     tsol1(1,33),tsol1(1,34),tsol1(1,35),tsol1(1,36),tsol1(1,37), 
+     3 itsol1(1, 3),itsol1(1, 4),itsol1(1, 5),itsol1(1, 6),itsol1(1, 7),
+     3 itsol1(1, 8),itsol1(1, 9),itsol1(1,10),itsol1(1,11),tsol1(1,38),
+     3     tsol1(1,39),tsol1(1,40),tsol1(1,41),tsol1(1,42),tsol1(1,43), 
+     3     tsol1(1,44),tsol1(1,45),itsol1(1,12),tsol1(1,46)  ) 
+
+*     Scattering operation for series extraction.
+
+      do k=1,nland
+        xxtcan(iland(k)) = tcangat(k)
+        xxsnow(iland(k)) = snogat (k)
+        xxrhosno(iland(k)) = rhosgat(k)
+        xxtsnow(iland(k)) = tsnogat(k)
+        xxalbsno(iland(k)) = albsgat(k)
+        xxrcan(iland(k)) = wcangat(k)
+        xxscan(iland(k)) = scangat(k)
+        xxgrowth(iland(k)) = ttgat(k)
+        xxalirbar(iland(k)) = allwgat(k)
+        xxalvsbar(iland(k)) = alswgat(k)
+        xxcdh(iland(k)) = cdhgat(k)
+        xxcdm(iland(k)) = cdmgat(k)
+        xxgt(iland(k)) = gtgat(k) 
+        xxqg(iland(k)) = qggat(k)
+        xxsurfq(iland(k)) = sfcqgat(k)
+        xxsurft(iland(k)) = sfctgat(k)
+        xxsurfu(iland(k)) = sfcugat(k)
+        xxsurfv(iland(k)) = sfcvgat(k)
+        xxcmai(iland(k)) = cmaigat(k)
+        xxfsgv(iland(k)) = fsgvgat(k)
+        xxfsgs(iland(k)) = fsgsgat(k)
+        xxfsgg(iland(k)) = fsgggat(k)
+        xxflgv(iland(k)) = flgvgat(k)
+        xxflgs(iland(k)) = flgsgat(k)
+        xxflgg(iland(k)) = flgggat(k)
+        xxhfsc(iland(k)) = hfscgat(k)
+        xxhfss(iland(k)) = hfssgat(k)
+        xxhfsg(iland(k)) = hfsggat(k)
+        xxhevc(iland(k)) = hevcgat(k)
+        xxhevs(iland(k)) = hevsgat(k)
+        xxhevg(iland(k)) = hevggat(k)
+        xxevap(iland(k)) = qfsgat(k)
+        xxrunoff(iland(k)) = rofgat(k)
+        xxovrflo(iland(k)) = overfgat(k)
+        xxqfcf(iland(k)) = qfcfgat(k)
+        xxqfcl(iland(k)) = qfclgat(k)
+        xxqfg(iland(k)) = qfggat(k)
+        xxqfn(iland(k)) = qfngat(k)
+        xxpcfc(iland(k)) = pcfcgat(k)
+        xxpclc(iland(k)) = pclcgat(k)
+        xxpcpg(iland(k)) = pcpggat(k)
+        xxpcpn(iland(k)) = pcpngat(k)
+        xxrofc(iland(k)) = rofcgat(k)
+        xxrofn(iland(k)) = rofngat(k)
+        xxwtrc(iland(k)) = wtrcgat(k)
+        xxwtrs(iland(k)) = wtrsgat(k)
+        xxwtrg(iland(k)) = wtrggat(k)
+        xxbetaf(iland(k)) = efgat(k)
+        xxfcs(iland(k)) = fcs(k)
+        xxfgs(iland(k)) = fgs(k)
+        xxfc(iland(k)) = ffc(k)
+        xxfg(iland(k)) = fg(k)
+      end do
+
+      do l=1,ig
+        do k=1,nland
+          xxtbar(iland(k),l) = tbargat(k,l)
+          xxthliq(iland(k),l) = thlqgat(k,l)
+          xxthice(iland(k),l) = thicgat(k,l)
+          xxtransp(iland(k),l) = qfcgat(k,l)         
+        end do
+      end do
+
+      CALL SERXST (xxtbar(1,1),      '00',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtbar(1,2),      '01',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtbar(1,3),      '02',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxthliq(1,1),     '03',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxthliq(1,2),     '04',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxthliq(1,3),     '05',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxthice(1,1),     '06',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxthice(1,2),     '07',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxthice(1,3),     '08',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtcan,           '09',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxsnow,           '10',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxrhosno,         '11',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtsnow,          '12',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxalbsno,         '13',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxrcan,           '14',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxscan,           '15',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxgrowth,         '16',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxalirbar,        '17',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxalvsbar,        '18',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxcdh,            '19',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxcdm,            '20',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxgt,             '21',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxqg,             '22',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxsurfq,          '23',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxsurft,          '24',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxsurfu,          '25',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxsurfv,          '26',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxcmai,           '27',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfsgv,           '28',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfsgs,           '29',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfsgg,           '30',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxflgv,           '31',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxflgs,           '32',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxflgg,           '33',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxhfsc,           '34',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxhfss,           '35',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxhfsg,           '36',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxhevc,           '37',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxhevs,           '38',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxhevg,           '39',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxevap,           '40',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxrunoff,         '41',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxovrflo,         '42',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxqfcf,           '43',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxqfcl,           '44',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxqfg,            '45',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxqfn,            '46',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxpcfc,           '47',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxpclc,           '48',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxpcpg,           '49',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxpcpn,           '50',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtransp(1,1),    '51',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtransp(1,2),    '52',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxtransp(1,3),    '53',JL,ILG,0.,     1.,-1   )
+      CALL SERXST (xxrofc,           '54',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxrofn,           '55',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxwtrc,           '56',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxwtrs,           '57',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxwtrg,           '58',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxbetaf,          '59',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfcs,            '60',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfgs,            '61',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfc,             '62',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (xxfg,             '63',JL,ILG,0.,     1.,-1   )      
+
+
+*************** Debut de la recuperation *******************
+
+      do 460 k=1,nland
+        do 460 l=1,ig
+          f(tsoil+(l-1)*ilg+iland(k)-1) = tbargat(k,l)
+          f(wsoil+(l-1)*ilg+iland(k)-1) = thlqgat(k,l)
+          f(isoil+(l-1)*ilg+iland(k)-1) = thicgat(k,l)
+ 460  continue
+
+      do 465 k=1,nland
+*     Permanent prognostic fields.
+         f(tveg+iland(k)-1) = tcangat(k)
+         f(snoma+iland(k)-1) = snogat (k)
+         f(snoal+iland(k)-1) = albsgat(k)
+         f(snoro+iland(k)-1) = rhosgat(k)
+         f(tsno+iland(k)-1) = tsnogat(k)
+         f(vegro+iland(k)-1) = ttgat(k)
+         f(wveg+iland(k)-1) = wcangat(k)
+         f(iveg+iland(k)-1) = scangat(k)
+*     Output fields 
+         alvsbar(iland(k)) = alswgat(k)
+         alirbar(iland(k)) = allwgat(k)
+         cdmbar(iland(k)) = cdmgat(k)
+         qsens(iland(k)) = hfsgat(k)
+         qevap(iland(k)) = qevpgat(k)
+         st(iland(k)) = sfctgat(k)
+         sq(iland(k)) = sfcqgat(k)
+         su(iland(k)) = sfcugat(k)
+         sv(iland(k)) = sfcvgat(k)
+
+         v(cdm+iland(k)-1) = cdmgat(k)
+         v(cdh+iland(k)-1) = cdhgat(k)
+         f(tdiag+iland(k)-1) = sfctgat(k) 
+         f(qdiag+iland(k)-1) = sfcqgat(k)
+         f(udiag+iland(k)-1) = sfcugat(k)
+         f(vdiag+iland(k)-1) = sfcvgat(k)
+         v(alvs+iland(k)-1) = alswgat(k)
+         v(alir+iland(k)-1) = allwgat(k)
+
+         v(qg+iland(k)-1) = qggat(k)
+         f(tsrad+iland(k)-1) = gtgat(k)
+         v(cmai+iland(k)-1) = cmaigat(k)
+
+         v(fsgv+iland(k)-1) = fsgvgat(k)
+         v(fsgs+iland(k)-1) = fsgsgat(k)
+         v(fsgg+iland(k)-1) = fsgggat(k)
+
+         v(flgv+iland(k)-1) = flgvgat(k)
+         v(flgs+iland(k)-1) = flgsgat(k)
+         v(flgg+iland(k)-1) = flgggat(k)
+
+         v(hfsc+iland(k)-1) = hfscgat(k)
+         v(hfss+iland(k)-1) = hfssgat(k)
+         v(hfsg+iland(k)-1) = hfsggat(k)
+
+         v(hevc+iland(k)-1) = hevcgat(k)
+         v(hevs+iland(k)-1) = hevsgat(k)
+         v(hevg+iland(k)-1) = hevggat(k)
+
+         v(evapo+iland(k)-1) = qfsgat(k)
+         v(runoff+iland(k)-1) = rofgat(k)
+         v(overfl+iland(k)-1) = overfgat(k)
+         v(qfcf+iland(k)-1) = qfcfgat(k)
+         v(qfcl+iland(k)-1) = qfclgat(k)
+         v(qfg+iland(k)-1) = qfggat(k)
+         v(qfn+iland(k)-1) = qfngat(k)
+         v(pcfc+iland(k)-1) = pcfcgat(k)
+         v(pclc+iland(k)-1) = pclcgat(k)
+         v(pcpg+iland(k)-1) = pcpggat(k)
+         v(pcfg+iland(k)-1) = pcpngat(k)
+         v(rofc+iland(k)-1) = rofcgat(k)
+         v(rofn+iland(k)-1) = rofngat(k)
+         v(wtrc+iland(k)-1) = wtrcgat(k)
+         v(wtrs+iland(k)-1) = wtrsgat(k)
+         v(wtrg+iland(k)-1) = wtrggat(k)
+         v(betaf+iland(k)-1) = efgat(k)
+         v(fcovcs+iland(k)-1) = fcs(k)
+         v(fcovgs+iland(k)-1) = fgs(k)
+         v(fcovc+iland(k)-1) =  ffc(k)
+         v(fcovg+iland(k)-1) = fg(k)
+ 465  CONTINUE
+
+      do l=1,ig
+        do k=1,nland
+          v(transp+(l-1)*ilg+iland(k)-1) = qfcgat(k,l)         
+        end do
+      end do
+
+*     Compute CLASS feedbacks on atmospheric model
+  
+      do j=1,ilg
+         sc=1.0/(seloc(j,nk-1)-seloc(j,nk-2))
+         if (f(gc+j-1).lt.-0.5) then
+            v(bm+j-1)=-sqrt(ugcm(j)**2+vgcm(j)**2)*
+     +                  cdmbar(j)*grav/(rgasd*ta(j))
+            f(tsoil+j-1)=f(tsrad+j-1)
+            f(alvis+j-1)=0.5*(alirbar(j)+alvsbar(j))
+            v(fc+j-1)=qsens(j)
+            v(fv+j-1)=qevap(j)         
+            v(alfat+j-1)=grav*v(fc+j-1)/(cpd*pressg(j))
+            v(bt+j-1)=0.0
+            v(alfaq+j-1)=v(fv+j-1)*grav/(2.501e6*pressg(j))
+         endif
+      end do
+
+      CALL SERXST (v(fc),            'FC',JL,ILG,0.,     1.,-1   )      
+      CALL SERXST (v(fv),            'FV',JL,ILG,0.,     1.,-1   ) 
+      CALL SERXST (f(alvis),         'A6',JL,ILG,0.,     1.,-1   ) 
+
+*     Desallocation of all pointers.
+
+      call unstakw(trv1)
+      call unstakw(trv2)
+      call unstakw(trv3)
+      call unstakw(trv4)
+      call unstakw(trv5)
+      call unstakw(trv6)
+      call unstakw(itrv1)
+
+      call unstakw (pata)
+      call unstakw (paqwv)
+      call unstakw (paqwi)
+      call unstakw (papcpr)
+      call unstakw (paqinv)
+      call unstakw (paqini)
+      call unstakw (pacoszs)
+      call unstakw (paqswd)
+      call unstakw (paalvsbar)
+      call unstakw (paalirbar)
+      call unstakw (paqsens)
+      call unstakw (paqevap)
+      call unstakw (pacdmbar)
+
+      CALL UNSTAKW(IA1)      
+      CALL UNSTAKW(A1)
+      CALL UNSTAKW(AC1)
+      CALL UNSTAKW(AX1)
+      CALL UNSTAKW(X1)
+      CALL UNSTAKW(X2)
+      CALL UNSTAKW(X3)
+      CALL UNSTAKW(GAT1)
+      CALL UNSTAKW(GC1)
+      CALL UNSTAKW(GCP1)
+      CALL UNSTAKW(GDIR)
+      CALL UNSTAKW(GIG1)
+      CALL UNSTAKW(GG1)
+      CALL UNSTAKW(G1)
+      call unstakw(gx1)
+
+*----------------------------------------------------------------------
+
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

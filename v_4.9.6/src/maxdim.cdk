@@ -1,0 +1,7 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      integer nmlmax, nstatmx, nsurfmx, nprofmx, dzmxsrf, dzmxprf
+      parameter (nmlmax=256)
+      parameter (nstatmx=256, nsurfmx=256, nprofmx=256)
+      parameter (dzmxsrf=64, dzmxprf=64)
+*

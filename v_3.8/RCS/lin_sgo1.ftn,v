@@ -1,0 +1,246 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  LIN_SGO1
+#include "phy_macros_f.h"
+      SUBROUTINE LIN_SGO1 ( F, SIZEF, U, V, T, P, S, 
+     $                      RUG, RVG, TAU, KOUNT, TRNCH, N, M, NK, 
+     $                      ITASK, SGOKIND)
+*
+#include "impnone.cdk"
+      INTEGER ITASK, SIZEF, TRNCH, N, M, NK, KOUNT, SGOKIND
+      REAL F(SIZEF)
+      REAL U(M,NK),V(M,NK),T(M,NK),P(M),S(N,NK)
+      REAL RUG(N,NK),RVG(N,NK)
+      REAL TAU
+*
+*Author
+*          A. Zadra RPN (May 2002)
+*
+*Object
+*          Simplified version of GWD4
+*
+*IMPLICITES
+*
+#include "options.cdk"
+#include "phybus.cdk"
+#include "consphy.cdk"
+*
+*MODULES
+*
+*     ROUTINES D'EXTRACTION DE SERIES TEMPORELLES
+*
+c      EXTERNAL SERXST
+c      EXTERNAL MVZNXST
+*
+*     ROUTINES DU "SGO DRAG"
+*
+      EXTERNAL LIN_SGOFLX1
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( LAND     , REAL*8   , (N   ) )
+      AUTOMATIC ( LAUNCH   , REAL*8   , (N   ) )
+      AUTOMATIC ( SLOPE8   , REAL*8   , (N   ) )
+      AUTOMATIC ( XCENT8   , REAL*8   , (N   ) )
+      AUTOMATIC ( MTDIR8   , REAL*8   , (N   ) )
+      AUTOMATIC ( TT       , REAL*8   , (N,NK) )
+      AUTOMATIC ( TE       , REAL*8   , (N,NK) )
+      AUTOMATIC ( UU       , REAL*8   , (N,NK) )
+      AUTOMATIC ( VV       , REAL*8   , (N,NK) )
+      AUTOMATIC ( PP       , REAL*8   , (N   ) )
+      AUTOMATIC ( FCORIO   , REAL*8   , (N   ) )
+      AUTOMATIC ( SS       , REAL*8   , (N,NK) )
+      AUTOMATIC ( SE       , REAL*8   , (N,NK) )
+      AUTOMATIC ( UTENDSGO , REAL*8   , (N,NK) )
+      AUTOMATIC ( VTENDSGO , REAL*8   , (N,NK) )
+*
+************************************************************************
+*
+      INTEGER I,J,K,IS
+*
+      LOGICAL GWDRG, BLOCKING, OROLIFT, LEEWAVE, APPLYTEND
+*
+*--------------------------------------------------------------------
+*
+        if (sgokind.eq.100 .or. sgokind.eq.110 .or. 
+     +      sgokind.eq.120 .or. sgokind.eq.130)     then
+          gwdrg     = .true.
+          blocking  = .true.
+          orolift   = .false.
+          leewave   = .false.
+          applytend = .false.
+        endif
+
+        if (sgokind.eq.101 .or. sgokind.eq.111 .or. 
+     +      sgokind.eq.121 .or. sgokind.eq.131)     then
+          gwdrg     = .true.
+          blocking  = .true.
+          orolift   = .false.
+          leewave   = .false.
+          applytend = .true.
+        endif
+
+        if (sgokind.eq.200 .or. sgokind.eq.210 .or. 
+     +      sgokind.eq.220 .or. sgokind.eq.230)     then
+          gwdrg     = .false.
+          blocking  = .true.
+          orolift   = .false.
+          leewave   = .false.
+          applytend = .false.
+        endif
+
+        if (sgokind.eq.201 .or. sgokind.eq.211 .or. 
+     +      sgokind.eq.221 .or. sgokind.eq.231)     then
+          gwdrg     = .false.
+          blocking  = .true.
+          orolift   = .false.
+          leewave   = .false.
+          applytend = .true.
+        endif
+
+        if (sgokind.eq.300) then
+          gwdrg     = .true.
+          blocking  = .false.
+          orolift   = .false.
+          leewave   = .false.
+          applytend = .false.
+        endif
+
+        if (sgokind.eq.301) then
+          gwdrg     = .true.
+          blocking  = .false.
+          orolift   = .false.
+          leewave   = .false.
+          applytend = .true.
+        endif
+
+*
+*--------------------------------------------------------------------
+*
+      DO K=1,NK
+*VDIR NODEP
+         DO J=1,N
+            TT(J,K) = T(J,K)
+            UU(J,K) = U(J,K)
+            VV(J,K) = V(J,K)
+            UTENDSGO(J,K) = 0.
+            VTENDSGO(J,K) = 0.
+         ENDDO
+      ENDDO
+*
+*VDIR NODEP
+         DO J=1,N
+            PP(J)     = P(J)
+            FCORIO(J) = F(FCOR+J-1)
+         ENDDO
+*
+      DO J=1,N
+         LAND(J) = - ABS( NINT( f(MG+J-1) ) )
+      ENDDO
+*
+      DO K=1,NK-1
+*VDIR NODEP
+         DO J=1,N
+            SE(J,K) = 0.5*( S(J,K) + S(J,K+1) )
+         ENDDO
+      ENDDO
+*
+*VDIR NODEP
+         DO J=1,N
+            SE(J,NK) = 0.5*( S(J,NK) + 1. )
+         ENDDO
+*
+      DO  K=1,NK-1
+*VDIR NODEP
+         DO J=1,N
+            TE(J,K) = 0.5*( TT(J,K) + TT(J,K+1) )
+         ENDDO
+      ENDDO
+*
+*VDIR NODEP
+         DO J=1,N
+            TE(J,NK) = 2.0*TT(J,NK) - TT(J,NK-1)
+         ENDDO
+*
+      DO I=1,N
+         LAUNCH(I) = F(LHTG+I-1)
+         SLOPE8(I) = F(SLOPE+I-1)
+         XCENT8(I) = F(XCENT+I-1)
+         MTDIR8(I) = F(MTDIR+I-1)
+      ENDDO
+*
+*
+      DO K=1,NK
+         DO J=1,N
+            SS(J,K) = S(J,K)
+         ENDDO
+      ENDDO
+*
+       CALL LIN_SGOFLX1 (UU, VV, UTENDSGO, VTENDSGO,
+     $                   TE, TT, SS, SE,
+     $                   NK, NK, N, 1, N,
+     $                   GRAV, RGASD, CAPPA, TAU, TAUFAC,
+     $                   LAND, LAUNCH, SLOPE8, XCENT8, MTDIR8,
+     $                   PP, FCORIO,
+     $                   GWDRG, BLOCKING, OROLIFT, LEEWAVE,
+     $                   APPLYTEND) 
+*
+      DO K=1,NK
+*VDIR NODEP
+         DO J=1,N
+            RUG(J,K) = UTENDSGO(J,K)
+            RVG(J,K) = VTENDSGO(J,K)
+            U  (J,K) =       UU(J,K)
+            V  (J,K) =       VV(J,K)
+         ENDDO
+      ENDDO
+*
+c      CALL SERXST( RUG,    'GU',     TRNCH, N, 0.0, 1.0,   -1)
+c      CALL SERXST( RVG,         'GV',TRNCH, N, 0.0, 1.0,   -1)
+c      CALL MVZNXST(RUG,RVG,'GU','GV',TRNCH, N, 1.0, -1 ,ITASK)
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

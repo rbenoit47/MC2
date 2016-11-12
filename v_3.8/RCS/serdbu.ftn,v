@@ -1,0 +1,122 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  SERDBU
+*
+      SUBROUTINE SERDBU
+*
+#include "impnone.cdk"
+*
+*Author
+*          R. Benoit (RPN 1984)
+*
+*Revision
+* 001      J. Cote RPN(January 1985)
+*          Recoding compatible to SEF/RFE version
+*          Documentation
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+*                      -  NINJNK is initialized in SERALOC
+* 003      B. Reid  (June 89) - Zonal diagnostics
+*
+* 004      B. Bilodeau (December 89)
+*                - Calculation of NK to allow the execution of
+*                  zonal diagnostics without the time-series
+* 005      B. Bilodeau  (July 1991)- Adaptation to UNIX
+* 006      G. Pellerin (Sept 1993) - Delete memory allocation for
+*          the zonal diagnostics
+*
+*Object
+*          to initialize the system of time-series extraction
+*
+*Arguments
+*          None.
+*
+*Notes
+*          The stations must be in increasing IJ order
+*
+*    Other modules of the system:
+*
+*       SERALLC = dynamic allocation of common variables
+*       SERDYN  = extraction of dynamic variables
+*       SERINI  = extraction of surface constant fields ( EFR )
+*       SERINS  = extraction of surface constant fields ( SEF )
+*       SERKH   = extraction of KH ( CRESSMAN/EFR )
+*       SERWRIT = output header block and arrays onto file NOUTSER
+*       SERXST  = extraction and calculation on extracted fields
+*       SERSET  = initialization of common variables of the system
+*       SETGET  = obtain the associated variables of the system
+*
+*IMPLICITES
+*
+#include "sercmdk.cdk"
+*
+*
+*MODULE
+      EXTERNAL SERDATA
+*
+**
+*
+      INTEGER K,L,M,NK
+*
+      IF (NSTAT.LE.0) THEN
+        CALL SERDATA
+        RETURN
+*
+      ELSE
+*
+         NK = NINJNK(3)
+         DO 1 M=1,NSURF
+            SURFACE(M,2) = '    '
+            DO 1 L=1,NSTAT
+    1          SERS(L,M) = 0.0
+*
+         DO 2 M=1,NPROF
+            PROFILS(M,2) = '    '
+            DO 2 L=1,NSTAT
+               DO 2 K=1,NK
+    2            SERP(K,L,M) = 0.0
+*
+      ENDIF
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

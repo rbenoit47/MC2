@@ -1,0 +1,649 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P SURFACE
+      SUBROUTINE SURFACE  ( 
+     $                      D, DSIZ, F, FSIZ, V, VSIZ, 
+     $                      WORK, ESPWORK, SELOC, TRNCH,
+     $                      KOUNT, DT, NI, M, NK, TASK
+     $                    )
+*
+#include "impnone.cdk"
+*
+      INTEGER DSIZ, FSIZ, VSIZ, ESPWORK
+      INTEGER TRNCH,KOUNT,NI,M, NK, TASK
+*
+      REAL DT
+      REAL D(DSIZ), F(FSIZ), V(VSIZ), WORK(ESPWORK), SELOC(M,NK)
+*
+*Author
+*          B. Bilodeau (Dec 1998)
+*
+*Revisions
+*
+* 001      J. Mailhot  (Jul 2000) - Changes to add MOISTKE option (ifluvert=3)
+* 002      B. Bilodeau (Mar 2003) - Convert aggregated value of SNODP to cm
+*
+*Object
+*          this is the main interface subroutine
+*          for the surface processes
+*
+*Arguments
+* 
+*          - Input/Output -
+* D        dynamic             bus
+* F        permanent variables bus
+* V        volatile (output)   bus
+* WORK     physics work space
+*
+*          - Input -
+* DSIZ     dimension of D
+* FSIZ     dimension of F
+* VSIZ     dimension of V
+* ESPWORK  dimension of WORK
+*
+*          - Input -
+* TRNCH    row number
+* KOUNT    timestep number
+* DT       length of timestep
+* NI       number of elements processed in the horizontal
+*          (could be a subset of M in future versions)
+* M        horizontal dimensions of fields
+*          (not used for the moment)
+* NK       vertical dimension
+* TASK     task number
+* 
+*
+*Notes
+*
+*IMPLICITES
+*
+#include "stk.cdk"
+#include "options.cdk"
+#include "consphy.cdk"
+#include "surfacepar.cdk"
+*
+*MODULES
+*
+**
+      logical do_glaciers, do_ice
+*
+      integer i, icpu, ik, j, jk, k, x, ptr
+      integer sommet
+      integer  ni_soil,  ni_glacier,  ni_water,  ni_ice
+      integer siz_soil, siz_glacier, siz_water, siz_ice
+*
+      real lemin, lemax, mask, sc
+*
+      real trav1d, trav2d
+      pointer (trav1d_     ,  trav1d     (m     ))
+      pointer (trav2d_     ,  trav2d     (m,nk,6))
+*
+#include "zuzt.cdk"
+*
+      real zun,ztn
+      pointer (zun_        ,  zun        (1     ))
+      pointer (ztn_        ,  ztn        (1     ))
+*
+*     les poids
+      real poids
+      pointer(poids_       ,  poids      (ni,4  ))
+*
+*     les "rangs" (dans l'espace de la grille complete)
+      integer rangs
+      pointer(rangs_       ,  rangs      (ni,4  ))
+*
+*     les "rangs" (dans chacun des 4 espaces 
+*     correspondant aux 4 types de surfaces)
+      integer rg_soil, rg_glacier, rg_water, rg_ice
+      pointer (rg_soil_    ,  rg_soil    (1     ))
+      pointer (rg_glacier_ ,  rg_glacier (1     ))
+      pointer (rg_water_   ,  rg_water   (1     ))
+      pointer (rg_ice_     ,  rg_ice     (1     ))
+*
+*     les bus
+      real bus_soil, bus_glacier, bus_water, bus_ice
+      pointer(bus_soil_    ,  bus_soil   (1     ))
+      pointer(bus_glacier_ ,  bus_glacier(1     ))
+      pointer(bus_water_   ,  bus_water  (1     ))
+      pointer(bus_ice_     ,  bus_ice    (1     ))
+*
+*     les pointeurs
+      integer ptr_soil, ptr_glacier, ptr_water, ptr_ice
+      pointer (ptr_soil_   ,  ptr_soil   (1     ))
+      pointer (ptr_glacier_,  ptr_glacier(1     ))
+      pointer (ptr_water_  ,  ptr_water  (1     ))
+      pointer (ptr_ice_    ,  ptr_ice    (1     ))
+*
+*
+#include "nbvarsurf.cdk"
+#include "dimsurf.cdk"
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+*
+*     fonction-formule
+      ik(i,k) = (k-1)*ni + i -1
+*
+*
+*     work space initialization
+      STK_INITA (work, espwork)
+*
+*VDIR NODEP
+      do i=1,ni
+        v(za+i-1) = -rgasd/grav* v(tve+ik(i,nk-1)) *
+     +                         alog(d(sigm+ik(i,nk-1)))
+        sc = d(sigm+ik(i,nk-1))**(-cappa)
+        v(thetaa+i-1) = sc*d(tmoins+ik(i,nk-1))
+        v(fcor  +i-1)= 1.45441e-4*sin(f(dlat+i-1))
+*
+      end do
+*
+*                         Phase of the precipitation reaching
+*                         the surface.
+*
+      CALL SURF_PRECIP( d(TMOINS+(nk-2)*ni), 
+     +                  f(TLC), f(TLS), f(TSC), f(TSS),
+     +                  v(rainrate), v(snowrate), ni )
+*
+*
+      if (ifluvert.eq.1) then           ! PHYSIMP
+*
+         STK_ALLOC (trav1d_     , m        )
+         STK_ALLOC (trav2d_     , m*nk*6   )
+*
+         call fisimp3 ( d,dsiz,f,fsiz,v,vsiz,
+     +                  seloc,trav2d,
+     +                  ni,nk-1,trav1d,kount)
+*
+      else if (ifluvert.ge.2) then      ! CLEF OR MOISTKE
+*
+         poids_ = loc(v(sfcwgt))
+*
+         STK_ALLOC (rangs_      , ni*4     )
+         STK_ALLOC (rg_water_   , ni       )
+         STK_ALLOC (rg_soil_    , ni       )
+         STK_ALLOC (rg_ice_     , ni       )
+         STK_ALLOC (rg_glacier_ , ni       )
+         STK_ALLOC (ptr_water_  , nvarsurf )
+         STK_ALLOC (ptr_soil_   , nvarsurf )
+         STK_ALLOC (ptr_ice_    , nvarsurf )
+         STK_ALLOC (ptr_glacier_, nvarsurf )
+*
+*        mg, glsea et glacier doivent etre bornes entre 0 et 1
+*        pour que les poids soient valides
+*VDIR NODEP
+         do i=1,ni
+            lemin = min(f(mg+i-1),f(glsea+i-1),f(glacier+i-1))
+            lemax = max(f(mg+i-1),f(glsea+i-1),f(glacier+i-1))
+            if (lemin.lt.0. .or. lemax.gt.1.) then
+               write(6,1000) 
+               call qqexit(1)
+            endif
+         end do
+*
+*        calcul des poids
+*VDIR NODEP
+         do i=1,ni
+*
+            mask = f(mg+i-1)
+            if      (mask.gt.(1.-critmask)) then
+               mask = 1.0
+            else if (mask.lt.    critmask ) then
+               mask = 0.0
+            endif
+*
+*           sol
+            poids(i,indx_soil)    =     mask  * (1.-f(glacier+i-1))
+*
+*           glaciers continentaux
+            poids(i,indx_glacier) =     mask  *     f(glacier+i-1)
+*
+*           eau
+            poids(i,indx_water)   = (1.-mask) * (1.-f(glsea  +i-1))
+*
+*           glace marine
+            poids(i,indx_ice)     = (1.-mask) *     f(glsea  +i-1)
+*
+         end do
+*
+         do i=1,ni
+           rg_soil   (i) = 0
+           rg_glacier(i) = 0
+           rg_water  (i) = 0
+           rg_ice    (i) = 0
+         end do
+*
+         do i=1,ni*4
+           rangs(i,1) = 0
+         end do
+*
+         ni_water     = 0
+         ni_ice       = 0
+         ni_soil      = 0
+         ni_glacier   = 0
+*
+*        definition des "rangs"
+*
+         if (agregat) then
+*
+*           agregation
+*           ----------
+*
+*VDIR NODEP
+            do i=1,ni
+*
+               if (poids(i,indx_soil).gt.0.0) then
+                  ni_soil                = ni_soil + 1 
+                  rangs(i,indx_soil)     = ni_soil
+                  rg_soil(ni_soil)       = i
+               endif
+*
+               if (poids(i,indx_glacier).gt.0.0) then
+                  ni_glacier             = ni_glacier + 1
+                  rangs(i,indx_glacier)  = ni_glacier
+                  rg_glacier(ni_glacier) = i
+               endif
+*
+               if (poids(i,indx_water).gt.0.0) then
+                  ni_water               = ni_water + 1 
+                  rangs(i,indx_water)    = ni_water
+                  rg_water(ni_water)     = i
+               endif
+*
+               if (poids(i,indx_ice).gt.0.0) then
+                  ni_ice               = ni_ice + 1 
+                  rangs(i,indx_ice)    = ni_ice
+                  rg_ice(ni_ice)       = i
+               endif
+*
+            end do
+*
+*
+        else if (.not.agregat) then 
+*
+*           pas d'agregation
+*           ----------------
+*
+            do i=1,ni
+*
+               if      (f(mg     +i-1).ge.0.5       .and.
+     $                  f(glacier+i-1).lt.0.5)      then
+*
+                  ni_soil                    = ni_soil + 1 
+                  rg_soil(ni_soil       )    = i
+                  poids  (i,indx_soil   )    = 1.0
+                  poids  (i,indx_glacier)    = 0.0
+                  poids  (i,indx_water  )    = 0.0
+                  poids  (i,indx_ice    )    = 0.0
+*
+               else if (f(mg     +i-1).ge.0.5        .and.
+     $                  f(glacier+i-1).ge.0.5)       then
+*
+                  ni_glacier                 = ni_glacier + 1
+                  rg_glacier(ni_glacier    ) = i
+                  poids  (i,indx_soil      ) = 0.0
+                  poids  (i,indx_glacier   ) = 1.0
+                  poids  (i,indx_water     ) = 0.0
+                  poids  (i,indx_ice       ) = 0.0
+*
+               else if (f(mg   +i-1).lt.0.5          .and.
+     $                  f(glsea+i-1).lt.0.5)         then
+*
+                  ni_water                   = ni_water + 1 
+                  rg_water(ni_water      )   = i
+                  poids   (i,indx_soil   )   = 0.0
+                  poids   (i,indx_glacier)   = 0.0
+                  poids   (i,indx_water  )   = 1.0
+                  poids   (i,indx_ice    )   = 0.0
+*
+*
+               else if (f(mg   +i-1).lt.0.5          .and.
+     $                  f(glsea+i-1).ge.0.5)         then
+*
+                  ni_ice                     = ni_ice + 1 
+                  rg_ice (ni_ice        )    = i
+                  poids  (i,indx_soil   )    = 0.0
+                  poids  (i,indx_glacier)    = 0.0
+                  poids  (i,indx_water  )    = 0.0
+                  poids  (i,indx_ice    )    = 1.0
+*
+               endif
+*
+            end do
+*
+         endif
+*
+*
+*******************************
+*                             *
+*        SOIL                 *
+*        ----                 *
+*                             *
+*******************************
+*
+         sommet = 1
+*VDIR NODEP
+         do i=1,nvarsurf
+            ptr_soil(i) = sommet
+            sommet = sommet + niveaux(i) * mul(i) * ni_soil
+         end do
+*
+*        Lorsque surfesptot =0, bus_soil ne contient
+*        qu'un element et il est egal a zero (voir s/p agrege).
+         siz_soil = max(surfesptot*ni_soil,1)
+*
+         if (siz_soil.eq.1) then
+*
+            STK_ALLOC (bus_soil_   , 1        )
+*
+            bus_soil(1) = 0.
+*
+         else if (siz_soil.gt.1) then
+*
+            STK_ALLOC (bus_soil_   , siz_soil )
+*
+            do i=1,siz_soil
+               bus_soil(i) = 0.0
+            end do
+*
+*           transvidage des 3 bus dans bus_soil
+            call copybus(bus_soil, d   , f   , v   ,
+     $                   siz_soil, dsiz, fsiz, vsiz,
+     $                   ptr_soil, nvarsurf,
+     $                   rg_soil, ni_soil, 
+     $                   ni, indx_soil, agregat, .true.)
+*
+            if (ischmsol.eq.1) then
+               call force_restore (
+     $                       bus_soil, siz_soil,
+     $                       ptr_soil, nvarsurf,
+     $                       kount, trnch,
+     $                       ni_soil, ni_soil, nk-1, icpu )
+*
+*           else if (ischmsol.eq.2) then
+*
+*              call class270
+*
+            else if (ischmsol.eq.3) then
+*
+               call isba2 (bus_soil, siz_soil,
+     $                     ptr_soil, nvarsurf,
+     $                     dt, kount, trnch,
+     $                     ni_soil, ni_soil, nk-1)
+*
+            endif
+*
+            call copybus(bus_soil, d   , f   , v   ,
+     $                   siz_soil, dsiz, fsiz, vsiz,
+     $                   ptr_soil, nvarsurf,
+     $                   rg_soil, ni_soil, 
+     $                   ni, indx_soil, agregat, .false.)
+*
+         endif
+*
+*
+*******************************
+*                             *
+*        WATER                *
+*        -----                *
+*                             *
+*******************************
+*
+         sommet = 1
+*VDIR NODEP
+         do i=1,nvarsurf
+            ptr_water(i) = sommet
+            sommet = sommet + niveaux(i) * mul(i) * ni_water
+         end do
+*
+         siz_water = max(surfesptot*ni_water,1)
+*
+         if (siz_water.eq.1) then
+*
+            STK_ALLOC (bus_water_  , 1        )
+*
+            bus_water(1) = 0.
+*
+         else if (siz_water.gt.1) then
+*
+            STK_ALLOC (bus_water_  , siz_water)
+*
+            do i=1,siz_water
+               bus_water(i) = 0.0
+            end do
+      
+*           transvidage des 3 bus dans bus_water
+            call copybus(bus_water, d   , f   , v   ,
+     $                   siz_water, dsiz, fsiz, vsiz,
+     $                   ptr_water, nvarsurf,
+     $                   rg_water, ni_water, 
+     $                   ni, indx_water, agregat, .true.)
+*
+            call water ( bus_water, siz_water,
+     $                   ptr_water, nvarsurf,
+     $                   trnch, kount,
+     $                   ni_water, ni_water, 
+     $                   nk-1)
+*
+            call copybus(bus_water, d   , f   , v   ,
+     $                   siz_water, dsiz, fsiz, vsiz,
+     $                   ptr_water, nvarsurf,
+     $                   rg_water, ni_water, 
+     $                   ni, indx_water, agregat, .false.)
+*
+         endif
+*
+*
+*******************************
+*                             *
+*     OCEANIC ICE             *
+*     -----------             *
+*                             *
+*******************************
+*
+         sommet = 1
+*VDIR NODEP
+         do i=1,nvarsurf
+            ptr_ice(i) = sommet
+            sommet = sommet + niveaux(i) * mul(i) * ni_ice
+         end do
+*
+         siz_ice = max(surfesptot*ni_ice,1)
+*
+         if (siz_ice.eq.1) then
+*
+            do_ice      = .false.
+*
+            STK_ALLOC (bus_ice_    , 1        )
+*
+            bus_ice(1) = 0.
+*
+         else if (siz_ice.gt.1) then
+*
+            do_ice      = .true.
+*
+            STK_ALLOC (bus_ice_    , siz_ice  )
+*
+            do i=1,siz_ice
+               bus_ice(i) = 0.0
+            end do
+      
+*           transvidage des 3 bus dans bus_ice
+            call copybus(bus_ice, d   , f   , v   ,
+     $                   siz_ice, dsiz, fsiz, vsiz,
+     $                   ptr_ice, nvarsurf,
+     $                   rg_ice, ni_ice, 
+     $                   ni, indx_ice, agregat, .true.)
+*
+            call seaice( bus_ice, siz_ice,
+     $                   ptr_ice, nvarsurf,
+     $                   trnch, kount, delt,
+     $                   icemelt, ni_ice,
+     $                   ni_ice, nk-1)
+*
+            call copybus(bus_ice, d   , f   , v   ,
+     $                   siz_ice, dsiz, fsiz, vsiz,
+     $                   ptr_ice, nvarsurf,
+     $                   rg_ice, ni_ice, 
+     $                   ni, indx_ice, agregat, .false.)
+*
+         endif
+*
+*
+*******************************
+*                             *
+*     CONTINENTAL ICE         *
+*     ---------------         *
+*                             *
+*******************************
+*
+*
+         sommet = 1
+*VDIR NODEP
+         do i=1,nvarsurf
+            ptr_glacier(i) = sommet
+            sommet = sommet + niveaux(i) * mul(i) * ni_glacier
+         end do
+*
+         siz_glacier = max(surfesptot*ni_glacier,1)
+*
+         if (siz_glacier.eq.1) then
+*
+            do_glaciers = .false.
+*
+            STK_ALLOC (bus_glacier_, 1          )
+*
+            bus_glacier(1) = 0.
+*
+         else if (siz_glacier.gt.1) then
+*
+            do_glaciers = .true.
+*
+            STK_ALLOC (bus_glacier_, siz_glacier)
+*
+            do i=1,siz_glacier
+               bus_glacier(i) = 0.0
+            end do
+      
+*           transvidage des 3 bus dans bus_glacier
+            call copybus(bus_glacier, d   , f   , v   ,
+     $                   siz_glacier, dsiz, fsiz, vsiz,
+     $                   ptr_glacier, nvarsurf,
+     $                   rg_glacier, ni_glacier, 
+     $                   ni, indx_glacier, agregat, .true.)
+*
+            call glaciers ( bus_glacier, siz_glacier,
+     $                      ptr_glacier, nvarsurf,
+     $                      trnch, kount, delt, icemelt,
+     $                      ni_glacier, ni_glacier, nk-1)
+*
+            call copybus(bus_glacier, d   , f   , v   ,
+     $                   siz_glacier, dsiz, fsiz, vsiz,
+     $                   ptr_glacier, nvarsurf,
+     $                   rg_glacier, ni_glacier, 
+     $                   ni, indx_glacier, agregat, .false.)
+*
+         endif
+*
+*      
+*
+*******************************
+*                             *
+*     AGREGATION              *
+*     ----------              *
+*                             *
+*******************************
+*
+         if (agregat) then
+*
+            call agrege ( d   , f   , v   , 
+     $                    dsiz, fsiz, vsiz,
+     $                    bus_soil, bus_glacier, bus_water, bus_ice,
+     $                    siz_soil, siz_glacier, siz_water, siz_ice,
+     $                     ni_soil,  ni_glacier,  ni_water,  ni_ice,
+     $                    ptr_soil, ptr_glacier, ptr_water, ptr_ice,
+     $                    nvarsurf,
+     $                    rangs, poids, ni,
+     $                    do_glaciers, do_ice)
+*
+         endif
+*
+      endif
+*
+*
+********************************************
+*     CORRECTIF TEMPORAIRE POUR LA SORTIE  *
+*     -----------------------------------  *
+********************************************
+*
+      do i=0,5*ni-1
+*        changement d'unites : m vers cm
+         f(snodp+i) = 100. * f(snodp+i)
+      end do
+*
+********************************************
+*     DIAGNOSTICS                          *
+*     -----------                          *
+********************************************
+*
+*     series temporelles et diagnostics zonaux
+      call diagnosurf (f,v,fsiz,vsiz,ni,ni,nk,trnch,task)
+*     
+*     Relacher l'espace de travail
+      STK_FREE
+*
+*
+1000   FORMAT (//2(1x,60('*')/),1x,'*',58(' '),'*'/
+     +         1x,'*',11(' '),'INVALID WEIGHTS FOR SURFACE',
+     +         20(' '),'*'/1x,'*',11(' '),
+     +         'PROCESSES IN SUBROUTINE "SURFACE"',
+     +         14(' '),'*'/(1x,'*',58(' '),'*'/),
+     +         ' *',11(' '),'MAKE SURE THAT # LAND-SEA MASK',17(' '),'*'
+     +         /1x,'*',26(' '),'# SEA ICE FRACTION',14(' '),'*'/,
+     +         ' *',26(' '),'# FRACTION OF GLACIERS',10(' '),'*'/
+     +         ' *',11(' '),'ARE BOUNDED BETWEEN 0 AND 1',20(' '),'*'/
+     +         (1x,'*',58(' '),'*'/),
+     +         ' *',58(' '),'*'/2(1x,60('*')/))
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

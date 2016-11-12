@@ -1,0 +1,11 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer bump_hwx,bump_hwy,bump_xpos,bump_ypos
+      real bump_heigth,brook_flo,brook_thrate
+      real blb_zp
+      integer blb_xp,blb_xs,blb_zs
+      character brook_typ
+*
+      common /brook/ bump_hwx,bump_hwy,bump_xpos,bump_ypos,bump_heigth,
+     $             brook_thrate,brook_flo,
+     $             blb_zp,blb_xs,blb_zs,blb_xp,brook_typ
+*

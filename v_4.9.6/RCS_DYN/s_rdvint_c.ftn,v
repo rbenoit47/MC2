@@ -1,0 +1,319 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r s_rdvint_c
+*
+      subroutine s_rdvint_c ( u,v,sw,tp,hm,qp,cl,trname,ntrname,datev,
+     $                        lminx,lmaxx,lminy,lmaxy,lnk,
+     $                        nia,nja,nka,mode)
+      implicit none
+*
+      integer ntrname,lminx,lmaxx,lminy,lmaxy,lnk,nia,nja,nka,mode
+      character*8 trname(ntrname)
+      character* (*) datev
+      real u  (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     v  (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     sw (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     tp (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     hm (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     qp (lminx:lmaxx,lminy:lmaxy,0:lnk),
+     $     cl (lminx:lmaxx,lminy:lmaxy,lnk,*)
+*
+*OBJECT
+*     Reads 3D meteorological data and performs vertical interpolcation
+*     for self-nested run only.
+*
+**
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "halo.cdk"
+#include "levels.cdk"
+#include "tracers.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+*
+**
+      integer  bmf_get,get_bmf
+      external bmf_get,get_bmf
+      integer i,j,k,n,l_i0,l_in,l_j0,l_jn,ng,i0,in,j0,jn,
+     $        nkat,err,suv,nest
+      real , dimension (:  ), allocatable :: ogl
+      real , dimension (:,:), allocatable :: topo_anal,gotsr,ortsr,
+     $     qtsr,nstr2,hgeow,hgeot,hgeom,f_anal,hgeow_anal,hgeot_anal,
+     $     hgeom_anal,w2,w4
+      real*8  rtt,zh
+*
+*-----------------------------------------------------------------------
+*
+      nkat = nka - 1
+      suv  = 0
+      if (staguv) suv = 1
+*
+      nest = -1 
+      i0   = 1
+      j0   = 1
+      in   = nia
+      jn   = nja
+      l_i0 = 1    - west *hx
+      l_j0 = 1    - south*hx
+      l_in = ldni + east *hx
+      l_jn = ldnj + north*hx
+      if ((mode.eq.1).or.(mode.eq.2)) then
+         i0 = gc_ld(1,myproc) - hx*max(0,1-myrow) + hx
+         in = gc_ld(1,myproc) + ldni - 1
+     $                        + hx*max(0,myrow-npex+2) + hx + 1
+         j0 = 1
+         jn = halo + 1
+         nest = halo - hx - 1
+         l_i0 = 1    - west*hx
+         l_in = ldni + east*hx
+         l_j0 = 1 - hx
+         l_jn = 1 + nest
+         if (mode.eq.2) then
+            l_j0 = ldnj - nest
+            l_jn = ldnj + hx
+         endif
+      endif
+      if ((mode.eq.3).or.(mode.eq.4)) then
+         i0 = 1
+         in = halo + 1
+         j0 = gc_ld(3,myproc) + (halo-hx)*(max(0,1-mycol)-1)
+         jn = gc_ld(3,myproc) + ldnj 
+     $                        - (halo-hx)*(max(0,mycol-npey+2)+1)
+         nest = halo - hx - 1
+         l_j0 = 1    + south*(1+nest)
+         l_jn = ldnj - north*(1+nest)
+         l_i0 = 1 - hx
+         l_in = 1 + nest
+         if (mode.eq.4) then
+            l_i0 = ldni - nest
+            l_in = ldni + hx
+         endif
+      endif
+*
+      ng  = (in-i0+1)*(jn-j0+1)
+*
+      call hpalloc (paposit,ng*gnk*6   , err,1)  
+      call hpalloc (pahuv  ,ng*(nka+3) , err,1)
+      call hpalloc (pahtt  ,ng*(nka+3) , err,1)
+      call hpalloc (pahww  ,ng*(nka+3) , err,1)
+*
+      allocate ( topo_anal(ng,2),ogl(nkat+8),
+     $     hgeow     (ng,gnk),hgeot     (ng,gnk),hgeom     (ng,0:gnk),
+     $     hgeow_anal(ng,nka),hgeot_anal(ng,nka),hgeom_anal(ng,  nka),
+     $     f_anal(ng,nka), w2(ng,gnk+1), w4(ng,0:gnk) )
+*
+      err = get_bmf ('MX  ',0,0,topo_anal,i0,in,j0,jn,2,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+*
+      call hauteur_omp (hgeow     ,'HW',topo_anal,ng,1,gnk)
+      call hauteur_omp (hgeot     ,'HT',topo_anal,ng,1,gnk)
+      call hauteur_omp (hgeom(1,1),'HM',topo_anal,ng,1,gnk)
+      do i=1,ng
+         hgeom(i,0) = topo_anal(i,1)
+      enddo
+*
+      err = get_bmf ('HT  ',0,0,ogl,1,nkat+8,1,1,1,nkat+8,1)
+      if (err.ne.0) call mc2stop(-1)
+      call ref_h2 ( hgeow_anal,hgeot_anal,hgeom_anal,topo_anal,
+     $              ogl,ng,nkat )
+      tzero_star  = ogl (nkat + 4)
+      ttop_star   = ogl (nkat + 5)
+      ntrop_star  = ogl (nkat + 6)
+      htrop_star  = ogl (nkat + 7)
+      nstrat_star = ogl (nkat + 8)
+      if ((myproc.eq.0).and.(mode.lt.1)) write (6,900) tzero_star,
+     $                ttop_star,ntrop_star,htrop_star,nstrat_star
+*
+      call findvpo2 ( hgeow_anal,hgeot_anal,hgeom_anal,
+     $                hgeow,hgeot,hgeom(1,1),ng,gnk,nkat )
+*
+      deallocate ( ogl, hgeow, hgeow_anal, hgeom_anal )
+*
+      err = get_bmf ('UU  ',0,0,f_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+      call vertint3 (w2,f_anal,posit,huv,ng,gnk,nka)
+      call a2m (u,w2,suv,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+      err = get_bmf ('VV  ',0,0,f_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+      call vertint3 (w2,f_anal,posit,huv,ng,gnk,nka)
+      call a2m (v,w2,0,suv,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+      err = get_bmf ('HU  ',0,0,f_anal,i0,in,j0,jn,nkat,nia,nja)
+      call vertint3 (w2,f_anal,posit(ng*gnk*2+1),htt,ng,gnk,nkat)
+      call a2m (hm,w2,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+      err = get_bmf ('BUOY',0,0, f_anal,i0,in,j0,jn,nkat,nia,nja)
+      call vertint3 (w2,f_anal,posit(ng*gnk*2+1),htt,ng,gnk,nkat)
+*
+      allocate ( gotsr(ng,gnk  ), ortsr(ng,0:gnk), 
+     $           qtsr (ng,0:gnk), nstr2(ng,  gnk) )
+      call qntstar (qtsr,nstr2,gotsr,ortsr,hgeot,hgeom,ng,0,gnk)
+      do k=1,gnk
+      do i=1,ng
+         zh = hgeot_anal(i,1)-hgeot(i,k)
+         if (zh.gt.0) then
+            rtt = (w2(i,k)+grav_8)/gotsr(i,k) - tcdk_8
+            rtt = rtt + 0.0065*zh
+            w2(i,k) = (rtt+tcdk_8)*gotsr(i,k) - grav_8
+         endif
+      end do
+      end do 
+      deallocate ( gotsr, ortsr, qtsr, nstr2 )
+*
+      call a2m (tp,w2,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+*
+      err = get_bmf ('PREG',0,0,f_anal,i0,in,j0,jn,nka,nia,nja)
+      if (err.ne.0) call mc2stop(-1)
+      call vertint3 (w4(1,1),f_anal,posit,huv,ng,gnk,nka)
+      do i = 1, ng
+         w4 (i,0) = f_anal (i,1)
+      end do
+      call a2m (qp,w4,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,
+     $                                                      gnk+1)
+*
+      do k=1,gnk
+      do j=l_j0,l_jn
+      do i=l_i0,l_in
+         u (i,j,k) = u (i,j,k) / sqrt(sby(i,j))
+         v (i,j,k) = v (i,j,k) / sqrt(sbx(i,j))
+         sw(i,j,k) = 0.0
+      end do
+      end do
+      end do
+*
+      do j=l_j0,l_jn
+      do i=l_i0,l_in
+         u(i,j,gnk) = u(i,j,gnk-1)
+         v(i,j,gnk) = v(i,j,gnk-1)
+      end do
+      end do
+*
+      err = get_bmf ('WZ  ',0,0,f_anal,i0,in,j0,jn,nkat,nia,nja)
+      if (err.eq.0) then
+         call vertint3 (w2,f_anal,posit(ng*gnk*4+1),hww,ng,gnk,nkat)
+         call a2m(sw,w2,0,0,minx,maxx,miny,maxy,l_i0,l_in,l_j0,l_jn,gnk)
+      endif
+*
+      do n = 1, ntr
+         do k=1,gnk
+         do j=l_j0,l_jn
+         do i=l_i0,l_in
+            cl(i,j,k,n) = 0.
+         end do
+         end do
+         end do
+      end do
+*
+      if ((glconta).and.(iconta.ne.0)) then
+         if (mode.gt.0) then
+            do k=1,gnk
+            do j=l_j0,l_jn
+            do i=l_i0,l_in
+               cl(i,j,k,iconta) = 1.
+            end do
+            end do
+            end do
+         else
+            do k=1,gnk
+               do j=l_j0,0
+               do i=l_i0,l_in
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+               do j=ldnj+1,l_jn
+               do i=l_i0,l_in
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+               do j=l_j0,l_jn
+               do i=l_i0,0
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+               do j=l_j0,l_jn
+               do i=ldni+1,l_in
+                  cl(i,j,k,iconta) = 1.
+               end do
+               end do
+            end do
+         endif
+      endif
+*
+      do n=1,n_tracers
+         j=0
+         do i=1,ntr
+            if (trpil(n).eq.trname(i)) j=i
+         end do
+         if (j.gt.0) then
+            err = get_bmf (trpil(n),0,0,f_anal,i0,in,j0,jn,nkat,nia,nja)
+            call vertint3 (w2,f_anal,posit(ng*gnk*2+1),htt,ng,gnk,nkat)
+            call a2m (cl(1-hx,1-hy,1,j),w2,0,0,minx,maxx,miny,maxy,
+     $                                     l_i0,l_in,l_j0,l_jn,gnk)
+         endif
+      end do
+*
+      call hpdeallc (paposit,err,1)
+      call hpdeallc (pahuv  ,err,1)
+      call hpdeallc (pahtt  ,err,1)
+      call hpdeallc (pahww  ,err,1)
+      paposit = 0
+      pahuv   = 0
+      pahtt   = 0
+      pahww   = 0
+*
+      deallocate ( topo_anal, hgeot, hgeom, hgeot_anal,
+     $             f_anal, w2, w4 )
+*
+      call bmf_clear 
+*
+      if ((myproc.eq.0).and.(mode.le.1)) then
+         write(6,100)
+         write(6,101) datev
+         write(6,100)
+      endif
+*
+ 100  format (' ',65('*'))
+ 101  format (' (S_RDVINT_C) JUST READ INPUT DATA FOR DATE: ',a15)
+ 900  format (x,'In cascade mode, basic state is taken from the '/
+     $        x,'previous run: tzero_star,ttop_star,ntrop_star,',
+     $          'htrop_star,nstrat_star='/5f15.5/)
+*-----------------------------------------------------------------------
+      return
+      end
+*
+
+
+
+
+
+
+
+
+
+
+@

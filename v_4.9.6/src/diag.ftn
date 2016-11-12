@@ -1,0 +1,176 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine diag( d, s, czz, c2, om, nx, ny, nz,
+     $                 lminx,lmaxx,lminy,lmaxy,lnk)
+*
+      implicit none
+*
+      integer nx, ny, nz
+      integer lminx, lmaxx, lminy, lmaxy, lnk
+      real    d(nx,ny,nz)
+      real    s(lminx:lmaxx,lminy:lmaxy), czz(lnk,4)
+      real    c2, c_tmp, om
+*
+#include "lcldim.cdk"
+      integer i, j, k
+*
+*---------------------------------------------------------------------
+      om = 1.8
+*     om = 1.5
+
+*     Bottom k = 1
+
+      c_tmp = c2 - czz(1,2)
+
+      if (south+west.eq.2) then
+        d(1,1,1) = om / ( -2*s(1,1) + c_tmp ) 
+      endif
+
+      if (south.gt.0) then
+        do i = 1+west, ldni-2*east
+          d(i,1,1) = om / ( -3*s(i,1) + c_tmp ) 
+        enddo
+      endif
+
+      if (south+east.eq.2) then
+        d(ldni-1,1,1) = om / ( -2*s(ldni-1,1) + c_tmp ) 
+      endif
+
+      if (west.gt.0) then
+        do j = 1+south, ldnj-2*north
+          d(1,j,1) = om / ( -3*s(1,j) + c_tmp ) 
+        enddo
+      endif
+
+      do j = 1+south, ldnj-2*north
+        do i = 1+west, ldni-2*east
+          d(i,j,1) = om / ( -4*s(i,j) + c_tmp ) 
+        enddo
+      enddo
+
+      if (east.gt.0) then
+        do j = 1+south, ldnj-2*north
+          d(ldni-1,j,1) = om / ( -3*s(ldni-1,j) + c_tmp ) 
+        enddo
+      endif
+
+      if (north+west.eq.2) then
+        d(1,ldnj-1,1) = om / ( -2*s(1,ldnj-1) + c_tmp ) 
+      endif
+
+      if (north.eq.1) then
+        do i = 1+west, ldni-2*east
+          d(i,ldnj-1,1) = om / ( -3*s(i,ldnj-1) + c_tmp ) 
+        enddo
+      endif
+
+      if (north+east.eq.2) then
+        d(ldni-1,ldnj-1,1) = om / ( -2*s(ldni-1,ldnj-1) + c_tmp ) 
+      endif
+
+*     for k = 2 to nk-1
+
+      do k = 2, nk-1
+
+        c_tmp = c2 - czz(k,2) - czz(k,3)
+
+        if (south+west.eq.2) then
+          d(1,1,k) = om / ( -2*s(1,1) + c_tmp ) 
+        endif
+
+        if (south.gt.0) then
+          do i = 1+west, ldni-2*east
+            d(i,1,k) = om / ( -3*s(i,1) + c_tmp ) 
+          enddo
+        endif
+
+        if (south+east.eq.2) then
+          d(ldni-1,1,k) = om / ( -2*s(ldni-1,1) + c_tmp ) 
+        endif
+
+        if (west.gt.0) then
+          do j = 1+south, ldnj-2*north
+            d(1,j,k) = om / ( -3*s(1,j) + c_tmp ) 
+          enddo
+        endif
+
+        do j = 1+south, ldnj-2*north
+          do i = 1+west, ldni-2*east
+            d(i,j,k) = om / ( -4*s(i,j) + c_tmp ) 
+          enddo
+        enddo
+
+        if (east.gt.0) then
+          do j = 1+south, ldnj-2*north
+            d(ldni-1,j,k) = om / ( -3*s(ldni-1,j) + c_tmp ) 
+          enddo
+        endif
+
+        if (north+west.eq.2) then
+          d(1,ldnj-1,k) = om / ( -2*s(1,ldnj-1) + c_tmp ) 
+        endif
+
+        if (north.eq.1) then
+          do i = 1+west, ldni-2*east
+            d(i,ldnj-1,k) = om / ( -3*s(i,ldnj-1) + c_tmp ) 
+          enddo
+        endif
+
+        if (north+east.eq.2) then
+          d(ldni-1,ldnj-1,k) = om / ( -2*s(ldni-1,ldnj-1) + c_tmp ) 
+        endif
+
+      enddo
+
+*     Top k = nk
+
+      c_tmp = c2 - czz(nk,3)
+
+      if (south+west.eq.2) then
+        d(1,1,nk) = om / ( -2*s(1,1) + c_tmp ) 
+      endif
+
+      if (south.gt.0) then
+        do i = 1+west, ldni-2*east
+          d(i,1,nk) = om / ( -3*s(i,1) + c_tmp ) 
+        enddo
+      endif
+
+      if (south+east.eq.2) then
+        d(ldni-1,1,nk) = om / ( -2*s(ldni-1,1) + c_tmp ) 
+      endif
+
+      if (west.gt.0) then
+        do j = 1+south, ldnj-2*north
+          d(1,j,nk) = om / ( -3*s(1,j) + c_tmp ) 
+        enddo
+      endif
+
+      do j = 1+south, ldnj-2*north
+        do i = 1+west, ldni-2*east
+          d(i,j,nk) = om / ( -4*s(i,j) + c_tmp ) 
+        enddo
+      enddo
+
+      if (east.gt.0) then
+        do j = 1+south, ldnj-2*north
+          d(ldni-1,j,nk) = om / ( -3*s(ldni-1,j) + c_tmp ) 
+        enddo
+      endif
+
+      if (north+west.eq.2) then
+        d(1,ldnj-1,nk) = om / ( -2*s(1,ldnj-1) + c_tmp ) 
+      endif
+
+      if (north.eq.1) then
+        do i = 1+west, ldni-2*east
+          d(i,ldnj-1,nk) = om / ( -3*s(i,ldnj-1) + c_tmp ) 
+        enddo
+      endif
+
+      if (north+east.eq.2) then
+        d(ldni-1,ldnj-1,nk) = om / ( -2*s(ldni-1,ldnj-1) + c_tmp ) 
+      endif
+
+      return
+      end

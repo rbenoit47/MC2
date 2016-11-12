@@ -1,0 +1,156 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ac_posi
+*     
+      subroutine ac_posi (xpx,ypx,dimgx,dimgy)
+      implicit none
+*     
+      integer dimgx,dimgy
+      real xpx(dimgx), ypx(dimgy)
+**
+#include "consdyn_8.cdk"
+#include "grd.cdk"
+#include "lcldim.cdk"
+*
+      character*1 grdtyp
+      integer i
+      real xr,yr, ac_xp(max(1,Grdc_ni)), ac_yp(max(1,Grdc_nj))
+      real*8 d2r,d60,xpos,ypos,c1,c2,c3,a1,a2,a3,a4,a5
+      parameter (a1=2000.0d0 , a2=1000.0d0, a3=180.0d0, 
+     $           a4=2.0d0, a5=90.0d0)
+*
+*---------------------------------------------------------------------
+*
+      Grdc_gid = 0
+      Grdc_gjd = 0
+      Grdc_gif = 0
+      Grdc_gjf = 0
+*
+      if ((Grdc_proj_S.eq.'@').or.(Grdc_ndt.lt.0)) then
+         Grdc_proj_S = '@'
+         return
+      endif
+*
+      print*
+      if ( (Grdc_proj_S.ne.Grd_proj_S) .or.
+     $     (Grdc_xlat1 .ne.Grd_xlat1 ) .or.
+     $     (Grdc_xlat2 .ne.Grd_xlat2 ) .or.
+     $     (Grdc_xlon1 .ne.Grd_xlon1 ) .or.
+     $     (Grdc_xlon2 .ne.Grd_xlon2 ) .or.
+     $     (Grdc_phir  .ne.Grd_phir  ) .or.
+     $     (Grdc_dgrw  .ne.Grd_dgrw  ) ) then
+         Grdc_gid = hx + 1
+         Grdc_gjd = hx + 1
+         Grdc_gif = dimgx - hx
+         Grdc_gjf = dimgy - hx
+         write (6,1001)
+         goto 999
+      endif
+*
+*     *** Positional parameters for f and q points
+*
+      d2r = dble(pi_8) / a3
+      d60 = dble(Grdc_dx)
+*
+      grdtyp=' '  !  to trap invalid cases
+*      
+      if (Grdc_proj_S.eq.'P') then ! Polar stereographic projection
+*
+         grdtyp = 'N'
+         call xyfll (xr,yr,Grdc_latr,Grdc_lonr,Grdc_dx,Grdc_dgrw,1)
+         xpos  = (dble(xr)-dble(Grdc_iref-1)) * d60 / a2
+         ypos  = (dble(yr)-dble(Grdc_jref-1)) * d60 / a2
+         call xpyp_n (ac_xp, ac_yp, xpos, ypos, 0,0,d60,Grdc_ni,Grdc_nj)
+*
+      endif
+*     
+      if (Grdc_proj_S.eq.'M') then ! Mercator projection
+*     
+         grdtyp = 'E'
+         c2 = dble(rayt_8)/a2*cos(dble(Grdc_phir)*d2r)*d2r
+         c1 = d60/a2/c2
+         c2 = a4 / d2r
+         c3 = c1 * d2r 
+         xpos = dble(Grdc_lonr) + (dble(1-Grdc_iref)) * c1
+         ypos = c2*atan(tan(dble(Grdc_latr+90.)/c2)*exp(c3*
+     $          (dble(1-Grdc_jref)) ))-a5
+         call xpyp_m (ac_xp,ac_yp,xpos,ypos,0,0,c1,Grdc_ni,Grdc_nj)
+*
+      endif
+*
+      if (Grdc_proj_S.eq.'L') then ! Spherical
+*     
+         grdtyp = 'E'
+         c1   = Grdc_dx    ! directly in degree lat-lon
+         xpos = dble(Grdc_lonr) + (dble(1-Grdc_iref)) * c1
+         ypos = dble(Grdc_latr) + (dble(1-Grdc_jref)) * c1
+         call xpyp_l (ac_xp,ac_yp,xpos,ypos,0,0,c1,Grdc_ni,Grdc_nj)
+*
+      endif
+*
+      if (grdtyp.eq.' ') then
+         Grdc_proj_S = '@'
+         Grdc_ndt    = -1
+         write (6,1002)
+         goto 999
+      endif
+*
+      do i=1,dimgx
+         if (xpx(i).le.ac_xp(1))       Grdc_gid=i
+         if (xpx(i).le.ac_xp(Grdc_ni)) Grdc_gif=i
+      enddo
+      if (Grdc_gid.ge.Grdc_gif) Grdc_gid = 0
+*
+      Grdc_gjd = 0
+      Grdc_gjf = 0
+      do i=1,dimgy
+         if (ypx(i).le.ac_yp(1))       Grdc_gjd=i
+         if (ypx(i).le.ac_yp(Grdc_nj)) Grdc_gjf=i
+      enddo
+      if (Grdc_gjd.ge.Grdc_gjf) Grdc_gjd = 0
+*
+      if ((Grdc_gid.gt.0).and.(Grdc_gjd.gt.0)) then
+         if ( (Grdc_gid-2.gt.0) .and. (Grdc_gif+3.lt.dimgx) .and.
+     $        (Grdc_gjd-2.gt.0) .and. (Grdc_gjf+3.lt.dimgy) ) then
+            Grdc_gid = Grdc_gid - 2
+            Grdc_gjd = Grdc_gjd - 2
+            Grdc_gif = Grdc_gif + 3
+            Grdc_gjf = Grdc_gjf + 3
+         else
+            Grdc_gid = 0
+            Grdc_gjd = 0
+         endif
+      else
+         Grdc_gid = 0
+         Grdc_gjd = 0
+      endif
+*
+ 999  if ((Grdc_gid.gt.hx).and.(Grdc_gjd.gt.hx)) then
+	 Grdc_gid = Grdc_gid - hx
+	 Grdc_gif = Grdc_gif - hx
+	 Grdc_gjd = Grdc_gjd - hy
+	 Grdc_gjf = Grdc_gjf - hy
+         write (6,1003) Grdc_gid,Grdc_gif,Grdc_gjd,Grdc_gjf
+      else
+         write (6,1004)
+         Grdc_proj_S = '@'
+         Grdc_ndt    = -1
+      endif
+*
+ 1001 format (' Cascade grid: NOT same projection or NOT same rotation'
+     $        ' detected'/15x,'Whole domain will be output. You will'
+     $        ' need to run'/15x,'MC2NTR to start next cascade run')
+ 1002 format (' Cascade grid: Projection Not yet supported in cascade'
+     $        '  mode')
+ 1003 format (' Cascade grid: ',4i6)
+ 1004 format (' Cascade grid: NO grid will be output')
+*--------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+

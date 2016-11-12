@@ -1,0 +1,13 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      character*16 current_nest
+      integer Pil_nesdt,Pil_datacvrg,gndtini,endnesi
+      logical ctebcs,endnesl
+      real grninit,endnesr
+      real*8 tf_nest,endnesr8
+*
+      common /nestingc / current_nest
+      common /nestingi / Pil_nesdt,Pil_datacvrg,gndtini,endnesi
+      common /nestingl / ctebcs,endnesl
+      common /nestingr / grninit,endnesr
+      common /nestingr8/ tf_nest,endnesr8
+*

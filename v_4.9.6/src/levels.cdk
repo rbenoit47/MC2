@@ -1,0 +1,11 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer maxdynlv
+      parameter (maxdynlv = 1000)
+*
+      real zt(maxdynlv),ztr(maxdynlv),zm(maxdynlv),kh(maxdynlv),
+     $     nu(maxdynlv),b0t(maxdynlv,2),b0w(maxdynlv,2),
+     $     b0m(maxdynlv,2),endlvlr
+      common /levelsr/ zt,ztr,zm,kh,nu,endlvlr
+      common /b0r/ b0t,b0w,b0m
+*
+

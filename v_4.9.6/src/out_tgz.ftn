@@ -1,0 +1,300 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_tgz
+      subroutine out_tgz ( tmod,hmod,ttmod,prw,prt,prm,hw,ht,hm,rf,
+     $                                   ng,lnk,nksor,ip2,init,unf )
+      implicit none
+*
+      logical init
+      integer ng,lnk,nksor,ip2,unf
+      real tmod(ng,lnk),hmod(ng,lnk),ttmod(ng,lnk),prw(ng,lnk),
+     $     prt(ng,lnk),prm(ng,lnk+1),hw(ng,lnk),ht(ng,lnk),
+     $     hm(ng,lnk+1),rf(nksor)
+*
+*OBJECT
+*     conversion des champs de temperature (tt),
+*     de hauteur du geopotentiel (gz),
+*     et de pression au niveau de la mer (pn)
+*
+*METHOD
+*
+**
+#include "lcldim.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+#include "rec.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+#include "partopo.cdk"
+*
+      integer i,j,k,err,ktop(ng*nksor),kbot(ng*nksor)
+      integer gltt,glth,glgz,glp0,glpn,glh1,glh2,glp1,glp2,glbuoy,
+     $        gltprm,gltstr
+      real c2,gamma,gsrgam,q,r,rap_p,tmoy
+      real gzpres(ng,nksor),ttpres(ng,nksor),
+     $     tr1(ng,nksor),tr2(ng,lnk),pnm(ng),zm_tmp(lnk+1),rfp(nksor),
+     $     lprw(ng,lnk),lprt(ng,lnk),lprm(ng,lnk+1)
+      real posv
+      pointer (paposv, posv(ng,nksor,2,3))
+      real gotsr(ng,lnk),dum3(ng,0:lnk),dum1(ng,0:lnk),dum2(ng,lnk)
+*
+*------------------------------------------------------------------
+*           
+      call qntstar(dum1,dum2,gotsr,dum3,ht,hm,ng,0,lnk)
+      do k=1,lnk
+      do i=1,ng
+         ttmod(i,k)= (tmod(i,k)+grav_8)/gotsr(i,k)
+         lprw(i,k) = alog(prw(i,k))
+         lprt(i,k) = alog(prt(i,k))
+         lprm(i,k) = alog(prm(i,k))
+      end do
+      end do
+      do i=1,ng
+         lprm(i,lnk+1)= alog(prm(i,lnk+1))
+      end do
+*
+      if (myproc.eq.0) print*, '=====> OUT_TGZ'
+*
+      gltt=-1
+      glth=-1
+      glgz=-1
+      glp0=-1
+      glpn=-1
+      glh1=-1
+      glh2=-1
+      glp1=-1
+      glp2=-1
+      glbuoy=-1
+      gltprm=-1
+      gltstr=-1
+      do i=1,nvardyn
+         if (udolist(i).eq.'TT') gltt=i
+         if (udolist(i).eq.'TH') glth=i
+         if (udolist(i).eq.'GZ') glgz=i
+         if (udolist(i).eq.'P0') glp0=i
+         if (udolist(i).eq.'PN') glpn=i
+         if (udolist(i).eq.'H1') glh1=i
+         if (udolist(i).eq.'H2') glh2=i
+         if (udolist(i).eq.'P1') glp1=i
+         if (udolist(i).eq.'P2') glp2=i
+         if (udolist(i).eq.'BUOY') glbuoy=i
+         if (udolist(i).eq.'TPRM') gltprm=i
+         if (udolist(i).eq.'TSTR') gltstr=i
+      end do
+      if (levtyp.ne.'P') glgz = -1
+      if (levtyp.ne.'P') glth = -1
+      if (levtyp.ne.'G') then
+         glh1 = -1
+         glh2 = -1
+         glp1 = -1
+         glp2 = -1
+         glbuoy=-1
+         gltprm=-1
+         gltstr=-1
+      endif
+*
+      gamma = 0.0065
+      gsrgam= grav_8/(rgasd_8*gamma)
+*
+      if ((levtyp.ne.'G').and.(nksor.gt.0)) then
+*
+         paposv = papositd
+         if (levtyp.eq.'P') then
+            do k=1,nksor
+            do i=1,ng
+               tr1(i,k) = alog(rf(k)*100.)
+            end do
+            end do
+            if (glgz.gt.0) then
+            call inv_posiz (posv(1,1,1,1),huv_od,lprm,tr1,ktop,kbot,
+     $                                              ng,nksor,lnk+1)
+            call inv_vertint (gzpres,hm,posv(1,1,1,1),huv_od,ng,
+     $                                              nksor,lnk+1)
+            endif
+            call inv_posiz (posv(1,1,1,1),hww_od,lprw ,tr1,ktop,kbot,
+     $                                                ng,nksor,lnk  )
+            call inv_posiz (posv(1,1,1,2),huv_od,lprm ,tr1,ktop,kbot,
+     $                                                ng,nksor,lnk+1)
+            call inv_posiz (posv(1,1,1,3),htt_od,lprt,tr1,ktop,kbot,
+     $                                                ng,nksor,lnk  )
+            do k=1,nksor
+               rfp(k) = rf(nksor-k+1)
+            end do
+            do k=1,nksor
+               rf(k) = rfp(k)
+               rfp(k)= rfp(k)*100.
+            end do            
+         elseif ((levtyp.eq.'H').and.(init)) then
+            do k=1,nksor
+            do i=1,ng
+               tr1(i,k) = rf(k)
+            end do
+            end do
+            call posiz3 (posv(1,1,1,1),hww_od,hw ,tr1,ktop,kbot,
+     $                                           ng,nksor,lnk  )
+            call posiz3 (posv(1,1,1,2),huv_od,hm ,tr1,ktop,kbot,
+     $                                           ng,nksor,lnk+1)
+            call posiz3 (posv(1,1,1,3),htt_od,ht ,tr1,ktop,kbot,
+     $                                           ng,nksor,lnk  )
+         endif
+*
+         call inv_vertint (ttpres,ttmod,posv(1,1,1,3),htt_od,ng,
+     $                                                nksor,lnk)
+*     
+*     * Correct ttpres & gzpres between ground and 1000 mb
+*                t(p)=ts*(pr/ps)**c2
+*                gz=h0-h*ln(pr/ps)/(1.-epsl*ln(pr/ps)) with h=r*ts/g
+*
+         if (levtyp.eq.'P') then
+            c2   = rgasd_8*gamma/grav_8
+            do k=1,nksor
+            do i=1,ng
+               rap_p = max(1.,rfp(k)/prt(i,1))
+               ttpres(i,k)= ttpres(i,k)*rap_p**c2
+            end do
+            end do
+            if (glgz.gt.0) then
+               c2   = rgasd_8/grav_8
+               do 33 i=1,ng
+                  do k=1,nksor
+                     if(rfp(k).lt.prm(i,1)) goto 33
+                     rap_p = rfp(k)/prm(i,1)
+                     tmoy = (ttmod(i,1)+ttpres(i,1))*.5
+                     gzpres(i,k)= hm(i,1)-c2*tmoy*alog(rap_p)
+                  end do
+ 33            continue
+            endif
+         endif
+*
+         do k=1,nksor
+         do i=1,ng
+            ttpres(i,k) = ttpres(i,k) - tcdk_8
+         end do
+         end do
+*
+      else   ! No vertical interpolation
+*
+         do k=1,lnk
+         do i=1,ng
+            tr2(i,k) = ttmod(i,k) - tcdk_8
+         end do
+         end do
+*
+      endif
+*
+      if (levtyp.ne.'G') then
+*
+         if (nksor.gt.0) then
+*
+         if (glgz.gt.0)
+     $           call ecris_fst (gzpres,minx,maxx,miny,maxy,rf,'GZ  ',
+     $             0.1,ip2,out_kind,nksor,table_out(1,glgz),'DYN',unf)
+         if (gltt.gt.0)
+     $           call ecris_fst (ttpres,minx,maxx,miny,maxy,rf,'TT  ',
+     $             1.0,ip2,out_kind,nksor,table_out(1,gltt),'DYN',unf)
+*
+         if (glth.gt.0) then
+            do k=1,nksor
+            do i=1,ng
+               gzpres(i,k) = (ttpres(i,k)+tcdk_8)
+     $                      *(1.e5/(rfp(k)))**cappa_8
+            end do
+            end do
+            call ecris_fst (gzpres,minx,maxx,miny,maxy,rf,'TH  ',1.0,
+     $                ip2,out_kind,nksor,table_out(1,glth),'DYN',unf)
+         endif
+*
+         endif
+*
+      else
+*
+         if (glbuoy.gt.0)
+     $        call ecris_fst (tmod,minx,maxx,miny,maxy,ztr,'BUOY',1.0,
+     $               ip2,out_kind,nksor,table_out(1,glbuoy),'DYN',unf)
+         if (gltt.gt.0)
+     $        call ecris_fst (tr2,minx,maxx,miny,maxy,ztr,'TT  ',1.0,
+     $                ip2,out_kind,nksor,table_out(1,gltt),'DYN',unf)
+*
+         if (glth.gt.0) then
+            do k=1,lnk
+            do i=1,ng
+               tr2(i,k) = (tr2(i,k)+tcdk_8)*(1.e5/prt(i,k))**cappa_8
+            end do
+            end do
+            call ecris_fst (tr2,minx,maxx,miny,maxy,ztr,'TH  ',1.0,ip2,
+     $                      out_kind,nksor,table_out(1,glth),'DYN',unf)
+         endif
+         if (gltprm.gt.0) then
+            do k=1,lnk
+            do i=1,ng
+               tr2(i,k) = tmod(i,k) / gotsr(i,k)
+            end do
+            end do
+            call ecris_fst (tr2,minx,maxx,miny,maxy,ztr,'TPRM',1.0,ip2,
+     $                    out_kind,nksor,table_out(1,gltprm),'DYN',unf)
+         endif
+         if (gltstr.gt.0) then
+            do k=1,lnk
+            do i=1,ng
+               tr2(i,k) = grav_8 / gotsr(i,k) - tcdk_8
+            end do
+            end do
+            call ecris_fst (tr2,minx,maxx,miny,maxy,ztr,'TSTR',1.0,ip2,
+     $                    out_kind,nksor,table_out(1,gltstr),'DYN',unf)
+         endif
+
+*
+*   * Ecriture de P1 et P2 (Pression thermo. et pression moment.
+*
+         do k=1,lnk
+            zm_tmp(k+1) = zm(k)
+         end do
+         zm_tmp(1) = zt(1)
+*
+         if (glh1.gt.0)
+     $        call ecris_fst (ht,minx,maxx,miny,maxy,ztr,'H1  ',1.0,
+     $               ip2,out_kind,nksor,table_out(1,glh1),'DYN',unf)
+         if (glh2.gt.0)
+     $        call ecris_fst (hm,minx,maxx,miny,maxy,zm_tmp,'H2  ',
+     $          1.0,ip2,out_kind,lnk+1,table_out(1,glh2),'DYN',unf)
+         if (glp1.gt.0)
+     $        call ecris_fst (prt,minx,maxx,miny,maxy,ztr,'P1  ',0.01,
+     $                   ip2,out_kind,lnk,table_out(1,glp1),'DYN',unf)
+         if (glp2.gt.0)
+     $        call ecris_fst (prm,minx,maxx,miny,maxy,zm_tmp,'P2  ',
+     $          0.01,ip2,out_kind,lnk+1,table_out(1,glp2),'DYN',unf)
+*            
+      endif 
+*  
+*   * Surface pressure and PNM in mb.
+*
+      if (glp0.gt.0)
+     $     call ecris_fst (prw,minx,maxx,miny,maxy,0.,'P0  ',0.01,ip2,
+     $                                2,1,table_out(1,glp0),'DYN',unf)
+      if (glpn.gt.0) then
+         c2 = rgasv_8/rgasd_8-1.
+         do i=1,ng
+            pnm(i) = prt(i,1)*  (1. + gamma*ht(i,1) / 
+     $              (ttmod(i,1)*(1. + hmod(i,1)*c2)))**gsrgam
+         end do
+         call ecris_fst (pnm,minx,maxx,miny,maxy,0.,'PN  ',0.01,ip2,2,1,
+     $                                      table_out(1,glpn),'DYN',unf)
+      endif
+*
+*--------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+
+
+
+
+
+
+

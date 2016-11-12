@@ -1,0 +1,185 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine serctrl (prout,status)
+      implicit none
+*
+      logical prout
+      integer status
+*
+#include "dynmem.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "maxdim.cdk"
+#include "serinml.cdk"
+#include "path.cdk"
+#include "yomdyn.cdk"
+#include "lun.cdk"
+*
+      character*10 nmlname
+      integer i,k,pnflag1,pnflag2,pnerrdirf,unnml,ierr,longueur
+      real    xposi,yposi
+*
+      data unnml /11/
+*
+*---------------------------------------------------------------------
+*
+      grpi = xref+Grd_dx/2000. + (hx)*Grd_dx/1000.
+      grpj = yref+Grd_dx/2000. + (hy)*Grd_dx/1000.
+      nmlname = 'series_cfg'
+      do k=1,nmlmax
+         statll(1,k) = -999. !latitude
+         statll(2,k) = -999. !longitude
+      end do
+*
+      if (.not.modrstrt) then
+         nstat  =0
+         nsurf  =0
+         nprof  =0
+         serint =1
+         do 2 k=1,nmlmax
+            statij(1,k) = 0
+            statij(2,k) = 0
+            lcl_sta(k)  = 0
+            surface(k) ='        '
+            profil(k)  ='        '
+ 2       continue
+*
+* *** Updating configuration with namelist 'series_cfg'
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $         form='FORMATTED',status='OLD',iostat=pnerrdirf)
+*
+         if (pnerrdirf.eq.0) then
+            call checnml (unnml,'&'//nmlname,pnflag1)
+            if (pnflag1.eq.0) then
+*
+#if defined (NEC)
+               read (unnml,series_cfg,iostat=pnflag2)
+#else
+               read (unnml,nml=series_cfg,iostat=pnflag2)
+#endif
+               if (pnflag2.ne.0) then
+                  print '(/,2x,a/2x,4a/)', '==> ABORT -- ABORT <==',
+     $                  'PROBLEM WITH NAMELIST ',nmlname,' ON FILE ',
+     $                   nml(1:longueur(nml))
+                  goto 9991
+               else
+               print *, ' CONFIGURATION UPDATED WITH NAMELIST ',nmlname
+               endif
+            else
+               print '(1x,2a/1x,a)',
+     $              'NAMELIST series_cfg IS NOT FOUND ON FILE ',
+     $               nml(1:longueur(nml)),
+     $              '  ==> REVERTING TO DEFAULT CONFIGURATION <=='
+            endif
+            close(unnml)
+         else
+            print '(1x,a)', 'SERNML --- USING DEFAULT CONFIGURATION'
+         endif
+*
+         if (statll(1,1).ne.-999.) then
+            if (Grd_proj_S.eq.'P')  then
+               print*, 'CONVERTING LAT/LON AT GRID POINTS'
+               do k=1,nstat
+               call xyfll(xposi,yposi,statll(1,k),statll(2,k),
+     $                                 Grd_dx,Grd_dgrw,1)
+               statij(1,k)= int(xposi+0.5-(grpi*1000./Grd_dx-1.))
+               statij(2,k)= int(yposi+0.5-(grpj*1000./Grd_dx-1.))
+               enddo
+            else
+               print*, 'CONVERTION FROM LAT/LON TO GRID POINTS'
+               print*, 'NOT POSSIBLE IN MERCATOR PROJECTION'
+               nstat  = 0
+            endif
+         endif
+         do k=1,nstat
+            statij(1,k)=max(1,min(statij(1,k),gni))
+            statij(2,k)=max(1,min(statij(2,k),gnj))
+         end do
+*
+      else
+         print '(1x,a/1x,a)', 'WARNING --  RESTART MODE',
+     $        'USING SERIES CONFIGURATION OF PREVIOUS RUN'
+         call rsercfg (un_rstrt)
+      endif
+*
+*     check nmlmax
+      if (nstat.gt.nmlmax.or.nsurf.gt.nmlmax.or.nprof.gt.nmlmax) then
+         print *,' SERNML... model_settings too long. ',
+     $           'Increase nmlmax parameter to at least ',
+     $           max(nstat,nsurf,nprof)
+         goto 9991
+      endif
+*
+*     Print series configuration
+*
+      if (prout) then
+      print *, '----------------------------------------------------'
+      print*, 'nstat  =',nstat
+      if (nstat.gt.0) then
+         print*, 'nsurf  =',nsurf
+         print*, 'nprof  =',nprof
+         print*, 'serint =',serint
+         print *,'station #    i    j'
+         print '(i10,2i5)', (k,statij(1,k),statij(2,k),k=1,nstat)
+         if (statll(1,1).ne.-999.) 
+     $   print '(i10,2f10.5)', (k,statll(1,k),statll(2,k),k=1,nstat)
+         print '(1x,a/(1x,9a))', 'surface series= ',
+     $           (surface(k),k=1,nsurf)
+         print '(1x,a/(1x,9a))', 'profile series= ',
+     $           (profil(k),k=1,nprof)
+      endif
+      print *, '----------------------------------------------------'
+      print*
+      endif
+*
+      if (nstat.gt.0) then
+         if (nstat.gt.nstatmx.or.nsurf.gt.nsurfmx.or.nprof.gt.nprofmx) 
+     $   then
+            print *,'SERNML limits exceeded on one of the followings:'
+            print *,' nstat=',nstat,'(nstatmx)',
+     $              ' nsurf=',nsurf,'(nsurfmx)',
+     $              ' nprof=',nprof,'(nprofmx)'
+            print *,'ABORT -- ABOR --ABORT'
+            goto 9991
+         endif
+      endif
+      status = 1
+*
+ 9991 continue
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine rsercfg (fnrstrt)
+      implicit none
+      integer fnrstrt
+*
+#include "maxdim.cdk"
+#include"serinml.cdk"
+**
+*----------------------------------------------------------------------
+*
+      read  (fnrstrt)  nstat,nsurf,nprof,statij,surface,profil,serint
+*
+*----------------------------------------------------------------------
+      return
+      end
+*
+      subroutine wsercfg (fnrstrt)
+      implicit none
+      integer fnrstrt
+*
+#include "maxdim.cdk"
+#include"serinml.cdk"
+**
+*----------------------------------------------------------------------
+*
+      write  (fnrstrt) nstat,nsurf,nprof,statij,surface,profil,serint
+*
+*----------------------------------------------------------------------
+      return
+      end

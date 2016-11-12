@@ -1,0 +1,9 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer iconta,itheoc,ismphys,ntrdyn,n_tracers
+      integer maxntrpil
+      parameter (maxntrpil = 500)
+      character*4 trpil (maxntrpil)
+*
+      common /traceri/ iconta,itheoc,ismphys,ntrdyn,n_tracers
+      common /tracerc/ trpil
+*

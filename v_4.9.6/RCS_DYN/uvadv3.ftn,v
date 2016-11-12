@@ -1,0 +1,105 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine uvadv3
+      implicit none
+*
+*REVISION
+*
+#include "yomdyn.cdk"
+#include "dynmem.cdk"
+#include "wrnmem.cdk"
+#include "nbcpu.cdk"
+#include "topo.cdk"
+*
+      integer i, j, k, n
+      real*8  pt5
+      parameter(pt5=0.5d0)
+*----------------------------------------------------------------------
+*
+*     Set Pu=u, Pv=v, Pqp=q, Psw=sw, Ptp=tp, Phm=hm and Pcl=cl
+*            &
+*     Set Ru=Rv=Rq=Rsw=Rt=Rhm=Rcl=0
+*
+!$omp do
+      do k=1,gnk
+         if (k.eq.1) then
+            do j=1-hy,ldnj+hy-1
+            do i=1-hx,ldni+hx-1
+               swm(i,j,1) = dhdt(i,j,1) - sbxy(i,j) * pt5 *
+     $              ( gg1(i+1,j,1)*um(i+1,j,1) + gg1(i,j,1)*um(i,j,1)
+     $              + gg2(i,j+1,1)*vm(i,j+1,1) + gg2(i,j,1)*vm(i,j,1) )
+               sw0(i,j,1) = dhdt(i,j,1) - sbxy(i,j) * pt5 *
+     $              ( gg1(i+1,j,1)*u0(i+1,j,1) + gg1(i,j,1)*u0(i,j,1)
+     $              + gg2(i,j+1,1)*v0(i,j+1,1) + gg2(i,j,1)*v0(i,j,1) )
+            end do
+            end do
+         endif
+         do j=1-hy,ldnj+hy-1
+         do i=1-hx,ldni+hx-1
+            hmp(i,j,k) = hmm(i,j,k)
+         end do
+         end do
+         do n = 1, ntr
+            do j=1-hy,ldnj+hy-1
+            do i=1-hx,ldni+hx-1
+               clp(i,j,k,n) = clm(i,j,k,n)
+            end do
+            end do
+         end do
+      end do
+!$omp enddo
+c      hmp=hmm
+c      do n = 1, ntr
+c         clp(:,:,:,n) = clm(:,:,:,n)
+c      end do
+*
+      if (nosolv) then
+*
+!$omp single
+         qpp=qpm
+         up =um
+         vp =vm
+         swp=swm
+         tpp=tpm
+*
+         ur = 0.
+         vr = 0.
+        swr = 0.
+        tpr = 0.
+!$omp end single
+*
+      endif
+*   
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+
+@

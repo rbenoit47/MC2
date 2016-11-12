@@ -1,0 +1,213 @@
+# faire les Abs pour 496+38+EOLE
+EOLE_496=/home/rb/exper/MC2/eole_496
+EOLE_496_OFFICIEL=/home/rb/exper/MC2/EOLE_496_OFFICIEL
+ADDED_MANUALLY=/home/rb/exper/MC2/added_manually
+
+RECETTES_MC2=/home/rb/exper/MC2/PRECIOUS/DYN/recettes_DYN
+PRECIOUS=/home/rb/exper/MC2/PRECIOUS
+#
+TRAVAIL=/home/rb/exper/MC2/basic_DYN+PHY+EOLE_ABS_2  #faire les Abs dans TRAVAIL
+#
+bloc1=0
+bloc2=0
+bloc3=0
+bloc4=0
+#
+bloc=$1   #plus simple ainsi
+
+if [ "$bloc" == "" ];
+then
+echo donner un numero de bloc en argument 1.  $0 1  par exemple
+exit
+fi
+#
+ln -sfn $TRAVAIL TRAVAIL
+cd $TRAVAIL
+#
+set -x
+#
+# modele
+cat >modele.dot <<FIN
+export MODEL=mc2
+export MODEL_VERSION=4.9.6
+export PHY_VERSION=3.8
+export MODEL_PATH=/home/rb/exper/MC2/v_4.9.6
+export MODLIBPATH=\${MODEL_PATH}/lib/\${EC_ARCH}
+#       MODLIBPATH=\$MODEL_PATH/lib/\$ARCH
+FIN
+#
+. modele.dot
+#
+#  petites manoeuvres CRUCIALES	
+#
+# deja fait ...mkdir -p $MODEL_PATH/Makefile_$EC_ARCH
+#
+cp -f $PRECIOUS/Makefile_Linux_x86-64_gfortran $MODEL_PATH/Makefile_$EC_ARCH
+#  skip.  Fait manuellement cp -fp $GEMCLIM/RCS_DYN/.recettes $MODEL_PATH/RCS_DYN/
+cp -f $PRECIOUS/recettes_mc2_from_gemclim $MODEL_PATH/RCS_DYN/.recettes
+cp -f $PRECIOUS/cibles_sisl               $MODEL_PATH/RCS_DYN/.cibles
+#
+
+if [ "$bloc" == "1" ];
+then
+rm -f *.ftn *.cdk *.h *.o Makefile* arbre_de_dependance make_cdk *~ *.f
+rm -rf malib${EC_ARCH}
+mkdir -p malib${EC_ARCH}
+#
+# comme sur ekman
+#
+
+cp $ADDED_MANUALLY/save_options.ftn .
+cp $ADDED_MANUALLY/out_dyn*.ftn .
+cp $ADDED_MANUALLY/ecris2_fst.ftn .
+cp $ADDED_MANUALLY/ecris_fst.ftn .
+cp $ADDED_MANUALLY/sormc2.ftn .
+cp $ADDED_MANUALLY/sorctrl.ftn .
+
+cp -fp ${EOLE_496_OFFICIEL}/*.ftn .
+cp -fp ${EOLE_496_OFFICIEL}/*.cdk .
+
+cp -fp ${EOLE_496}/eole_3d.ftn .  
+cp -fp ${EOLE_496}/eole_qbal.ftn .
+cp -fp ${EOLE_496}/draglaw.ftn .
+cp -fp ${EOLE_496}/getspc.ftn .
+
+cp ../PRECIOUS/DYN/*.ftn .  
+cp ../PRECIOUS/PHY/*.ftn .
+#  pas tout de suite cp ../PRECIOUS/PHY/*.h .
+#
+#cp ${EOLE_496}/*.ftn .
+#cp ${EOLE_496}/*.cdk .
+#
+cp -f ../PRECIOUS/EOLE/*.ftn .
+cp -f ../PRECIOUS/EOLE/*.cdk .
+#
+#  et quoi pour added_manually ?? voir ci dessus
+#
+#  un kdiff3 entre src de 4.9.6 et added_manually révèle ceci pour les *.ftn et .cdk
+# les decks suivants sont différents avec des edits de moi ou autre dedans
+# mais ce sont juste des print
+# donc PAS IMPORTANTS.  NE PAS INCLURE ALORS.
+cat > /dev/null <<FIN
+ecris_fst.ftn
+ecris2_fst.ftn
+out_dyn.ftn
+out_dync.ftn
+sorctrl.ftn
+sormc2.ftn
+FIN
+#  
+
+echo CODE EOLE en place
+else
+echo bloc1 RIEN
+fi
+#
+if [ "$bloc" == "2" ];
+then
+chmod -x *.ftn *.cdk *.h  #oter droit en exec
+#
+r.make_exp
+# ajouter recettes mc2 ...non deja là
+#
+env|grep -i model
+env|grep -i phy
+echo bloc2 make_exp et env modele fait
+else
+echo bloc2 rien
+fi
+#
+if [ "$bloc" == "3" ];
+then
+. modele.dot
+#
+cp -f ../PRECIOUS/PHY/*.h .  #ecrase au besoin
+#
+#  LCLPO=\.  pour avoir les *.o direct ici et evite de refaire continuellement
+#
+make clean
+# pas de LCLPO quand on fait abs...ca fout la pagaille avec le cp final du malib au folder de travail
+# LCLPO=\. 
+make objloc
+echo bloc3 objloc fait
+else
+echo bloc3 rien
+fi
+#
+if [ "$bloc" == "4" ];
+then
+. modele.dot
+env |grep -i MOD
+# read toto
+#
+# besoin de makebidon  ...dans scripts du 4.9.6
+PATH=${MODEL_PATH}/scripts:$PATH
+#
+make clean
+#pas de LCLPO=\. pour les Abs
+make    MODLIBPATH=${MODLIBPATH}   PHY_VERSION=${PHY_VERSION} mc2ntr
+make    MODLIBPATH=${MODLIBPATH}   PHY_VERSION=${PHY_VERSION} mc2dm
+ls -al *.Abs
+mkdir $PRECIOUS/Abs  #au besoin
+# cp -fp *.Abs $PRECIOUS/Abs
+echo bloc4 Abs fait
+else
+echo bloc4 rien
+fi
+exit #
+#  ==========lignes de ekman TRY_496_EOLE========
+
+eoledir=/home/rbenoit/MC2_496/EOLE_496_OFFICIEL    # /home/rbenoit/exper/EOLE_496_OFFICIEL
+eoledir_RB=/home/rbenoit/MC2_496/eole_496   # attention
+
+cp ${Here}/added_manually/save_options.ftn .
+cp ${Here}/added_manually/out_dyn*.ftn .
+cp ${Here}/added_manually/ecris2_fst.ftn .
+cp ${Here}/added_manually/ecris_fst.ftn .
+cp ${Here}/added_manually/out_dynr.ftn .
+cp ${Here}/added_manually/sormc2.ftn .
+cp ${Here}/added_manually/sorctrl.ftn .
+
+#  ajouter code experimental (eole)
+cp -fp ${eoledir}/*.ftn .  # pas de f90
+cp -fp ${eoledir}/*.cdk .
+# re: hhm(minx:maxx,miny:maxy,0:gnk)
+cp -fp ${eoledir_RB}/eole_3d.ftn .  
+cp -fp ${eoledir_RB}/eole_qbal.ftn .
+cp -fp ${eoledir_RB}/draglaw.ftn .
+cp -fp ${eoledir_RB}/getspc.ftn .
+
+
+#  ==========ajout depuis rescue2================
+rm -rf malibLinux_x86-64_gfortran
+mkdir malibLinux_x86-64_gfortran
+
+cp -f  ../PRECIOUS/DYN/*.ftn .
+cp -f  ../PRECIOUS/DYN/*.cdk .
+cp -f  ../PRECIOUS/PHY/*.ftn .
+cp -f  ../PRECIOUS/PHY/*.cdk .
+#  cp -f  ../PRECIOUS/PHY/*.h   .
+cp -f  ../EOLE_496_OFFICIEL/*.ftn .
+cp -f  ../EOLE_496_OFFICIEL/*.cdk .
+
+#cp -fp ../eole_496/eole_3d.ftn .  voir + bas
+#cp -fp ../eole_496/eole_qbal.ftn .
+cp -fp ../eole_496/draglaw.ftn .
+cp -fp ../eole_496/getspc.ftn .
+
+
+cp -f  ../eole_496/*.ftn          .
+cp -f  ../eole_496/*.cdk          .
+
+chmod -x *.ftn *.cdk *.h
+
+r.make_exp
+
+cp -f  ../PRECIOUS/PHY/phy_macros_f.h_EOLE    ./phy_macros_f.h
+cp -f  ../PRECIOUS/PHY/eole*.ftn .   #retouches faites atan2d sur version eole_496
+
+make objloc ARCH=
+make mc2 ARCH=
+make clean
+
+

@@ -1,0 +1,264 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.04.18.26.52;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r set_world_view
+*
+      integer function set_world_view ()
+      implicit none
+*
+#include "lun.cdk"
+#include "lcldim.cdk"
+#include "grd.cdk"
+#include "physnml.cdk"
+#include "physcom.cdk"
+#include "path.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+*
+      character*6 dummy,mype
+      character*256 prejob,f_rst
+      logical bcastc
+      integer RPN_COMM_option_L,longueur,cnt,i,k,err
+      external set_world_view1,RPN_COMM_option_L
+      integer gnthread
+*
+*-------------------------------------------------------------------
+*
+      un_geo     = -1
+      un_rstrt   = 41
+      un_ser     = -1
+      un_zono    = -1
+      un_gbusper = 85
+*
+      set_world_view = -1
+      go4it = .false.
+*
+      call rpn_comm_init ( set_world_view1, myproc, numproc, 
+     $                                      npex  , npey )
+      err = RPN_COMM_option_L ('halo_ew_ext',.true.)
+*
+*   * Broadcasting commons
+*
+      if (.not.bcastc()) goto 9910
+*
+      call getenvc('rep_from_which_model_is_launched',dfwmil)
+*      
+      call hpalloc (pagcl , 4*numproc, err,1)
+*
+*   * Processor's topology
+*
+      call rpn_comm_mype ( myproc, myrow, mycol )
+      npeOpenMP = gnthread()
+*
+      west  = 0
+      east  = 0
+      south = 0
+      north = 0
+       west_L = .false.
+       east_L = .false.
+      south_L = .false.
+      north_L = .false.
+*
+      if (myrow.eq.    0) then
+         west_L = .true.
+         if (.not.period_x) west  = 1
+      endif         
+      if (myrow.eq.npex-1) then
+         east_L = .true.
+         if (.not.period_x) east  = 1
+      endif
+      if (mycol.eq.0    )  then
+         south_L = .true.
+         if (.not.period_y) south = 1
+      endif
+      if (mycol.eq.npey-1) then
+         north_L = .true.
+         if (.not.period_y) north = 1
+      endif
+*
+*   * Data topology
+*
+      call topoinit ()
+*
+      nk = gnk - 1
+      ntr   = 0
+      bghyd = 0
+      edhyd = -1
+      grdx  = Grd_dx
+      grdy  = grdx
+      satuco   = .true.
+*
+      call set_run_dir_xy (myrow, mycol)
+*
+      call set_transpose
+*
+      err = 0
+      if (modrstrt.and.(myproc.gt.0)) then
+         open (un_rstrt,file='restart',access='SEQUENTIAL',
+     $              iostat=err,status='OLD',form='UNFORMATTED')
+         if (err.ne.0)
+     $        print*, ' UNABLE TO OPEN RESTART FILE --- ABORT ---'
+      endif
+      call mc2stop (err)
+*
+      call gllvls (gnk)
+*
+      call set_sor 
+*
+      call nes_initwh
+*
+      call set_solver
+*
+      set_world_view = 0
+*
+*-------------------------------------------------------------------
+ 9910 return
+      end
+*
+***s/r set_world_view1
+*
+      subroutine set_world_view1 (npx,npy)
+      implicit none
+*
+      integer npx,npy
+*
+#include "lun.cdk"
+#include "lcldim.cdk"
+#include "rec.cdk"
+#include "lesbus.cdk"
+#include "partopo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "version.cdk"
+*
+      character*256 f_rst
+      integer err,statmc2,statmc2_t,statmc2_s
+*
+*-------------------------------------------------------------------
+*
+      statmc2_t  = 0
+      un_geo     = 33
+      un_ser     = 82
+      un_zono    = 83 
+      call open_status_file ()
+      call write_status_file ('_status=ABORT;')
+      f_rst='process/00-00/restart'
+      open (un_rstrt,file=f_rst,access='SEQUENTIAL',iostat=err,
+     $                         status='OLD',form='UNFORMATTED')
+      if (err.eq.0) then
+         modrstrt  = .true.
+      else
+         modrstrt  = .false.
+      endif
+      write (6,100) Version_S
+*
+      if (.not.modrstrt) then
+         theoc   = .false.
+         open (un_geo,file='process/geophy.bin',access='SEQUENTIAL',
+     $                   status='OLD',iostat=err,form='UNFORMATTED')
+         if (err.ne.0) then
+            un_geo  = -1
+            theoc   = .true.
+         endif
+         if (.not.theoc) then
+            read (un_geo) gni,gnj,hx,hy
+            call rpilpar (un_geo)
+            gni=gni-2*hx
+            gnj=gnj-2*hy
+         endif
+      else
+         un_geo = -1
+         rewind (un_rstrt)
+         read (un_rstrt) theoc
+         read (un_rstrt) gni,gnj,hx,hy
+         call rpilpar (un_rstrt)
+      endif
+*
+*###########  Establishing current run configuration ###########
+*###########  (see MC2 user guide for descriptions)  ###########
+*
+      call mc2ctrl (.true.,statmc2) 
+      call out_ctrl (statmc2_s)
+      npx = npex
+      npy = npey
+*     
+      if ((theoc).or.(sfc_only)) then
+         if (.not.modrstrt) call theo_cfg (.true.,statmc2_t)
+      endif
+*
+      if (un_geo.gt.0) read (un_geo) geotop,geospc
+*     
+      if ((statmc2.ge.0).and.(statmc2_t.ge.0).and.(statmc2_s.ge.0)) then
+         go4it = .true.
+      else
+         if (statmc2    .lt.0)    write (6,925) 'STATMC2',statmc2
+         if (statmc2_s  .lt.0)    write (6,925) 'STATMC2_S',statmc2_s
+         if (statmc2_t  .lt.0)    write (6,925) 'STATMC2_T',statmc2_t
+      endif
+*
+ 100  format (/10x,'***** MC2DM ',a,'  --  RUN TIME *****'//)
+ 919  format (/' FILE ',a,' MUST BE AVAILABLE'/)
+ 920  format (/' NUMPROC=',i4,',  NPEX=',i3,',  NPEY='/)
+ 925  format (/1x,a,'= ',i2/)
+*
+*-------------------------------------------------------------------
+*
+      return
+      end
+*
+      subroutine stop_world_view (flag,run_status)
+      implicit none
+*
+      logical flag,run_status
+      include 'mpif.h'
+#include "partopo.cdk"
+#include "path.cdk"
+*
+      character*256 postjob
+      integer err,longueur
+*
+*-------------------------------------------------------------------
+*
+      if (run_status) then
+*     
+         if (myproc.eq.0) then
+            if (flag) then
+               call write_status_file ('_status=RS;')
+            else
+               call write_status_file ('_status=ED;')
+            endif
+            call close_status_file ()
+         endif
+*
+      endif
+*     
+      call MPI_Barrier(MPI_comm_world, err)
+      call MPI_FINALIZE(err)
+*
+*-------------------------------------------------------------------
+*
+      return
+      end
+@

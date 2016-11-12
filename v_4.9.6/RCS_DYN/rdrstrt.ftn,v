@@ -1,0 +1,62 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r rdrstrt
+*
+      subroutine rdrstrt (dim4r,dynnes,dim2,phytend,dim5,
+     $                         dyndiv,dim3,lebus,nlebus)
+      implicit none
+*
+      integer dim4r,dim2,dim3,dim5,nlebus
+      real dynnes(dim2),phytend(dim5),dyndiv(dim3),
+     $     lebus(nlebus)
+*
+#include "dynmem.cdk"
+#include "lun.cdk"
+#include "physnml.cdk"
+#include "yomdyn.cdk"
+#include "partopo.cdk"
+*
+      real s1,s2
+      pointer (pas1, s1(dim4r)), (pas2, s2(dim4r))
+*---------------------------------------------------------------------
+*
+      if (myproc.eq.0) write (6,101)
+      call flush (6)
+      pas1 = paqp0
+      pas2 = paqpp
+      read (un_rstrt) s1,s2,dynnes,dyndiv
+      call flush (6)
+      if (gnmaphy.eq.1) then
+         read (un_rstrt) phytend
+      call flush (6)
+         if (incore) read (un_rstrt) lebus
+      call flush (6)
+      endif
+      close (un_rstrt)
+*
+ 101  format ('Reading restart FILE')
+*----------------------------------------------------------------------
+      return
+      end
+@

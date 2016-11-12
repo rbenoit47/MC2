@@ -1,0 +1,19 @@
+version=3.0.1
+#
+exp=gudbg
+gem_config dummy -settings gem_settings_canvas_gudbg -gridname debug_23x12u -etaname dbgu_28 -analfl /usr/local/env/armnlib/modeles/GEMDM_shared/v_${version}/dfiles/bcmk/1996071900_000 -Ptopo_npex 1 -Ptopo_npey 1 -Step_rsti 80 -Init_balgm_L -Init_dfnp 5 -Schm_phyms_L -exp $exp -xfer arxt05:/users/dor/armn/mid/local/ctrl_gem/v_${version}/$exp -launchit 
+#
+
+exp=gvdbg
+gem_config dummy -settings gem_settings_canvas_gvdbg -gridname debug_23x12v -etaname dbgv_28 -analfl /usr/local/env/armnlib/modeles/GEMDM_shared/v_${version}/dfiles/bcmk/20010920.120000 -Ptopo_npex 1 -Ptopo_npey 1 -Step_rsti 80 -Init_balgm_L -Init_dfnp 5 -Cstv_uvdf_8 13333. -Cstv_phidf_8 13333. -Schm_phyms_L -P_pbl_schsl_s -exp $exp -xfer arxt05:/users/dor/armn/mid/local/ctrl_gem/v_${version}/$exp -launchit
+#
+
+exp=gup9
+gem_config dummy -settings gem_settings_canvas_gup9 -gridname gup9  -etaname dbgu_28 -Step_total 240 -Cstv_dt_8 1800. -Step_rsti 130 -analfl /usr/local/env/armnlib/modeles/GEMDM_shared/v_${version}/dfiles/bcmk/anlm2000120100_000 -mach kaze -cm 8G -t 14400 -Ptopo_npex 2 -Ptopo_npey 3 -mpi -outputcfg output_gup9 -Schm_phyms_L -xfer arxt05:/users/dor/armn/mid/local/ctrl_gem/v_${version}/$exp -exp $exp -d2z -Init_balgm_L -Init_dfnp 23 -launchit
+
+exp=gvreg
+gem_config dummy -settings gem_settings_canvas_gvreg -gridname gvreg -etaname newreg -Step_total 384 -Step_rsti 32 -Cstv_dt_8 450. -P_rad_knt 8 -Cstv_uvdf_8 8333. -Cstv_phidf_8 8333. -Init_balgm_L -Init_dfnp 49 -analfl /usr/local/env/armnlib/modeles/GEMDM_shared/v_${version}/dfiles/bcmk/large_cases/2001082712_000 -climfl /usr/local/env/armnlib/modeles/GEMDM_shared/v_${version}/dfiles/bcmk/large_cases/climato_1080X540 -geopfl /usr/local/env/armnlib/modeles/GEMDM_shared/v_${version}/dfiles/bcmk/large_cases/geophy_gvp1375a3 -mach kaze -cm 16G -t 7200 -Ptopo_npex 2 -Ptopo_npey 3 -mpi -outputcfg output_gvreg -Schm_phyms_L -P_pbl_schsl_s -xfer arxt05:/users/dor/armn/mid/local/ctrl_gem/v_${version}/$exp -prefix prg -exp $exp -d2z -launchit
+
+
+
+

@@ -1,0 +1,53 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine flipnt ()
+      implicit none
+*
+#include "dynmem.cdk"
+*
+      integer i,j
+      real qpf, uf, vf, swf, tpf, hmf, clf
+      pointer
+     $        (paqpf , qpf(minx:maxx,miny:maxy,0:gnk)),
+     $        (pauf  , uf (minx:maxx,miny:maxy,1:gnk)),
+     $        (pavf  , vf (minx:maxx,miny:maxy,1:gnk)),
+     $        (paswf , swf(minx:maxx,miny:maxy,1:gnk)),
+     $        (patpf , tpf(minx:maxx,miny:maxy,1:gnk)),
+     $        (pahmf , hmf(minx:maxx,miny:maxy,1:gnk)),
+     $        (paclf , clf(minx:maxx,miny:maxy,1:gnk,1:ntr))
+*
+      paqpf = paqpm
+      pauf  = paum
+      pavf  = pavm
+      paswf = paswm
+      patpf = patpm
+      pahmf = pahmm
+      paclf = paclm
+      
+      paqpm = paqp0
+      paum  = pau0
+      pavm  = pav0
+      paswm = pasw0
+      patpm = patp0
+      pahmm = pahm0
+      paclm = pacl0
+      
+      paqp0 = paqpp
+      pau0  = paup
+      pav0  = pavp
+      pasw0 = paswp
+      patp0 = patpp
+      pahm0 = pahmp
+      pacl0 = paclp
+      
+      paqpp = paqpf
+      paup  = pauf
+      pavp  = pavf
+      paswp = paswf
+      patpp = patpf
+      pahmp = pahmf
+      paclp = paclf
+*   
+*----------------------------------------------------------------------
+      return
+      end

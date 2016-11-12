@@ -1,0 +1,111 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine rhs3_p_1d ( rhs, sw, nx, ny )
+      implicit none
+*
+      integer nx, ny
+      real*8 rhs (nx, ny, *), sw (nx, ny, *)
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*******************************************************************
+*                                                                 *
+*     CALCULATES                                                  *
+*                modified right-hand-side terms                   *
+*                Qsw*, Qqp*                                       *
+*       FROM                                                      *
+*                right-hand-side terms:                           *
+*                Qu, Qv, Qsw, Qtp, Qqp                            *
+*                stored in                                        *
+*                up, vp, swp, tpp, qpp                            *
+*      STORES                                                     *
+*                results in                                       *
+*                swp=Qsw*, rhs=Qqp*                               *
+*                                                                 *
+*     PERFORMS   essentially the following calculations:          *
+*                                                                 *
+*                                                                 *
+*     swp =   [ swp + dtp *tpp ] * nu0                            *
+*                                                                 *
+*     rhs = - [ qpp                     - dtp * DZ2(swp) ]        *
+*                                                                 *
+*                                                                 *
+*                            ~                   __Z              *
+*                  DZ2(sw) = d(sw)/dZ-2*c01*orts*sw               *
+*                                                                 *
+*                                                      ~          * 
+*        SEE     rhs3_pm for definitions of            d/dZ       *
+*                                                                 *
+*                cxxpar  for definitions of parameters cXX        *
+*                                                                 *
+*******************************************************************
+*
+#include "grd.cdk"
+#include "dynmem.cdk"
+#include "physcom.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dtmdtp.cdk"
+#include "nbcpu.cdk"
+*
+      integer i, j, k, km1, kp1, nkt
+      real*8  pt5, one, hdiv, nu0, q3b
+      parameter (pt5 = 0.5d0, one = 1.0d0)
+*
+*-----------------------------------------------------------------------
+*
+      nkt = gnk-1
+      if(flextop) nkt = gnk
+*
+      do k = 1, gnk
+         km1 = max(k-1, 1 )
+         do j = 1, ny
+         do i = 1, nx
+            nu0  =  one / ( c03 + dtp * dtp * c06 * nssq(i,j,k) )
+            swp(i,j,k) = ( swp(i,j,k) + dtp  * tpp(i,j,k) ) * nu0
+            sw (i,j,k) = swp(i,j,k)
+         end do
+         end do
+         if (k.eq.1) then
+            do j = 1, ny
+            do i = 1, nx
+               q3b = sbxy(i,j) * pt5 *
+     $              ( gg1(i+1,j,1)*up(i+1,j,1) + gg1(i,j,1)*up(i,j,1)
+     $              + gg2(i,j+1,1)*vp(i,j+1,1) + gg2(i,j,1)*vp(i,j,1) )
+               sw(i,j,1) = dhdt(i,j,1) - q3b
+            end do
+            end do
+         endif
+         if ((k.eq.gnk).and.(.not.flextop)) then
+            do j = 1, ny
+            do i = 1, nx
+               sw(i,j,gnk) = 0.
+            end do
+            end do
+         endif
+      end do
+*
+      do k = 1, nkt
+         if(k.lt.gnk) then
+            do j = 1, ny
+            do i = 1, nx
+               rhs(i,j,k) = - qpp(i,j,k)
+     $                    + dtp*gg0r(i,j,k)*(sw(i,j,k+1)-sw(i,j,k))
+     $                    - dtp*c01*orts(i,j,k)*(sw(i,j,k+1)+sw(i,j,k))
+            end do
+            end do
+         else
+            do j = 1, ny
+            do i = 1, nx
+               rhs(i,j,k) = - qpp(i,j,k) -dtp*c01t*orts(i,j,k)*sw(i,j,k)
+            end do
+            end do
+         endif
+      end do
+*
+*-----------------------------------------------------------------------
+      return
+      end

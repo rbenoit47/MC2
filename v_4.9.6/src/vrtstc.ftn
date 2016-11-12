@@ -1,0 +1,71 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r vrtstc
+*     
+      integer function vrtstc (pref,datestp,nkfin,iun)
+      implicit none
+*     
+      integer datestp,nkfin,iun
+      real pref(nkfin,3)
+**
+*
+#include "yomdyn.cdk"
+*     
+**
+      integer k,nk_tt,nk_qx
+      real dum
+*
+*----------------------------------------------------------------------
+*
+      vrtstc=-1
+*
+      do k=1,nkfin
+         pref(k,1) = -1.
+         pref(k,2) = -1.
+         pref(k,3) = -1.
+      end do 
+*
+      call getlvls (pref(1,2),nk_tt,nkfin,datestp,"TT",iun)
+      if (nk_tt.lt.1) 
+     $call getlvls (pref(1,2),nk_tt,nkfin,datestp,"VT",iun)
+      if (nk_tt.lt.1) 
+     $call getlvls (pref(1,2),nk_tt,nkfin,datestp,"BUOY",iun)
+      if (nk_tt.lt.1) return
+*
+      if (gngalsig.eq.1) then
+         call getlvls (pref,nk_qx,nkfin,datestp,"PREG",iun)
+         if (nk_qx.lt.1) return
+         pref(1    ,3) = pref(1,1)
+         pref(nk_tt,3) = pref(nk_qx,1)
+         do k=2,nk_tt-1
+            pref(k,3) = pref(k,2)
+         end do
+      else
+         do k=1,nk_tt
+            pref(k,1) = pref(k,2)
+            pref(k,3) = pref(k,2)
+         end do
+      endif
+*
+      if (nk_tt.lt.1) return
+      vrtstc = nk_tt
+*
+      if (gngalsig.ne.1) then  ! Invert column
+         do k=1,nk_tt/2
+            dum               = pref (k,1)
+            pref(k,1)         = pref (nk_tt-k+1,1)
+            pref(nk_tt-k+1,1) = dum
+            dum               = pref (k,2)
+            pref(k,2)         = pref (nk_tt-k+1,2)
+            pref(nk_tt-k+1,2) = dum
+            dum               = pref (k,3)
+            pref(k,3)         = pref (nk_tt-k+1,3)
+            pref(nk_tt-k+1,3) = dum
+         end do
+      endif
+*      
+*--------------------------------------------------------------------
+*
+      return
+      end
+      
+      

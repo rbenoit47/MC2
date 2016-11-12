@@ -1,0 +1,122 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/R  SFLTR    - FILTERING OF A FIELD IN THE S DIRECTION
+*                  WITH A GENERAL SYMMETRIC THREE POINT OPERATOR
+*
+      SUBROUTINE SFLTR ( R , F , W , CS , N , NK )
+*
+#include "impnone.cdk"
+      INTEGER N,NK
+      REAL R(N,NK),F(N,NK),W(N,2),CS
+*
+*Author
+*          J. Mailhot   (Sept 1984)
+*
+*Revision
+* 001      J. Cote(Nov. 1984), Vectorization, Documentation
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+*                          -  Delete the test [IF (LOC(R).NE.LOC(F))]
+*                             for transportability
+*
+*Object
+*          to filter a field in the S direction with a general
+*          symmetric three point operator
+*
+*Arguments
+*
+*          - Output -
+* R        result (can share memory location with F)
+*
+*          - Input -
+* F        field to be filtered
+* W        work field
+* CS       filter coefficient along S
+* N        horizontal dimension
+* NK       vertical dimension
+*
+*Notes
+*          R = F + (CS/2) * Fss (in the interior)
+*          with Fss = F(J,K+1) + F(J,K-1) - 2 * F(J,K)
+*          An average preserving correction is applied at the
+*          boundaries
+*
+**
+*
+      REAL CSO2
+      INTEGER J,K,LL,LM,LO,JK
+*
+      REAL EPS
+      SAVE EPS
+      DATA EPS / 1.E-37 /
+*
+      IF (ABS(CS).GT.EPS) THEN
+*
+*     FILTER ALONGS
+*
+         CSO2=CS/2.0
+         LM=1
+         LO=2
+*
+         DO 1 J=1,N
+            W(J,1)=CSO2*(F(J,2)-F(J,1))
+    1       R(J,1)=F(J,1)+W(J,1)
+*
+         DO 3 K=2,NK-1
+            DO 2 J=1,N
+               W(J,LO)=CSO2*(F(J,K+1)-F(J,K))
+    2          R(J,K)=F(J,K)+W(J,LO)-W(J,LM)
+            LL=LO
+            LO=LM
+    3       LM=LL
+*
+         DO 4 J=1,N
+    4       R(J,NK)=F(J,NK)-W(J,LM)
+*
+      ELSE
+          DO 5 JK=1,N*NK
+    5        R(JK,1) = F(JK,1)
+      ENDIF
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

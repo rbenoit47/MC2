@@ -1,0 +1,225 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+* 
+      subroutine mc2pds (lat,lon,latmin,dlat,rang,poids,theta,ni,nj)
+      implicit none
+* 
+      integer ni,nj,rang(*)
+      real lat(ni,nj),lon(ni,nj),latmin,dlat
+      real poids(*),theta(*)
+* 
+#include "yomdyn1.cdk"
+#include "grd.cdk"
+#include "dynmem.cdk"
+#include "maxdim.cdk"
+#include "diagnml.cdk"
+#include "topo.cdk"
+#include "consdyn_8.cdk"
+* 
+      logical rejected
+      integer nstatcln,statcln(256),tt
+      integer i,ii,j,ierr
+      real ym,lo,maxhaut,minhaut
+*
+      real sum,born1,born2
+      dimension sum(nbbande), born1(nbbande+1), born2(nbbande+1)
+*
+*--------------------------------------------------------------------
+*
+      nstatcln=0
+      do ii=1,250
+         statcln(ii)=0
+      end do
+*
+      do i = 1,nbbande
+         sum(i) = 0.
+      enddo
+*
+      if (divzon.lt.2) then   
+         do i = 1,nbbande
+            born1(i) = latmin+(i-1)*dlat
+            born2(i) = latmin+i*dlat
+            sum(i) = 0.0
+         end do 
+         born2(nbbande)=born2(nbbande)+0.1
+      endif
+*
+      if (divzon.eq.2) then      
+*       determination de la hauteur max et min pour la zone choisie.
+*       determination de la largeur d'une bande.
+         minhaut=40000.0
+         maxhaut=0.0
+         do i = iinf,isup
+            do j = jinf,jsup
+               minhaut=min(hh0(i,j,1), minhaut)
+               maxhaut=max(hh0(i,j,1), maxhaut)
+            end do
+         end do
+         dlat=(maxhaut-minhaut) / nbbande
+
+         do i =1,nbbande
+            born1(i)=minhaut+(i-1)*dlat
+            born2(i)=minhaut+i*dlat
+         end do
+         born2(nbbande)=born2(nbbande)+0.1
+*        *dlat (km for mc2_series)
+         dlat=dlat/1000.0 
+      endif  
+*
+      if (divzon.eq.3) then      
+         do i =1,nbbande
+            born1(i)= iinf
+            born2(i)= isup
+         end do
+      endif
+*  
+*     Boucle de calcul ds poids et rang en chaque point de grille
+      do 1310 j = 1, nj
+         do 1310 i = 1, ni 
+
+*     calcul du poids en fonction du facteur d'echelle de la projection
+            poids(i+(j-1)*ni) = grdx * grdy / sbxy(i,j)
+*
+*     initialiser rang a zero  (rb) 
+            if (divzon.eq.1) then   
+               rang(i+(j-1)*ni)=0
+               if (((i.ge.iinf).and.(i.le.isup)).and.
+     $              ((j.ge.jinf).and.(j.le.jsup))) then
+                  do ii = 1,nbbande
+                     if ((lat(i,j).ge.born1(ii))
+     $                    .and.(lat(i,j).lt.born2(ii))) then
+                        rang(i+(j-1)*ni)=ii 
+                     endif   
+                  end do
+               endif
+            endif
+
+            if (divzon.eq.0) then
+               rang(i+(j-1)*ni)=0
+               if (((i.ge.iinf).and.(i.le.isup)).and.
+     $              ((j.ge.jinf).and.(j.le.jsup))) then
+                  do ii = 1,nbbande
+                     ym = j
+                     if ((ym.ge.born1(ii)).and.(ym.lt.born2(ii))) then
+                        rang(i+(j-1)*ni)=ii
+                     endif
+                  end do
+               endif   
+            endif   
+*
+*     initialiser en fonction des hauteurs topographiques.
+            if (divzon.eq.2) then
+               rang(i+(j-1)*ni)=0
+               if (((i.ge.iinf).and.(i.le.isup)).and.
+     +              ((j.ge.jinf).and.(j.le.jsup))) then
+                  do ii = 1,nbbande
+                     if ((hh0(i,j,1).ge.born1(ii)).and.
+     +                    (hh0(i,j,1).lt.born2(ii))) then
+                        rang(i+(j-1)*ni)=ii
+                     endif   
+                  end do
+               endif
+            endif
+*               
+*     initialiser en fonction des positions de station.
+            if (divzon.eq.3) then
+               rang(i+(j-1)*ni)=0
+               do 39 ii = 1,nbbande              !nbbande = nstat
+*              si station repertorie comme rejete, passe a la porchaine
+                  rejected = .false.
+                  do tt=1,nstatcln
+                     if (statcln(tt).eq.ii) rejected = .true.
+                  end do
+                  if (.not.rejected) then
+*                    le point est-il dans la limite de la station
+                     if ((i.le.statijd(1,ii)+dimi)
+     $                    .and.(j.le.statijd(2,ii)+dimj)
+     $                    .and.(i.ge.statijd(1,ii)-dimi)
+     $                    .and.(j.ge.statijd(2,ii)-dimj)) then
+                        if (rang(i+(j-1)*ni).eq.0) then
+*                          si station hors limite, elimine la station
+                           if (((i.lt.iinf).and.(i.gt.isup)).and.
+     $                         ((j.lt.jinf).and.(j.gt.jsup))) then
+                              nstatcln=nstatcln+1
+                              statcln(nstatcln)=ii
+                              print *,'station (i,j)= ',statijd(1,ii),
+     $                             statijd(2,ii),
+     $                             ' rejected in mc2pds (outlimit)'
+                           else
+                              rang(i+(j-1)*ni)=ii  
+                           endif
+                        else
+*                          si point deja alouee (recoupement), 
+*                          elimine la station
+                           nstatcln=nstatcln+1
+                           statcln(nstatcln)=ii
+                           print *,'station (i,j)= ',statijd(1,ii),
+     $                          statijd(2,ii),
+     $                          ' rejected in mc2pds (supperposition)'
+                        endif           !(rang(i+(j-1)*ni).eq.0)
+                     endif              !(limite de la station)
+                  endif                 !(.not.rejected)
+ 39            continue
+            endif
+1310  continue
+*
+*     Verify each grid point regarding to rejected stations
+*
+      do i=1,ni
+         do j=1,nj
+            do ii=1,nstatcln
+               if (rang(i+(j-1)*ni).eq.ii) rang(i+(j-1)*ni)=0
+            enddo
+         enddo
+      enddo
+*
+*     Normalise les poids
+      do i=1,nbbande
+         sum(i) =0.
+      enddo
+
+      do i = 1,ni*nj 
+         if (rang(i).gt.0) then 
+            sum(rang(i))  = sum(rang(i))  + poids(i)
+         endif
+      end do
+*
+      do i = 1,ni*nj 
+         if (rang(i).gt.0) then 
+            if (sum(rang(i)).ne.0.0) poids(i)=poids(i)/sum(rang(i))
+         endif
+      end do
+*
+      do j = 1,nj
+         do i = 1,ni
+            lo = lon(i,j)
+            if (lo.ge.180.) lo=lo-180.
+            theta(i+(j-1)*ni) = (lo+Grd_dgrw-180.)*pi_8/180. 
+         enddo
+      enddo
+*
+*--------------------------------------------------------------------
+      return
+      end
+@

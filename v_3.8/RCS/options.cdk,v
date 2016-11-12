@@ -1,0 +1,265 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.10;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.04.01.21.57.11;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*
+#include "maxlev.cdk"
+*
+*     OPTIONS INITIALISEES PAR LA DYNAMIQUE
+*
+      INTEGER           ICONVEC,IFLUVERT,IGWDRAG,IKFCPCP,ILONGMEL,IOPTIX,
+     +                  IRADIA,ISCHMSOL,ISHLCVT(2),ISTCOND
+      CHARACTER*8        CONVEC, FLUVERT, GWDRAG, KFCPCP, LONGMEL, OPTIX,
+     +                   RADIA, SCHMSOL, SHLCVT(2), STCOND, RADFILES
+      INTEGER           CW_RAD,DATE(14),DEBUT,KNTRAD,
+     +                  LIN_KPH,LIN_LSC,LIN_PBL,LIN_SGO,LIN_V4D, 
+     +                  MOYHR, NSLOFLUX, RADNIVL(LEVMAX+1)
+      LOGICAL           ADVECTKE,AGREGAT,BKGALB,CHAUF,CLIMAT,CORTM,
+     +                  CORTS,DBGMEM,DIFFUW,DMOM,DRAG,DRYLAPS,
+     +                  EVAP,FOMIC,INILWC,ICEMELT,KFCMOM,MONTAGN,
+     +                  RADFIX,REDUC,SATUCO,SNOALB_ANL,SNOWMELT,
+     +                  STOMATE,STRATOS,TYPSOL,WET,Z0DIR,Z0TCST
+      REAL              AS2,BETA2,DELT,DZSEDI,EPONGE(LEVMAX),ETRMIN2,
+     +                  FACDIFV,FACTDT,HC2,HF2,HM2,KFCTRIG,KFCRAD,
+     +                  KFCDEPTH,KFCDLEV,KFCDET,KFCTIMEC,KFCTIMEA,
+     +                  KKL2,PARSOL(6),QCO2,TAUFAC,Z0MIN2
+      COMMON /IOPTIONC/ ICONVEC,IFLUVERT,IGWDRAG,IKFCPCP,ILONGMEL,IOPTIX,
+     +                  IRADIA,ISCHMSOL,ISHLCVT,ISTCOND
+      COMMON / OPTIONC/  CONVEC, FLUVERT, GWDRAG, KFCPCP, LONGMEL, OPTIX,
+     +                   RADIA, SCHMSOL, SHLCVT, STCOND,  RADFILES
+      COMMON / OPTIONI/ CW_RAD,DATE,DEBUT,KNTRAD,
+     +                  LIN_KPH,LIN_LSC,LIN_PBL,LIN_SGO,LIN_V4D, 
+     +                  MOYHR,NSLOFLUX,RADNIVL
+      COMMON / OPTIONL/ ADVECTKE,AGREGAT,BKGALB,CHAUF,CLIMAT,CORTM,
+     +                  CORTS,DBGMEM,DIFFUW,DMOM,DRAG,DRYLAPS,EVAP,
+     +                  FOMIC,ICEMELT,INILWC,KFCMOM,MONTAGN,RADFIX,
+     +                  REDUC,SATUCO,SNOALB_ANL,SNOWMELT,STOMATE,
+     +                  STRATOS,TYPSOL,WET,Z0DIR,Z0TCST
+      COMMON /OPTIONR/  AS2,BETA2,DELT,DZSEDI,EPONGE,ETRMIN2,FACDIFV,
+     +                  FACTDT,HC2,HF2,HM2,PARSOL,KFCTRIG,KFCRAD,
+     +                  KFCDEPTH,KFCDLEV,KFCDET,KFCTIMEC,KFCTIMEA,
+     +                  KKL2,QCO2,TAUFAC,Z0MIN2
+*
+      NAMELIST /OPTIONP/
+*               type chaine de caractere
+     +                  CONVEC,FLUVERT,GWDRAG,KFCPCP,LONGMEL,
+     +                  OPTIX,RADIA,RADFILES,SHLCVT,SCHMSOL,
+     +                  STCOND,
+*               type entier 
+     +                  CW_RAD,DATE,DEBUT,KNTRAD,
+     +                  LIN_KPH,LIN_LSC,LIN_PBL,LIN_SGO,LIN_V4D, 
+     +                  MOYHR,NSLOFLUX,RADNIVL,
+*               type logique
+     +                  ADVECTKE,AGREGAT,BKGALB,CHAUF,CLIMAT,CORTM,
+     +                  CORTS,DBGMEM,DMOM,DIFFUW,DRAG,DRYLAPS,EVAP,
+     +                  FOMIC,ICEMELT,INILWC,KFCMOM,MONTAGN,RADFIX,
+     +                  REDUC,SATUCO,SNOALB_ANL,SNOWMELT,STOMATE,
+     +                  STRATOS,TYPSOL,WET,Z0DIR,Z0TCST,
+*               type reel 
+     +                  AS2,BETA2,DELT,DZSEDI,EPONGE,ETRMIN2,FACDIFV,
+     +                  FACTDT,HC2,HF2,HM2,KFCTRIG,KFCRAD,KFCDEPTH,
+     +                  KFCDLEV,KFCDET,KFCTIMEC,KFCTIMEA,KKL2,PARSOL,
+     +                  QCO2,TAUFAC,Z0MIN2
+*
+#if defined(DOC)
+*
+* CONVEC     convection switch
+* FLUVERT    boundary layer processes switch
+* GWDRAG     gwd formulation switch
+* KFCPCP     switch for conservation of precipitation in kfcp
+* LONGMEL    mixing length formulation
+* OPTIX      choice of 2 parameterizations for cloud 
+*            optical properties: an old one for simpler 
+*            condensation schemes (conds, Sundqvist),
+*            and a newer one for microphysics schemes
+* RADFILES   format of radiation files :
+*            'STD': RPN standard file
+*            'UNF': Fortran unformatted binary file
+* RADIA      radiation switch
+* SCHMSOL    land surface processes switch
+* SHLCVT     shallow convection switches
+* STCOND     condensation switch
+*
+* ICONVEC    integer value for CONVEC  switch
+* IFLUVERT   integer value for FLUVERT switch
+* IGWDRAG    integer value for GWDRAG  switch
+* IKFCPCP    integer value for KFCPCP  switch
+* ILONGMEL   integer value for LONGMEL switch
+* IRADIA     integer value for RADIA   switch
+* ISCHMSOL   integer value for SCHMSOL switch
+* ISHLCVT    integer values for SHLCVT  switches
+* ISTCOND    integer value for STCOND  switch
+*
+* CW_RAD     operating mode in s/r cldoptx regarding cloud water
+* DATE       CMC date time stamp
+* DEBUT      timestep of beginning of model run
+*            (for climate runs only)
+* KNTRAD     number of timesteps between calculations
+*            of radiative processes
+* MOYHR      number of timesteps for temporal averages
+* NSLOFLUX   number of timesteps for which surface fluxes
+*            "FC" and "FV" are gradually set from zero to
+*            their full value in a "slow start" fashion"
+*            at the beginning of a time integration
+* RADNIVL    list of levels on which radiation (IR and visible)
+*            calculations are performed
+*
+* ADVECTKE   switch for TKE advection by the dynamics
+* AGREGAT    switch to control aggregation of surface properties
+* CHAUF      sensible heating switch for simplified physics
+* CLIMAT     climate mode switch (only for SEF at this time)
+* DBGMEM     debug switch for physics memory allocation system
+* DMOM       vertical diffusion switch for simplified physics
+* DRAG       surface drag switch for simplified physics
+* DIFFUW     vertical motion diffusion switch
+* EVAP       evaporation switch
+* FOMIC      .TRUE. use Fomichev radiation code
+*            .FALSE. do not use Fomichev radiation code
+* ICEMELT    sea ice melting switch
+* INILWC     initialization of cloud water content switch
+* RADFIX     .TRUE. for active radiation fixes in RADMULT/RADIR/SUN
+*            .FALSE. otherwise
+* REDUC      .TRUE. if computations are to be on RADNIVL levels
+*            .FALSE. to compute on all levels (ignore RADNIVL)
+* SATUCO     .TRUE. if water/ice phase for saturation
+*            .FALSE. if water phase only for saturation
+* SNOALB_ANL .true.  snow albedo (ISBA) read from analysis
+*            .false. snow albedo (ISBA) calculated from snow age
+* SNOWMELT   snow melting switch
+* STOMATE    stomatal resistance switch
+* STRATOS    stratospheric mode (similar to CLIMAT mode)
+* TYPSOL     soil surface parameters switch
+* WET        .TRUE.  for wet model
+*            .FALSE. for dry model
+* Z0DIR      .TRUE.  for     directional roughness length
+*            .FALSE. for non-directional roughness length
+* Z0TCST     .TRUE.  for constant Z0 for heat/moisture flux calculations over water
+*            .FALSE. for variable "   "      "          "       "         "    "
+* CORTM      .true., TM corrected for difference between
+*            original and filtered topography
+*            .false., no correction
+* CORTS      .true., TS and TP corrected for difference
+*             between original and filtered topography
+*            .false., no correction
+* DRYLAPS    .true., uses dry adiabat
+*            .false., uses Schuman-Newell lapse rate
+* MONTAGN    .true., run with mountains
+*            .false. mountains set to zero
+* BKGALB     .true., clim albedo used as background
+*            .false., albedo computed without background
+* AS2        stable boundary layer AS parameter
+* BETA2      boundary layer beta parameter
+* DELT       true timestep of the model
+* DZSEDI     thickness of the smallest layer (m);  
+*            used to determine sedimentation parameters
+* EPONGE     coefficients that multiply KM to simulate
+*            sponge layer near the top of the model
+* ETRMIN2    minimal value for vertical diffusion in stable mode
+* FACDIFV    factor (usually 1 or 2) that multiplies
+*            the timestep to enhance the effect of the
+*            vertical diffusion
+* FACTDT     =1 for 2-time level integration scheme
+*            =2 for 3-time level integration scheme
+* HC2        relative humidity threshold for onset of moist
+*            convective adjustment
+* HF2        relative humidity threshold for upward moisture flux
+*            during convective adjustment
+* HM2        input to calculate the saturation relative humidity
+*
+* KFCMOM     true. for transfer of momemntum 
+* KFCTRIG    trigger parameter of Kain-Fritsch convection scheme
+* KFCRAD     initial convective updratf radius in Kain-Fritsch 
+*            convection scheme
+* KFCDEPTH   minimum depth of cnvective updraft in Kain-Fritsch
+* KFCDLEV    initial level of forced detrainment in Kain-Fritsch
+* KFCDET     total forced detrainment in Kain-Fritsch
+* KFCTIMEC   convective time scale in Kain-Fritsch
+* KFCTIMEA   convective time adjustment in Kain-Fritsch
+* KKL2       sedimentation threshold for mixphase
+* LIN_KPH    kind of physics for 4dvar
+*            = 0 full       physics
+*            = 1 simplified physics
+* LIN_LSC    simplified large-scale condensation scheme
+*            = 0 no parameterization
+*            = 1 simple condensation scheme
+* LIN_PBL    simplified planetary boundary layer
+*            = 0 no parameterization
+*            = 1 linear diffusion coefficients
+*            = 2 linear diffusion coefficients 
+*                (coefficients from nonlinear low-res run)
+* LIN_SGO    simplified sub-grid orographic effecs
+*            = 0 non parameterization
+* LIN_V4D    configuration of 4dvar
+*            = 0 full physics 
+*            = 1 simplified physics
+* PARSOL     thermal parameters of the soil (force-restore scheme):
+*            1) basic value of heat capacity of soil
+*            2) basic value of heat capacity of snow
+*            3) basic value of heat capacity of ice
+*            4) basic value of heat diffusivity of soil
+*            5) basic value of heat diffusivity of snow
+*            6) basic value of heat diffusivity of ice
+* QCO2       background atmospheric CO2 concentration in ppmv
+* TAUFAC     factor used in the gwd formulation ( = 1/(LENGHT SCALE))
+* Z0MIN2     minimum value of roughness length over the oceans
+*
+*
+*
+#endif
+@
+
+
+3.8
+log
+@La version 3.8 de la physique a ete creee le 12 mars 2003
+
+Principaux changements par rapport a la version 3.72 :
+----------------------------------------------------
+
+	* contenu de la rustine r2 de la version 3.72
+	* code developpe pour le modele regional a 15 km
+		- MOISTKE (refonte)
+		- MIXPHASE (avec BLG)
+		- KTRSNT
+		- proprietes optiques des nuages
+	* option ADVECTKE reactivee
+	* BOUJO disponible dans eturbl
+	* ajouts importants au code de physique linearisee
+	* nouvelles cles : AS,BETA,KKL,KFCPCP,SHLCVT(2),STRATOS,QCO2
+	* nombreux diagnostics supplementaires
+	* optimisation des series temporelles
+	* diagnostics supplementaires pour CHRONOS et AURAMS
+	* correction d'une multitude de bogues mineurs
+@
+text
+@@

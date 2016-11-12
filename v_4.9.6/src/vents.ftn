@@ -1,0 +1,197 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r vents
+      subroutine vents (umod,vmod,prm,qs,ht,hm,f,msf,rf,ng,lnk,
+     $                                               nksor,ip2)
+      implicit none
+*
+      integer ng,lnk,nksor,ip2
+      real umod(ng,lnk),vmod(ng,lnk),prm(ng,lnk),qs(ng,lnk),
+     $     f(ng),msf(ng),ht(ng,*),hm(ng,*),rf(nksor)
+*
+*OBJECT
+*     interpolation des vents de coord. hauteur a pression
+*     calcul du tourbillon
+*
+*METHOD
+*
+**
+#include "consdyn_8.cdk"
+#include "levels.cdk"
+#include "lcldim.cdk"
+#include "sor.cdk"
+#include "vinterpo.cdk"
+*
+      integer i,j,k,err,nkref
+      integer gluu,glvv,glqr,gldd,glpreg,glpprm,glpstr
+      real, dimension (:,:), allocatable :: uupres,vvpres,u,v
+      real, dimension (:  ), allocatable :: qr,dd
+      real gotsr(ng,lnk-1), ortsr(ng,lnk),
+     $     qtsr (ng,lnk  ), ntsr2(ng,lnk-1)
+      real posv,zm_tmp(lnk+1)
+      pointer (paposv, posv(ng,nksor,2,3))
+*----------------------------------------------------------------------
+*
+      print*, '=====> VENTS'
+*
+      paposv = paposit
+*      
+      gluu   = -1
+      glvv   = -1
+      glqr   = -1
+      gldd   = -1
+      glpreg = -1
+      glpprm = -1
+      glpstr = -1
+      do i=1,nvardyn
+         if (udolist(i).eq.'UU'  ) gluu  =i
+         if (udolist(i).eq.'VV'  ) glvv  =i
+         if (udolist(i).eq.'QR'  ) glqr  =i
+         if (udolist(i).eq.'DD'  ) gldd  =i
+         if (udolist(i).eq.'PREG'  ) glpreg  =i
+         if (udolist(i).eq.'PPRM'  ) glpprm  =i
+         if (udolist(i).eq.'PSTR'  ) glpstr  =i
+      end do
+      if (levtyp.ne.'G') then
+         glpprm = -1
+         glpstr = -1
+      endif
+*
+      nkref= nksor
+      if (levtyp.eq.'G') nkref= lnk
+      if (nkref.lt.1) return
+*
+      do i=1,ng
+         umod(i,1) = umod(i,2)
+         vmod(i,1) = vmod(i,2)
+      end do
+      do k=1,lnk-1
+         zm_tmp(k+1) = zm(k)
+      end do
+      zm_tmp(1) = zt(1)
+*
+      allocate (uupres(ng,nkref),vvpres(ng,nkref),
+     $          u(ng,nkref),v(ng,nkref),qr(ng*nkref),dd(ng*nkref))
+*
+      if (levtyp.ne.'G') then
+         call inv_vertint (uupres,umod,posv(1,1,1,2),huv,ng,nkref,lnk)
+         call inv_vertint (vvpres,vmod,posv(1,1,1,2),huv,ng,nkref,lnk)
+      else
+         do k=1,nkref
+         do i=1,ng
+            uupres(i,k) = umod(i,k)
+            vvpres(i,k) = vmod(i,k)
+         end do
+         end do
+      endif
+*
+      if ((glqr.gt.0).or.(gldd.gt.0))
+     $     call qqdiv (qr,dd,uupres,vvpres,msf,gni,gnj,nkref)
+*
+      do k=1,nkref
+      do i=1,ng
+         u(i,k) = uupres(i,k) / knams_8 * msf(i)
+         v(i,k) = vvpres(i,k) / knams_8 * msf(i)
+      end do
+      end do
+*
+*     Staggering of U and V.
+*
+      if (staguv) call stag_uv (u,v,gni,gnj,nkref)
+*
+      if (levtyp.ne.'G') then
+         if (gluu.gt.0) then
+            print*, 'UU ',(table_out(i,gluu),i=1,3)
+            call ecris2_fst (u,rf,'UU',-1,ip2,0,1.0,ng,nkref,
+     $                                    table_out(1,gluu))
+         endif
+         if (glvv.gt.0) then
+            print*, 'VV ',(table_out(i,glvv),i=1,3)
+            call ecris2_fst (v,rf,'VV',-1,ip2,0,1.0,ng,nkref,
+     $                                    table_out(1,glvv))
+         endif
+      else
+         if (gluu.gt.0) then
+            table_out(2,gluu) = table_out(2,gluu) + 1
+            print*, 'UU ',(table_out(i,gluu),i=1,3)
+            call ecris2_fst (u,zm_tmp,'UU',-1,ip2,0,1.0 ,ng,nkref,
+     $                                         table_out(1,gluu))
+         endif
+         if (glvv.gt.0) then 
+            table_out(2,glvv) = table_out(2,glvv) + 1
+            print*, 'VV ',(table_out(i,glvv),i=1,3)
+            call ecris2_fst (v,zm_tmp,'VV',-1,ip2,0,1.0 ,ng,nkref,
+     $                                         table_out(1,glvv))
+         endif
+      endif
+*
+*     * Vorticity and Divergence
+*
+      if ((glqr.gt.0).or.(gldd.gt.0)) then
+         if (levtyp.ne.'G') then
+         if (glqr.gt.0) then
+            print*, 'QR ',(table_out(i,glqr),i=1,3)
+            call ecris2_fst (qr,rf,'QR',-1,ip2,0,1.0,ng,nkref,
+     $                                     table_out(1,glqr))
+         endif
+         if (gldd.gt.0) then
+            print*, 'DD ',(table_out(i,gldd),i=1,3)
+            call ecris2_fst (dd,rf,'DD',-1,ip2,0,1.0,ng,nkref,
+     $                                     table_out(1,gldd))
+         endif
+         else
+         if (glqr.gt.0) then
+            print*, 'QR ',(table_out(i,glqr),i=1,3)
+            call ecris2_fst (qr,zm_tmp,'QR',-1,ip2,0,1.0,ng,nkref,
+     $                                         table_out(1,glqr))
+         endif
+         if (gldd.gt.0) then
+            print*, 'DD ',(table_out(i,gldd),i=1,3)
+            call ecris2_fst (dd,zm_tmp,'DD',-1,ip2,0,1.0,ng,nkref,
+     $                                         table_out(1,gldd))
+         endif
+         endif
+      endif
+*
+      if (glpreg.gt.0) then
+         if (levtyp.ne.'G') then
+            call inv_vertint (dd,qs,posv(1,1,1,2),huv,ng,nkref,lnk)
+            print*, 'PREG ',(table_out(i,glpreg),i=1,3)
+            call ecris2_fst (dd,rf,'PREG',-1,ip2,0,1.0,ng,nkref,
+     $                                     table_out(1,glpreg))
+         else
+            table_out(2,glpreg) = table_out(2,glpreg) + 1
+            print*, 'PREG ',(table_out(i,glpreg),i=1,3)
+            call ecris2_fst (qs,zm_tmp,'PREG',-1,ip2,0,1.0,ng,nkref,
+     $                                         table_out(1,glpreg))
+         endif
+      endif
+*
+      call qntstar (qtsr,ntsr2,gotsr,ortsr,ht,hm,ng,0,lnk-1)
+*
+      if (glpprm.gt.0) then
+         do k=1,nkref
+         do i=1,ng
+            u(i,k) = exp(qs(i,k) * ortsr(i,k))
+         end do
+         end do
+         table_out(2,glpprm) = table_out(2,glpprm) + 1
+         print*, 'PPRM ',(table_out(i,glpprm),i=1,3)
+         call ecris2_fst (u,zm_tmp,'PPRM',-1,ip2,0,0.01,ng,nkref,
+     $                                     table_out(1,glpprm))
+      endif
+      if (glpstr.gt.0) then
+         do k=1,nkref
+         do i=1,ng
+            u(i,k) = exp(qtsr(i,k))
+         end do
+         end do
+         table_out(2,glpstr) = table_out(2,glpstr) + 1
+         print*, 'PSTR ',(table_out(i,glpstr),i=1,3)
+         call ecris2_fst (u,zm_tmp,'PSTR',-1,ip2,0,0.01,ng,nkref,
+     $                                      table_out(1,glpstr))
+      endif
+*
+      deallocate (uupres,vvpres,u,v,qr,dd)
+*----------------------------------------------------------------------
+      return
+      end

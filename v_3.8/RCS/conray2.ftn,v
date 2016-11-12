@@ -1,0 +1,131 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P  CONRAY2
+*
+      SUBROUTINE CONRAY2(DECLSC,FRFLXS,SH,DSH,n,NK,DATE,IDATIM)
+*
+#include "impnone.cdk"
+      INTEGER IDATIM(14), NK, n
+      REAL DECLSC(2),  FRFLXS(n,NK),  SH(n,NK),DSH(n,NK)
+      REAL DATE
+*
+*Author
+*          Y.Delage(Jan 1979)
+*
+*Revision
+* 001      C.Beaudoin(August 88)
+*                 Add in the common physics library
+* 002      N. Brunet  (May91)
+*                 New version of thermodynamic functions
+*                 and file of constants
+* 003      R. Benoit (August 93) 2D version for use with Local Sigma
+*
+*Object
+*          to calculate the sines and cosines of the solar
+*          declination in the day function of the year.
+*
+*Arguments
+*
+*          - Output -
+* DECLSC   sines and cosines centred on the sigma levels
+* FRFLXS   weight shared from the warming by the ozone and the
+*          cooling by the CO2 in the stratosphere.  It is assumed
+*          that the warming(cooling) crosses linearly in Z from
+*          sigma
+*
+*          - Input -
+* SH       sigma levels
+* DSH      depth of layers centred on the sigma levels
+* n        horizontal dimension
+* NK       number of sigma levels
+* DATE     day of the year
+* IDATIM   date array used for generating the date when DATE=0
+*
+**
+*
+      REAL AJOUR,RDECL,SFR
+      INTEGER K,NS,NS1
+*
+#include "consphy.cdk"
+#include "valcon.cdk"
+      REAL SIGMAS
+      SAVE SIGMAS
+      integer j
+      DATA SIGMAS / .25 /
+*-----------------------------------------------------------------------
+
+      IF(DATE.EQ.0.)  AJOUR = 30.4 * (IDATIM(2)-1) + IDATIM(3)
+      IF(DATE.NE.0.)  AJOUR =  DATE
+*
+      RDECL = .412*COS((AJOUR+10.)*2.*PI/365.25-PI)
+      DECLSC(1) = SIN(RDECL)
+      DECLSC(2) = COS(RDECL)
+*
+      do 100 j=1,n
+         NS = 0
+         SFR = 0.
+*
+ 10      NS = NS + 1
+         FRFLXS(j,NS)=DSH(j,NS)*(-ALOG(MAX(SH(j,NS),.035))+ALOG(SIGMAS))
+         SFR = SFR + FRFLXS(j,NS)
+         IF(SH(j,NS+1).GE.SIGMAS) GO TO 20
+         GO TO 10
+*
+ 20      IF(ABS(SFR) .GT. 1.E-9) GO TO 30
+*
+         FRFLXS(j,1) = 1.
+         GO TO 50
+*
+ 30      DO 40 K=1,NS
+            FRFLXS(j,K) = FRFLXS(j,K)/SFR
+ 40      CONTINUE
+
+ 50      NS1 = NS + 1
+         DO 60 K=NS1,NK
+ 60         FRFLXS(j,K) = 0.
+
+ 100  continue
+      RETURN
+*
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

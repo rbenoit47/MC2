@@ -1,0 +1,44 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.08.15.19.08;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r hauteur2
+      subroutine hauteur2 (htr,zt,hh0,htop,iscal,ni,nj,nk)
+      implicit none
+*
+      integer ni,nj,nk,iscal(2)
+      real htr(ni,nj,nk), zt(nk), hh0(ni,nj,2), htop
+*
+      integer i,j,k
+#include "h_geop.cdk"
+*
+      do k=1,nk
+      do j=1,nj
+      do i=1,ni
+         htr(i,j,k) = h_geop (zt(k),i,j)
+      end do
+      end do
+      end do
+*
+      return
+      end
+@

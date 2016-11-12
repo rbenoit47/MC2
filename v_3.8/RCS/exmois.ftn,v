@@ -1,0 +1,1078 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** S/P EXMOIS
+#include "phy_macros_f.h"
+      SUBROUTINE EXMOIS ( TP1,QP1,
+     1                    ZTE,ZQE,PS,S,CDT,VT,
+     1                    QCTPHY,QRTPHY,ZSRR,ZSSR,QC,QR,SIGD,
+     1                    NI,NK)
+*
+#include "impnone.cdk"
+*
+      INTEGER NI,NK,NKM1
+      REAL TP1(NI,NK),QP1(NI,NK)
+      REAL ZTE(NI,NK),ZQE(NI,NK),VT(NI,NK)
+      REAL PS(NI),S(NI,NK),CDT
+      REAL QCTPHY(NI,NK),QRTPHY(NI,NK)
+      REAL ZSRR(NI), ZSSR(NI)
+      REAL QC(NI,NK),QR(NI,NK),SIGD(NI,NK)
+*
+*Author
+*          Stephane Belair  July 1991
+*
+*Revision
+* 001      S. Belair (Sept. 1998) 
+*          Output solid precipitation rate (variable ZSSR)
+* 002      B. Bilodeau (Jan 2001)
+*          Automatic arrays
+*
+*Object
+*          to calculate the temperature, humidity, cloud
+*          water/ice and rainwater/snow tendencies due to
+*          explicit condensation and evaporation of
+*          water vapour, cloud water/cloud ice and
+*          rainwater/snow.
+*
+*Arguments
+*
+*          - Input -
+* TP1      temperature at time (T+1)
+* QP1      specific humidity at time (T+1)
+*
+*          - Input/Output -
+* ZTE      convective tendencies for temperature
+* ZQE      convective tendencies for specific humidity
+*
+*          - Input -
+* PS       surface pressure at time (T+1)
+* S        sigma levels of the RFE model
+* CDT      model timestep (s) times a factor (1 or 2)
+*          for time integration scheme (see s/r param)
+*
+*          - Output -
+* VT       terminal velocity of rainwater/snow
+* QCTPHY   tendency of cloud water/cloud ice due to
+*          explicit condensation/evaporation(kg/kg/s)
+* QRTPHY   tendency of rainwater/snow due to
+*          explicit condensation/evaporation(kg/kg/s)
+* ZSRR     explicit liquid precipitation rate (kg/M**2/s)
+* ZSSR     explicit solid precipitation rate (kg/M**2/s)
+*
+*          - Input -
+*
+* QC       cloud water mixing ratio at time T
+* QR       rain water mixing ratio at time T
+* SIGD     D(sigma)/DT at time (T+1)
+* NI       X dimension of the model grid
+* NK       Z dimension of the model grid
+* J        west-east slab number
+* KOUNT    current timestep in the model
+*
+*Notes
+*
+*     Features
+*     ========
+*
+*     - Virtual temperature formulation
+*     - Hydrostatic water loading
+*     - condensation and evaporation
+*     - freezing and melting
+*     - sublimation and deposition
+*     - phase demarcation between cloud water and
+*       cloud ice / between rainwater and snow is
+*         at the 0 degree isotherm
+*     - explicit predictive equations for:
+*         QC: cloud water/cloud ice
+*         QR: rainwater/snow
+*
+*     Interface
+*     =========
+*
+*     SUBROUTINE EXMOIS IS CALLED FROM VKUOCON
+*
+*     Steps
+*     =====
+*
+*     A) Definition of all the parameters
+*
+*        preliminary calculations
+*
+*     B) calculation of the production terms
+*        ( PGCI,PCED,PAUT,PACR,PRED )
+*        using values of T,Q at the current time (T+1)
+*
+*     D) calculations of the terminal velocity
+*        and freezing terms ( TVTEND and FRTEND )
+*
+*     E) calculation of temperature and specific
+*        humidity tendencies (DTEX and DQEX)
+*
+*     F) calculation of cloud water/cloud ice and
+*        rainwater/snow tendencies ( QCTPHY and QRTPHY )
+*
+*     G) calculation of explicit precipitation rate
+*        (liquid: ZSRR, and solid: ZSSR )
+*
+*
+*     References
+*     ==========
+*
+*     The main reference:
+*
+*     ZHANG,D.-L., 1989: The effect of parameterized
+*       ice microphysics on the simulation of
+*       vortex circulation with a mesoscale
+*       hydrostatic model, TELLUS, 41A, 132-147
+*
+*     Other references:
+*
+*     ZHANG,D.-L. ET AL, 1988: A Comparison of
+*       explicit and implicit predictions of
+*       convective and stratiform precipitating
+*       systems with a meso-beta scale numerical
+*       model, Q.J.R.MET.SOC., 114, 31-60
+*
+*     RUTLEDGE, S.A., AND P.V. HOBBS, 1983:
+*       J.OF ATMOS. SCI., 40, 1185-1206
+*
+*     LIN, Y.-L., ET AL, 1983:  Bulk parameterization
+*       of the snow field in a cloud model
+*       J.OF CLIMATE AND APP. MET., 22, 1065-1092
+**
+*
+      INTEGER I,K,ITOTAL,KM1,KP1,IFLAG
+*
+      REAL AJUS,AS,AWW,BETA,BS,BS4,BWW,BW4
+      REAL CP,CPM,DELQV,DENOM,DF
+      REAL DTEX,DQEX,DUMMY,ES,ESI,EW
+      REAL FRTEND,G,GAMBS2,GAMBW2,GAMMA2
+      REAL GAM3BS,GAM3BW,GAM4BS,GAM4BW
+      REAL KA,K1,LAMM1,LF,LS,LV
+      REAL MI0,M0,NC,NS,NU,NW,N0
+      REAL P,PACR,PACRS,PACRW,PAUT,PCED,PGCI
+      REAL PRED,PREDS,PREDW,Q,QCNEW
+      REAL QC0,QI0,QRFIN,QRNEW,QVNEW,QVS
+      REAL R,RH,RHO,RHOL,RHOS,RV
+      REAL SC,SUPICE,T,TCEL,TNEW,TV,TVTEND,T0,T0COND
+      REAL VTW,VTS,WATER,WF
+*
+      LOGICAL ICE
+*
+*
+      EXTERNAL GAMMA2
+*
+*
+*
+************************************************************************
+*     AUTOMATIC ARRAYS
+************************************************************************
+*
+      AUTOMATIC ( QVS    , REAL , (NI,NK) )
+      AUTOMATIC ( CPM    , REAL , (NI,NK) )
+      AUTOMATIC ( RHO    , REAL , (NI,NK) )
+      AUTOMATIC ( LAMM1  , REAL , (NI,NK) )
+      AUTOMATIC ( P      , REAL , (NI,NK) )
+      AUTOMATIC ( TV     , REAL , (NI,NK) )
+      AUTOMATIC ( ES     , REAL , (NI,NK) )
+      AUTOMATIC ( NC     , REAL , (NI,NK) )
+      AUTOMATIC ( QI0    , REAL , (NI,NK) )
+      AUTOMATIC ( RH     , REAL , (NI,NK) )
+      AUTOMATIC ( PGCI   , REAL , (NI,NK) )
+      AUTOMATIC ( PAUT   , REAL , (NI,NK) )
+      AUTOMATIC ( PCED   , REAL , (NI,NK) )
+      AUTOMATIC ( PRED   , REAL , (NI,NK) )
+      AUTOMATIC ( PACR   , REAL , (NI,NK) )
+      AUTOMATIC ( PREDW  , REAL , (NI,NK) )
+      AUTOMATIC ( PREDS  , REAL , (NI,NK) )
+      AUTOMATIC ( TVTEND , REAL , (NI,NK) )
+      AUTOMATIC ( FRTEND , REAL , (NI,NK) )
+      AUTOMATIC ( DTEX   , REAL , (NI,NK) )
+      AUTOMATIC ( DQEX   , REAL , (NI,NK) )
+      AUTOMATIC ( AJUS   , REAL , (NI,NK) )
+      AUTOMATIC ( DENOM  , REAL , (NI,NK) )
+      AUTOMATIC ( QVNEW  , REAL , (NI,NK) )
+      AUTOMATIC ( QCNEW  , REAL , (NI,NK) )
+      AUTOMATIC ( TNEW   , REAL , (NI,NK) )
+      AUTOMATIC ( QRNEW  , REAL , (NI,NK) )
+      AUTOMATIC ( QRFIN  , REAL , (NI,NK) )
+      AUTOMATIC ( KA     , REAL , (NI,NK) )
+      AUTOMATIC ( DF     , REAL , (NI,NK) )
+      AUTOMATIC ( SC     , REAL , (NI,NK) )
+      AUTOMATIC ( Q      , REAL , (NI,NK) )
+      AUTOMATIC ( T      , REAL , (NI,NK) )
+      AUTOMATIC ( WF     , REAL , (NI,NK) )
+*
+************************************************************************
+*
+#include "consphy.cdk"
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*
+*
+*
+* SWITCH PARAMETERS:
+* ================
+*
+*   T0COND = 273.16
+*   ICE = .TRUE.        => ICE MICROPHYSICS IS TREATED
+*
+*   T0COND = 0.0
+*   ICE = .FALSE        => NO ICE MICROPHYSICS
+*
+      T0COND = 273.16
+      DATA ICE /.TRUE./
+*
+*
+*  A) DEFINITION OF ALL THE PARAMETERS
+*     ================================
+*
+*
+      LV    = 2.50E6
+*           = LATENT HEAT OF VAPORIZATION (J/KG)
+*
+      CP    = 1.005E3
+*           = SPECIFIC HEAT OF AIR AT CONSTANT PRESSURE (J/KG K)
+*
+      RV    = 461.
+*           = GAS CONSTANT FOR WATER VAPOR (J/KG K)
+*
+      M0    = 6.26E-13
+*           = INITIAL MASS OF CLOUD ICE CRYSTAL (KG)
+*
+      N0    = 1.0 E-2
+*           = CONSTANT IN ICE CRYSTAL CONCENTRATION (/M**3)
+*
+      BETA  = 0.6
+*           = CONSTANT IN ICE CRYSTAL CONCENTRATION (/K)
+*
+      T0    = 273.16
+*           = REFERENCE TEMPERATURE (K)
+*
+      R     = 287.05
+*           = GAS CONSTANT FOR AIR
+*
+      K1    = 0.001
+*           = RATE COEFFICIENT OF AUTOCONVERSION OF CLOUD
+*             WATER INTO RAINWATER (/S)
+*
+      MI0   = 9.4E-10
+*           = MAXIMUM MASS OF CLOUD ICE CRYSTAL (KG)
+*
+      QC0   = 5.0E-4
+*           = MASS TRESHOLD CLOUD WATER FOR
+*             AUTOCONVERSION (KG/KG)
+*
+      LS    = 2.8336E6
+*           = LATENT HEAT OF SUBLIMATION OF WATER SUBSTANCE
+*
+      NW    = 8.0E6
+*           = INTERCEPT VALUE IN RAINDROP SIZE DISTRIBUTION
+*             ( /M**4 )
+*
+      AWW   = 842.
+*           = CONSTANT FOR EVAPORATION OF RAINWATER (M**(1-BWW)/S)
+*
+      NU    = 1.718E-5
+*           = KINETIC VISCOSITY OF AIR ( KG/M/S )
+*
+      BWW   = 0.8
+*           = CONSTANT FOR EVAPORATION OF RAINWATER
+*
+      RHOL  = 1.0E3
+*           = DENSITY OF LIQUID WATER (KG/M**3)
+*
+      NS    = 3.0E6
+*           = INTERCEPT VALUE OF SNOWFLAKE SIZE
+*             DISTRIBUTION (/M**4)
+*
+      AS    = 27.2
+*           = CONSTANT IN DEPOSITIONAL GROWTH OF SNOW
+*             ( M**(1-BS)/S )
+*
+      BS    = 0.25
+*           = CONSTANT IN DEPOSITIONAL GROWTH OF SNOW
+*
+      RHOS  = 100.0
+*           = DENSITY OF SNOW (KG/M**3)
+*
+      EW    = 0.8
+*           = RAIN/CLOUD WATER COLLECTION EFFICIENCY
+*
+      ESI   = 0.6
+*           = SNOW/ICE CRYSTAL COLLECTION EFFICIENCY
+*
+      G     = 9.80616
+*           = GRAVITATIONAL CONSTANT
+*
+      LF    = 3.34E5
+*           = LATENT HEAT OF FUSION FOR WATER
+*           = LS - LV
+*
+*  PRELIMINARY CALCULATIONS
+*  ========================
+*
+*
+        DO 10 K=1,NK
+        DO 10 I=1,NI
+* =====================
+*
+*...THE VALUES OF T AND Q ARE TAKEN AT TIME LEVEL T+1
+*
+      T(I,K) = TP1(I,K)
+      Q(I,K) = QP1(I,K)
+*
+*...NO NEGATIVE VALUES OF Q ARE POSSIBLE...
+*
+      Q(I,K) = AMAX1( Q(I,K), 1.0E-10 )
+*
+*  SPECIFIC HEAT AT CONSTANT
+*  PRESSURE FOR MOIST AIR
+*
+      CPM(I,K) = CP*( 1.0+ 0.81*Q(I,K) )
+*
+*  THE PRESSURE
+*      ========        ===
+*
+          P(I,K) = S(I,K)*PS(I)
+*
+*  THE VIRTUAL TEMPERATURE
+*      ===================
+*
+          TV(I,K) = FOTVT( T(I,K),Q(I,K) )
+*
+*
+*
+*  THE AIR  DENSITY
+*      ============
+*
+          RHO(I,K) = P(I,K)/(R*TV(I,K))
+*
+*
+ 10    CONTINUE
+*
+*
+*  CALCULATION OF THE WEIGHTING FUNCTION APPEARING
+*  IN THE CALCULATION OF THE TERMINAL VELOCITY
+*
+*
+      DO 15 K=1,NK
+      DO 15 I=1,NI
+*
+         WF(I,K) = ( 1.0/S(I,K) )**.25
+*
+ 15   CONTINUE
+*
+*
+      DO 20 K=1,NK
+      DO 20 I=1,NI
+*
+        TCEL = T(I,K)-T0
+*
+*...CALCULATE THE THERMAL CONDUCTIVITY OF AIR (KA IN J/M/S/K)
+*   PRUPPACHER AND KLETT... PAGE 418
+*
+        KA(I,K) = 0.023818 + 7.12E-5*TCEL
+*
+*...CALCULATE THE DIFFUSITIVITY OF WATER VAPOR IN AIR
+*   ( DK IN M*M/S); PRUPPACHER AND KLETT... PAGE 413
+*
+        DF(I,K) = 2.11E-5 *( T(I,K)/T0 )**1.94 *
+     1            ( 101325.0/P(I,K) )
+*
+*...CALCULATE THE SCHMIDT NUMBER...
+*
+        SC(I,K) = NU / DF(I,K)
+*
+ 20   CONTINUE
+*
+*
+*
+      GAM4BS= GAMMA2(4.0+BS)
+      GAM4BW= GAMMA2(4.0+BWW)
+      GAM3BS= GAMMA2(3.0+BS)
+      GAM3BW= GAMMA2(3.0+BWW)
+      GAMBS2= GAMMA2(BS/2.0+2.5)
+      GAMBW2= GAMMA2(BWW/2.0+2.5)
+*
+      BW4   = BWW/4.0
+      BS4   = BS/4.0
+*
+      VTW = 0.50*AWW*GAM4BW / 6.0
+      VTS = 0.50*AS*GAM4BS / 6.0
+*
+      DO 22 K=1,NK
+      DO 22 I=1,NI
+      PREDW(I,K) = 0.32*SC(I,K)**.333*GAMBW2*(AWW/NU)**0.5
+      PREDS(I,K) = 0.32*SC(I,K)**.333*GAMBS2*(AS/NU)**0.5
+ 22   CONTINUE
+*
+      PACRW = 0.25*PI*EW*NW*AWW*GAM3BW
+      PACRS = 0.25*PI*ESI*NS*AS*GAM3BS
+*
+      NKM1 = NK - 1
+*
+*
+* THIS FORMULATION IS CONSISTENT WITH THE FORMULATION
+* IN THE FRITSCH-CHAPPELL SCHEME
+*
+      DO 300 K=1,NK
+      DO 300 I=1,NI
+* ====================
+*
+*
+      IF (T(I,K).GT.T0COND) THEN
+*
+      ELSE
+*
+*  NUMBER CONCENTRATION OF CLOUD ICE CRYSTALS
+*
+*
+          NC(I,K)=N0*EXP( BETA*( T0-T(I,K) ) )
+*
+*  QIO: CONVERSION OF CLOUD
+*       ICE TO SNOW TRESHOLD
+*
+          QI0(I,K) = MI0*NC(I,K)/RHO(I,K)
+*
+*
+      ENDIF
+*
+* SATURATION SPECIFIC HUMIDITY AND RELATIVE HUMIDITY
+*
+      IF (ICE) THEN
+*
+        QVS(I,K) = FOQST( T(I,K),P(I,K) )
+        RH(I,K)  = FOHR ( Q(I,K),T(I,K),P(I,K) )
+*
+      ELSE
+*
+        QVS(I,K) = FOQSA( T(I,K),P(I,K) )
+        RH(I,K)  = FOHRA( Q(I,K),T(I,K),P(I,K) )
+*
+      ENDIF
+*
+ 300   CONTINUE
+*
+*
+*
+*
+      DO 320 K=1,NK
+      DO 320 I=1,NI
+* ==================
+*
+*  INVERSE SLOPE OF RAINDROP AND
+*  SNOWFLAKE SIZE DISTRIBUTION
+*
+       IF (T(I,K).GT.T0COND) THEN
+*
+*  SLOPE OF RAINDROP SIZE DISTRIBUTION
+*  ===================================
+*
+*
+      LAMM1(I,K) = ( (RHO(I,K)*QR(I,K)) /
+     1              ( PI*RHOL*NW ) )
+*
+*
+*  THE TERMINAL VELOCITY
+*      =================
+*
+*
+         VT(I,K) =  VTW*0.4*
+     1          LAMM1(I,K)**(BW4) * WF(I,K)
+*
+*
+*
+      DENOM(I,K) = RHO(I,K) * ( LV*LV/(KA(I,K)
+     1                *RV*T(I,K)*T(I,K))
+     1                + 1.0/(RHO(I,K)*QVS(I,K)*DF(I,K)) )
+*
+*
+*
+      ELSE
+*
+*  SLOPE OF SNOWFLAKE SIZE DISTRIBUTION
+*  ====================================
+*...WE DO NOT ALLOW LAMM1 TO BE ZERO...USE DUMMY
+*
+        LAMM1(I,K) = ( ( RHO(I,K)*QR(I,K) ) /
+     1              ( PI*RHOS*NS ) )
+*
+         VT(I,K) =    VTS*0.4*
+     1          LAMM1(I,K)**(BS4)* WF(I,K)
+*
+      DENOM(I,K) = RHO(I,K) * ( LS*LS/(KA(I,K)
+     1             *RV*T(I,K)*T(I,K))
+     1                + 1.0/(RHO(I,K)*QVS(I,K)*DF(I,K)) )
+*
+      ENDIF
+*
+ 320  CONTINUE
+*
+*  CALCULATION OF THE PRODUCTION TERMS
+*  FOR EACH TERM, WE USE THE VALUES AT T+1
+* ============================================
+*
+*  A DETAILED DESCRIPTION OF ALL THESE TERMS IS GIVEN IN
+*  ZHANG 1989, WHICH IS THE MAIN REFERENCE FOR THE EXPLICIT
+*  MOISTURE SCHEME.
+*
+*  IN THE SUBROUTINE, OTHER REFERENCES ARE GIVEN TO COMPLETE THE
+*  MAIN REFERENCE.
+*
+*
+      DO 350 K=1,NK
+      DO 350 I=1,NI
+* ===================
+*
+*  PGCI = GENERATION OF CLOUD WATER OR CLOUD ICE
+*
+      IF (T(I,K).GT.T0COND) THEN
+*
+*  BASED ON EQUATION A6 OF RUTLEDGE ET AL
+*
+      PGCI(I,K) = (Q(I,K)-QVS(I,K)) /CDT/
+     1    (1.0 + LV*LV*QVS(I,K)/(CPM(I,K)*RV*T(I,K)*T(I,K) ) )
+      PCED(I,K) = -PGCI(I,K)
+*
+      ELSE
+*
+*  FOR THE CASE OF CLOUD ICE
+*  BASED ON EQ (A15) OF RUTLEDGE ET AL
+*
+      PGCI(I,K) =  M0*NC(I,K) /(CDT*RHO(I,K))
+*
+      PGCI(I,K) = AMIN1 ( PGCI(I,K) ,
+     1           (Q(I,K)-QVS(I,K))/CDT )
+*
+      ENDIF
+*
+      PGCI(I,K) = AMAX1 ( PGCI(I,K) , 0.0 )
+*
+ 350  CONTINUE
+*
+      DO 360 K=1,NK
+      DO 360 I=1,NI
+* ====================
+*
+      IF (T(I,K).GT.T0COND) THEN
+*
+*  AUTOCONVERSION OF CLOUD WATER
+*          TO RAINWATER
+*  EQUATION (A7) OF RUTLEDGE ET AL
+*
+           PAUT(I,K) = AMAX1 (0.0,
+     1                K1*(QC(I,K)-QC0) )
+*
+      ELSE
+*
+*  AUTOCONVERSION OF CLOUD ICE
+*           TO SNOW
+*  EQ (A19) OF RUTLEDGE ET AL
+*
+           PAUT(I,K) = AMAX1 ( 0.0 ,
+     1                (QC(I,K)-QI0(I,K))/
+     1                      CDT )
+*
+      ENDIF
+*
+ 360  CONTINUE
+*
+*
+      DO 370 K=1,NK
+      DO 370 I=1,NI
+* ====================
+*
+      IF (T(I,K).GT.T0COND) THEN
+*
+*  PCED: EVAPORATION OF CLOUD WATER
+*  EQ (A6) OF RUTLEDGE ET AL
+*
+* THIS PART IS ALREADY CALCULATED IN LOOP 350
+*
+      PCED(I,K) = AMAX1( PCED(I,K) , 0.0 )
+*
+      ELSE
+*
+*  PCED: DEPOSITIONAL GROWTH/SUBLIMATION OF CLOUD ICE
+*  EQ (A18) OF RUTLEDGE ET AL
+*  EQ (31) OF LIN AND ORVILLE
+*
+      PCED(I,K) =
+     1           ( 65.2*(1.0-RH(I,K))*( RHO(I,K)*QC(I,K)
+     1            *NC(I,K) )**0.5 ) / DENOM(I,K)
+*
+      ENDIF
+*
+ 370  CONTINUE
+*
+      DO 380 K=1,NK
+      DO 380 I=1,NI
+* ====================
+*
+      IF (T(I,K).GT.T0COND) THEN
+*
+*  PRED
+*  ====
+*       EVAPORATION OF RAINWATER
+*
+*  EQ (A12) OF RUTLEDGE ET AL
+*  EQ 52 OF LIN AND ORVILLE
+*
+      PRED(I,K) = ( 2.0*PI*( 1.0-RH(I,K) )*NW*
+     1             ( 0.78*LAMM1(I,K)**0.5 + PREDW(I,K)*
+     1               LAMM1(I,K)**(BW4/2.+5./8.) ) )/DENOM(I,K)
+*
+      PRED(I,K) = AMAX1( PRED(I,K) , 0.0 )
+*
+      ELSE
+*
+*  PRED
+*  ====
+*       DEPOSITIONAL GROWTH/SUBLIMATION OF SNOW
+*
+*  EQ (A26) OF RUTLEDGE ET AL
+*  EQ (32)  OF LIN AND ORVILLE
+*
+      PRED(I,K) =
+     1           ( 2.0*PI*( 1.0-RH(I,K) )*NS*
+     1             ( 0.78*LAMM1(I,K)**0.5 + PREDS(I,K)*
+     1               LAMM1(I,K)**(BS4/2.+5./8.) ) )/ DENOM(I,K)
+*
+      ENDIF
+*
+ 380  CONTINUE
+*
+      DO 385 K=1,NK
+      DO 385 I=1,NI
+*
+      IF ( RH(I,K).LT.1.0 ) THEN
+*
+*  FOR THE UNSATURATED CASE:
+*      THE EVAPORATION OF CLOUD WATER/ICE AND
+*      RAINWATER CANNOT EXCEED QC AND QR AVAILABLE
+*
+         PCED(I,K) = AMIN1 ( PCED(I,K),
+     1                QC(I,K)/CDT )
+*
+         PRED(I,K) = AMIN1 ( PRED(I,K) ,
+     1                QR(I,K)/CDT )
+*
+      ELSE
+*
+        IF ( T(I,K).LT.T0COND ) THEN
+*
+* FOR THE SUPERSATURATED CASE, THE REMOVAL OF WATER VAPOR
+* FOR THE GROWTH OF ICE CRYSTALS AND SNOW CANNOT EXCEED
+* THE AVAILABLE MOISTURE:
+*
+*       ( QV - QVS ) / CDT
+*
+         SUPICE = ( QVS(I,K)-Q(I,K) ) /CDT + PGCI(I,K)
+*
+         PCED(I,K) = AMAX1( PCED(I,K),SUPICE )
+         PRED(I,K) = AMAX1( PRED(I,K),SUPICE-PCED(I,K) )
+*
+*
+         PCED(I,K) = AMIN1( PCED(I,K), 0.0 )
+         PRED(I,K) = AMIN1( PRED(I,K), 0.0 )
+*
+        ENDIF
+*
+      ENDIF
+*
+ 385  CONTINUE
+*
+      DO 390 K=1,NK
+      DO 390 I=1,NI
+* ====================
+*  PACR
+*  ====
+*      ACCRETION OF CLOUD WATER BY RAINDROPS OR
+*      ACCRETION OF CLOUD ICE BY SNOW...
+*
+*  EQ (A9) OF RUTLEDGE ET AL
+*  EQ (51) OF LIN AND ORVILLE
+*
+      IF (QR(I,K).GT.1.0E-10) THEN
+*
+      IF (T(I,K).GT.T0COND) THEN
+*
+       PACR(I,K) =
+     1         PACRW*QC(I,K)*
+     1          LAMM1(I,K)**(3.0/4.0+BW4)
+*
+      ELSE
+*
+       PACR(I,K) =
+     1       PACRS*QC(I,K)*
+     1          LAMM1(I,K)**(3.0/4.0+BS4)
+*
+      ENDIF
+*
+      ELSE
+*
+       PACR(I,K) = 0.0
+*
+      ENDIF
+*
+ 390  CONTINUE
+*
+*  MAKE SURE THAT ALL SINK TERMS DO NOT EXCEED
+*  AVAILABLE CLOUD ICE/WATER
+*
+      DO 52 K=1,NK
+       DO 52 I=1,NI
+* ====================
+*
+         DUMMY = (PACR(I,K)+PAUT(I,K)+PCED(I,K)-PGCI(I,K))*CDT
+*
+         IF ( DUMMY.GT.QC(I,K) ) THEN
+*
+              PACR(I,K) = PACR(I,K)*QC(I,K)/DUMMY
+              PAUT(I,K) = PAUT(I,K)*QC(I,K)/DUMMY
+              PCED(I,K) = PCED(I,K)*QC(I,K)/DUMMY
+              PGCI(I,K) = PGCI(I,K)*QC(I,K)/DUMMY
+*
+         ENDIF
+*
+ 52   CONTINUE
+*
+*  NOTE
+*  ====
+*  THIS SPECIAL ADJUSTMENT ONLY OCCURS FOR THE CLOUD WATER/
+*  ICE.  FOR THE OTHER TERMS, IT IS ALREADY TAKEN CARE OF
+*  IN THE FORMULATION OF THE PRODUCTION TERMS
+*
+*  E) CALCULATION OF THE TEMPERATURE AND SPECIFIC
+*     HUMIDITY TENDENCIES
+*
+*  1) TEMPERATURE TENDENCY
+*     ====================
+*   DT/DT = ADVECTION + L/CP ( GENERATION OF CLOUD
+*           WATER/ICE - EVAPORATION OF CLOUD WATER/ICE
+*         - EVAPORATION OF RAINWATER/SNOW ) + FREEZING/MELTING
+*           OF RAINWATER/SNOW AND CLOUD WATER/ICE
+*
+      DO 60 K=1,NK
+       DO 60 I=1,NI
+* ====================
+*
+       IF (T(I,K).GT.T0COND) THEN
+*
+       DTEX (I,K) =
+     1                 LV/CPM(I,K) *
+     1           ( PGCI(I,K)-PCED(I,K)-PRED(I,K) )
+*
+       ELSE
+*
+       DTEX (I,K) =
+     1                    LS/CPM(I,K) *
+     1           ( PGCI(I,K)-PCED(I,K)-PRED(I,K) )
+*
+       ENDIF
+*
+ 60    CONTINUE
+*
+*  2) SPECIFIC HUMIDITY TENDENCY
+*     ==========================
+*
+*  DQ/DT = ADVECTION + EVAPORATION OF CLOUD WATER/ICE +
+*          EVAPORATION OF RAINWATER/SNOW - GENERATION OF
+*          CLOUD WATER/ICE
+*
+      DO 70 K=1,NK
+       DO 70 I=1,NI
+* ====================
+*
+       DQEX(I,K) =
+     1                PCED(I,K) + PRED(I,K)
+     1                    -PGCI(I,K)
+*
+ 70    CONTINUE
+*
+* E) CALCULATION OF CLOUD WATER/ICE AND RAINWATER/SNOW
+*    TENDENCIES
+*
+* 1) CLOUD WATER/ICE TENDENCY
+*    ===============
+*
+* DQC/DT = ADVECTION + GENERATION OF CLOUD WATER/ICE
+*        - EVAPORATION OF CLOUD WATER/ICE
+*        - AUTOCONVERSION OF CLOUD WATER/ICE TO RAINWATER/SNOW
+*        - ACCRETION OF CLOUD WATER/ICE BY RAINWATER/SNOW
+*
+      DO 80 K=1,NK
+       DO 80 I=1,NI
+* ====================
+*
+       QCTPHY(I,K) = PGCI(I,K) - PCED(I,K) - PAUT(I,K)
+     1             - PACR(I,K)
+*
+ 80   CONTINUE
+*
+*    RAINWATER/SNOW TENDENCY
+*    ==============
+*
+* DQR/DT = ADVECTION
+*        + AUTOCONVERSION OF CLOUD WATER/ICE TO RAINWATER/SNOW
+*        + ACCRETION OF CLOUD WATER/ICE BY RAINWATER/SNOW
+*        - EVAPORATION OF RAINWATER/SNOW
+*        + TERMINAL VELOCITY TERM
+
+      DO 90 K=1,NK
+       DO 90 I=1,NI
+* ====================
+*
+       QRTPHY(I,K) =
+     1           PAUT(I,K) + PACR(I,K) - PRED(I,K)
+*
+ 90    CONTINUE
+*
+*
+*  AFTER ALL THE TENDENCY TERMS ARE CALCULATED,
+*  WE PREVENT OVERSHOOTING FOR THE WATER VAPOR OR
+*  THE CLOUD WATER/ICE...
+*
+*  THE INTERMEDIATE VALUES ARE:
+*
+*  QCNEW: CLOUD WATER/ICE
+*  QVNEW: WATER VAPOR
+*  TNEW : TEMPERATURE
+*  QRNEW: RAINWATER/SNOW
+*  QRFIN: FINAL VALUE OF RAINWATER/SNOW AFTER THE FALLOUT
+*
+      DO 410 K=1,NK
+      DO 410 I=1,NI
+*
+       QVNEW(I,K) = QP1(I,K) + CDT* DQEX(I,K)
+       QCNEW(I,K) = QC(I,K) + CDT*QCTPHY(I,K)
+       QCNEW(I,K) = AMAX1( QCNEW(I,K),0.0 )
+       TNEW(I,K)  = TP1(I,K) + CDT* DTEX(I,K)
+       QRNEW(I,K) = QR(I,K) + CDT*QRTPHY(I,K)
+       QRNEW(I,K) = AMAX1( QRNEW(I,K),0.0 )
+*
+ 410  CONTINUE
+*
+*  THE NEW SATURATION SPECIFIC HUMIDITY...
+*
+      DO 420 K=1,NK
+      DO 420 I=1,NI
+*
+        IF (ICE) THEN
+          QVS(I,K) = FOQST( TNEW(I,K),P(I,K) )
+        ELSE
+          QVS(I,K) = FOQSA( TNEW(I,K),P(I,K) )
+        ENDIF
+*
+ 420  CONTINUE
+*
+*  ADJUSTMENT OF THE CLOUD WATER/ICE OR THE WATER VAPOR...
+*
+      DO 430 K=1,NK
+      DO 430 I=1,NI
+*
+        DELQV = ( QVNEW(I,K)-QVS(I,K) )/
+     1          ( 1.0 + LV*LV*QVS(I,K) /
+     2          ( CPM(I,K)*RV*TNEW(I,K)*TNEW(I,K) ) )
+*
+        WATER = QCNEW(I,K) + DELQV
+*
+        IF ( WATER.GT.0.0) THEN
+*
+         DUMMY = DELQV/CDT
+*
+        ELSE
+*
+         DUMMY = -QCNEW(I,K)/CDT
+*
+        ENDIF
+*
+        DQEX(I,K) = DQEX(I,K) - DUMMY
+*
+        QCTPHY(I,K) = QCTPHY(I,K) + DUMMY
+*
+          DTEX(I,K) = DTEX(I,K) + LV*DUMMY/CPM(I,K)
+*
+ 430  CONTINUE
+*
+*...SAME PROCEDURE IS APPLIED FOR THE RAINWATER/SNOW
+*
+      DO 415 K=1,NK
+      DO 415 I=1,NI
+*
+       QVNEW(I,K) = QP1(I,K) + CDT* DQEX(I,K)
+       QCNEW(I,K) = QC(I,K) + CDT*QCTPHY(I,K)
+       QCNEW(I,K) = AMAX1( QCNEW(I,K),0.0 )
+       TNEW(I,K)  = TP1(I,K) + CDT* DTEX(I,K)
+       QRNEW(I,K) = QR(I,K) + CDT*QRTPHY(I,K)
+       QRNEW(I,K) = AMAX1( QRNEW(I,K),0.0 )
+*
+ 415  CONTINUE
+*
+*  THE NEW SATURATION SPECIFIC HUMIDITY...
+*
+      DO 425 K=1,NK
+      DO 425 I=1,NI
+*
+        IF (ICE) THEN
+          QVS(I,K) = FOQST( TNEW(I,K),P(I,K) )
+        ELSE
+          QVS(I,K) = FOQSA( TNEW(I,K),P(I,K) )
+        ENDIF
+*
+ 425  CONTINUE
+*
+*  ADJUSTMENT OF THE RAINWATER/SNOW OR THE WATER VAPOR...
+*
+      DO 435 K=1,NK
+      DO 435 I=1,NI
+*
+        DELQV = ( QVNEW(I,K)-QVS(I,K) )/
+     1          ( 1.0 + LV*LV*QVS(I,K) /
+     2          ( CPM(I,K)*RV*TNEW(I,K)*TNEW(I,K) ) )
+*
+        WATER = QRNEW(I,K) + DELQV
+*
+        IF ( WATER.GT.0.0) THEN
+*
+         DUMMY = DELQV/CDT
+*
+        ELSE
+*
+         DUMMY = -QRNEW(I,K)/CDT
+*
+        ENDIF
+*
+        DQEX(I,K) = DQEX(I,K) - DUMMY
+*
+        QRTPHY(I,K) = QRTPHY(I,K) + DUMMY
+*
+          DTEX(I,K) = DTEX(I,K) + LV*DUMMY/CPM(I,K)
+*
+ 435  CONTINUE
+*
+*  CALCULATION OF THE FREEZING/MELTING TERM
+*                     ================
+      DO 50 I=1,NI
+        IFLAG = 0
+        DO 53 K=1,NK
+          FRTEND(I,K) = 0.0
+ 53     CONTINUE
+        DO 54 K=1,NK
+          IF ( T(I,K).GT.T0COND ) THEN
+            IFLAG = 1
+            GOTO 56
+          ENDIF
+ 54     CONTINUE
+ 56     CONTINUE
+        KP1 = MIN0 ( K+1,NK )
+        KM1 = MAX0 ( 1,K-1 )
+        IF (SIGD(I,K).LT.0.0.AND.IFLAG.EQ.1) THEN
+*
+          FRTEND (I,KM1) =
+     1       -LF*( SIGD(I,K)*( QC(I,K) +
+     1        QR(I,K) ) + RHO(I,K)*G*QR(I,K)*VT(I,K)
+     1       / PS(I) )
+     1       / ( CPM(I,K)*0.5*( S(I,KP1)-S(I,KM1) ) )
+*
+        ENDIF
+*
+        IF (SIGD(I,K).GE.0.0.AND.IFLAG.EQ.1) THEN
+*
+          FRTEND (I,K) =
+     1       -LF*( SIGD(I,K)*( QC(I,K) +
+     1        QR(I,K) ) + RHO(I,K)*G*QR(I,K)*VT(I,K)
+     1       / PS(I) )
+     1       / ( CPM(I,K)*0.5*( S(I,KP1)-S(I,KM1) ) )
+*
+        ENDIF
+*
+ 50   CONTINUE
+*
+      DO 440 K=1,NK
+      DO 440 I=1,NI
+        DTEX(I,K)    = DTEX(I,K) + FRTEND(I,K)
+ 440  CONTINUE
+*
+* G) CALCULATION OF THE STRATIFORM (EXPLICIT) PRECIPITATION
+*   ZSRR IS IN THE FLUX FORM (KG/M**2/S)
+*   THE QUANTITY OF WATER PRECIPITATING IS GIVEN BY THE
+*   THE FALLOUT TERM (TVTEND) AT THE LOWEST LEVEL (NK)
+*
+      DO 100 I=1,NI
+* ====================
+*
+*                           Temperature above 0. C, then
+*                           precipitation reaching the ground
+*                           is liquid.
+          ZSSR(I) = 0.0
+*
+          ZSRR(I) = RHO(I,NK)*QRNEW(I,NK)*VT(I,NK)
+          ZSRR(I) = AMAX1( ZSRR(I) , 0.0 )
+*
+*
+*                           Temperature less then 0.C, then
+*                           precipitation reaching the ground
+*                           is solid.
+*
+          IF (T(I,NK).LT.T0COND) THEN
+            ZSSR(I) = ZSRR(I)
+            ZSRR(I) = 0.0
+          END IF
+*
+ 100  CONTINUE
+*
+      DO 102 K=1,NK
+      DO 102 I=1,NI
+*
+        ZTE(I,K) = DTEX(I,K)
+        ZQE(I,K) = DQEX(I,K)
+*
+ 102  CONTINUE
+*
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,40 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r xpyp_l
+*
+      subroutine xpyp_l (xp,yp,xr,yr,ofi,ofj,delta,ni,nj)
+      implicit none
+*     
+      integer ni,nj,ofi,ofj
+      real xp(ni),yp(nj)
+      real*8 xr,yr,delta,xp_8(ni),yp_8(nj)
+**
+      integer i,j
+      real*8 con
+*
+      con = delta
+*
+      xp_8(1) = xr
+      do i=1,ofi
+         xp_8(1) = xp_8(1) + con
+      end do
+      if (xp_8(1).lt.0.d0) xp(1)=xp(1)+360.
+      do i=2,ni
+         xp_8(i) = xp_8(i-1) + con
+      end do
+      do i=1,ni
+         xp(i) = xp_8(i)
+      end do
+*
+      yp_8(1) = yr
+      do j=1,ofj
+         yp_8(1) = yp_8(1) + con
+      end do
+      do j=2,nj
+         yp_8(j) = yp_8(j-1) + con
+      end do
+      do j=1,nj
+         yp(j) = yp_8(j)
+      end do
+*
+      return
+      end

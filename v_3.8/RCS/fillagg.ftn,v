@@ -1,0 +1,118 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.30;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*** s/p fillagg
+       subroutine fillagg ( bus,bussiz,ptsurf,ptsurfsiz,indx_sfc,surflen)
+#include "impnone.cdk"
+*
+      integer bussiz,indx_sfc, ptsurfsiz, surflen
+      integer ptsurf(ptsurfsiz)
+      real bus(bussiz)
+*
+*
+*Author
+*             B. Bilodeau  Spring 2001
+*
+*Revisions
+*
+*Object
+*             To copy the fields FC, FV, TSURF, etc.
+*             into the arrays that subroutine AGREGE
+*             will use to calculate the aggregated
+*             values. This subroutine needs to be called 
+*             4 times
+*
+*Arguments
+*
+*             - Input/Output -
+* BUS         bus for the given surface scheme
+*
+*             - Input -
+* BUSSIZ      dimension of bus
+* PTSURF      surface pointers
+* PTSURFSIZ   dimension of ptsurf
+* INDX_SFC    integer value (1-4) corresponding to each surface type
+* SURFLEN     horizontal dimension (row length) of the gathered points
+*             for the given surface type on the full model row
+*
+*
+*Implicites
+*
+***
+*
+*
+#include "phy_macros_f.h"
+*
+#include "nbvarsurf.cdk"
+*
+#include "sfcbus.cdk"
+*
+       real champ_agg, champ_sfc
+       pointer(ichamp_agg, champ_agg(1))
+       pointer(ichamp_sfc, champ_sfc(1))
+*
+       integer i,ik,j,k
+       integer ptr, x
+       integer surflen
+*
+#include "dimsurf.cdk"
+*
+#include "xptsurf.cdk"
+*
+*
+       do j=1,nvarsurf
+          if (mul(j).eq.indx_agrege            .and.
+     $        statut(j,mul(j)).eq.indx_agrege) then
+            ichamp_agg = loc(bus(x(j,1,mul(j)  )))
+            ichamp_sfc = loc(bus(x(j,1,indx_sfc)))
+            do k=1,niveaux(j)
+               do i=1,surflen
+                  ik = (k-1)*surflen + i
+                  champ_agg(ik) = champ_sfc(ik)
+               end do
+            end do
+          endif
+       end do
+*
+       return
+       end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

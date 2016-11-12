@@ -1,0 +1,93 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+      subroutine mtn_sfc (geobus,ngeop)
+      implicit none
+      integer ngeop
+      real geobus(ngeop)
+*
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "rec.cdk"
+#include "nestpnt.cdk"
+#include "partopo.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "lesbus.cdk"
+#include "mtn.cdk"
+      include 'mpif.h'
+*
+      integer i,j,k,n,nix,njx,dim,err
+      real topo_l,topo_h
+      pointer (patopo_l, topo_l(gni+2*hx+1,gnj+2*hy+1,2)),
+     $        (patopo_h, topo_h(gni+2*hx+1,gnj+2*hy+1,2))
+
+      real zdi, zdj, zfak, xpos, zfak1, hwx, hwx1, con
+*
+      nix  = gni+2*hx+1
+      njx  = gnj+2*hy+1
+      call hpalloc (patopo_l, nix*njx*2, err, 1)
+      call hpalloc (patopo_h, nix*njx*2, err, 1)
+*
+      con=1.
+      if( vmh_ndt.gt.1 ) con=0.
+*
+c---- Define the topo_l and topo_h
+*
+      if (myproc.eq.0) then
+         hwx = real(mtn_hwx)
+         hwx1= 8.
+         xpos  = real(mtn_xpos + hx + 1)
+*
+         do j=1,njx
+            do i=1,nix
+               zdi  = (xpos - real(i))
+               zfak = (zdi/hwx)**2
+               zfak1= 3.1415926535*zdi/hwx1
+               if (theocase.eq.'MTN_PINTY1'
+     $         .or.theocase.eq.'MTN_PINTY2') then
+cccc pinty cases
+                  topo_h(i,j,1) = mtn_heigth / (zfak+1.0)
+cccc shaer case
+               else if (theocase.eq.'MTN_SHAER') then
+                  topo_h(i,j,1) = mtn_heigth *exp(-zfak) *cos(zfak1)**2
+               endif
+               topo_l(i,j,1) = con*topo_h(i,j,1)
+            end do
+         end do
+*         
+         if (.not.slab) call nesmt (topo_h,topo_l,nix,njx,1,hx,hy,
+     $                     nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy)
+*
+         call dc_topo(topo_l,maxhh01_l,maxhh02_l,nix,njx)
+         call dc_topo(topo_h,maxhh01_h,maxhh02_h,nix,njx)
+*
+      endif
+*
+      call MPI_bcast(topo_l(1,1,1),nix*njx,MPI_REAL,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(topo_l(1,1,2),nix*njx,MPI_REAL,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(topo_h(1,1,1),nix*njx,MPI_REAL,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(topo_h(1,1,2),nix*njx,MPI_REAL,0,MPI_COMM_WORLD,err)
+*
+      do j=1-hy-1,ldnj+hy
+      do i=1-hx-1,ldni+hx
+         hh0i(i,j,1)=topo_l(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,1)
+         hh0i(i,j,2)=topo_l(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,2)
+         hh0f(i,j,1)=topo_h(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,1)
+         hh0f(i,j,2)=topo_h(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,2)
+         hh0 (i,j,1) = hh0i(i,j,1)
+         hh0 (i,j,2) = hh0i(i,j,2)
+      end do
+      end do
+*
+      call hpdeallc(patopo_l ,err,1)
+      call hpdeallc(patopo_h ,err,1)
+*
+      if (gnmaphy.eq.1) then
+      if (myproc.eq.0) call inibus (geobus,ngeop,gni,gnj)
+      call MPI_bcast(geonm,maxbus*2,MPI_CHARACTER,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(geopar,maxbus*3,MPI_INTEGER,0,MPI_COMM_WORLD,err )
+      call MPI_bcast(geobus,geospc  ,MPI_REAL   ,0,MPI_COMM_WORLD,err )
+      endif
+*
+      return
+      end
+*

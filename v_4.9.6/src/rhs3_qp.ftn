@@ -1,0 +1,147 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine rhs3_qp (sol, rhs, s, q3, sw, s1, invs1, nx, ny, niter)
+      implicit none
+*
+      integer nx, ny, niter
+      real*8 sol (nx, ny, *), rhs (nx, ny, *),  q3 (nx, ny, *),  
+     $	      sw (nx, ny, *),  s1 (nx, ny, *),invs1(nx, ny, *)
+      real   s(1-(niter-1):nx+(niter-1),1-(niter-1):ny+(niter-1))
+*
+*AUTHORs    C. Girard & M. Desgagne
+*
+*OBJECT
+*
+*******************************************************************
+*                                                                 *
+*     CALCULATES                                                  *
+*                modified right-hand-side terms                   *
+*                Qsw*, Qqp*                                       *
+*       FROM                                                      *
+*                right-hand-side terms:                           *
+*                Qu, Qv, Qsw, Qtp, Qqp                            *
+*                stored in                                        *
+*                up, vp, swp, tpp, qpp                            *
+*      STORES                                                     *
+*                results in                                       *
+*                swp=Qsw*, rhs=Qqp*                               *
+*                                                                 *
+*     PERFORMS   essentially the following calculations:          *
+*                                                                 *
+*                                                                 *
+*     swp =   [ swp + dtp *tpp ] * nu0                            *
+*                                                                 *
+*     rhs = - [ qpp - dtp * hdiv(up,vp) - dtp * DZ2(swp) ]        *
+*                                                                 *
+*                                                                 *
+*                            ~                   __Z              *
+*                  DZ2(sw) = d(sw)/dZ-2*c01*orts*sw               *
+*                                                                 *
+*                                                      ~          * 
+*        SEE     rhs3_pm for definitions of <hdiv> and d/dZ       *
+*                                                                 *
+*                cxxpar  for definitions of parameters cXX        *
+*                                                                 *
+*******************************************************************
+*
+#include "dynmem.cdk"
+#include "physcom.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "dtmdtp.cdk"
+#include "nbcpu.cdk"
+*
+      integer i, j, k, km1, kp1, nkt
+      real*8  pt5, one, coe, q3b, hdiv, nu0, con, t1, t2
+      parameter (pt5 = 0.5d0, one = 1.0d0)
+*
+*-----------------------------------------------------------------------
+*
+      con  =  dtp * dtp
+      nkt = gnk-1
+      if(flextop) nkt = gnk
+*
+!$omp do
+      do k = 1, gnk
+         coe = 0.5
+         if(k.eq.1.or.k.eq.gnk) coe = 0.0
+         km1 = max(k-1, 1 )
+         do j = 1, ny
+         do i = 1, nx
+            s1(i,j,k) = c03 + dtp * dtp * c06 * nssq(i,j,k)
+            t1 = gg1(i+1,j,k) * ( up(i+1,j,k) - up(i+1,j,km1) )
+     $                + gg1(i  ,j,k) * ( up(i  ,j,k) - up(i  ,j,km1) )
+            t2 = gg2(i,j+1,k) * ( vp(i,j+1,k) - vp(i,j+1,km1) )
+     $                + gg2(i,j  ,k) * ( vp(i,j  ,k) - vp(i,j  ,km1) )
+            q3(i,j,k) = sbxy(i,j) * coe * ( t1 + t2 )
+         end do
+         end do
+*
+         call vrec (invs1(1,1,k), s1(1,1,k), nx*ny)
+*
+         do j = 1, ny
+         do i = 1, nx
+            swp(i,j,k) = (swp(i,j,k) + dtp  * tpp(i,j,k)) * invs1(i,j,k)
+            sw (i,j,k) = swp(i,j,k)
+         end do
+         end do
+         if (k.eq.1) then
+            do j = 1, ny
+            do i = 1, nx
+               t1 = sbxy(i,j) * pt5 *
+     $              ( gg1(i+1,j,1)*up(i+1,j,1) + gg1(i,j,1)*up(i,j,1)
+     $              + gg2(i,j+1,1)*vp(i,j+1,1) + gg2(i,j,1)*vp(i,j,1) )
+               sw(i,j,1) = dhdt(i,j,1) - t1
+            end do
+            end do
+            do j = 1-(niter-1), ny+(niter-1)
+            do i = 1-(niter-1), nx+(niter-1)
+               s(i,j) = con * sbxy(i,j)
+            end do
+            end do
+         endif
+      end do
+!$omp enddo
+*
+      if (.not.flextop) then
+!$omp do
+         do j = 1, ny
+         do i = 1, nx
+            sw(i,j,gnk) = 0.
+         end do
+         end do
+!$omp enddo
+      endif
+*
+!$omp do
+      do k = 1, nkt
+         if(k.lt.gnk) then
+            do j = 1, ny
+            do i = 1, nx
+               hdiv = sbxy(i,j) * ( ( up(i+1,j,k) - up(i,j,k) )*odx(1) +
+     $                              ( vp(i,j+1,k) - vp(i,j,k) )*ody(j) )
+     $              + gg0r(i,j,k) * ( q3(i,j,k+1) + q3(i,j,k) )*pt5
+               rhs(i,j,k) = - qpp(i,j,k) + dtp * hdiv
+     $                    + dtp*gg0r(i,j,k)*(sw(i,j,k+1)-sw(i,j,k))
+     $                    - dtp*c01*orts(i,j,k)*(sw(i,j,k+1)+sw(i,j,k))
+            end do
+            end do
+         else
+            do j = 1, ny
+            do i = 1, nx
+               rhs(i,j,k) = - qpp(i,j,k) -dtp*c01t*orts(i,j,k)*sw(i,j,k)
+            end do
+            end do
+         endif
+         do j = 1, ny
+         do i = 1, nx
+            sol(i,j,k) = qp0(i,j,k)
+         end do
+         end do
+      end do
+!$omp enddo
+*
+*-----------------------------------------------------------------------
+      return
+      end

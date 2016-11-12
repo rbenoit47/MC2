@@ -1,0 +1,100 @@
+#!/bin/sh
+#
+eval `cclargs $0 -ni          "30"                  \
+                 -nj          "30"                  \
+                 -tictac      "tictactest.std"      \
+                 -fileout     "champs_geo.std"  ++ $*`
+#
+#
+#
+#
+# ---------------------------------------------------------------------------#
+#                                                                            #
+#                                 BIGB V1.0                                  #
+#                                                                            #
+# ---------------------------------------------------------------------------#
+#
+#                               MODE D'EMPLOI
+#  
+#   Ce script permet de generer des champs geophysiques sur n'importe quel
+#   type de grille a n'importe quelle resolution.  Les champs produits 
+#   avec BIGB sont : ME (topographie), MG (masque terre-mer), VG (vegetation
+#   definie par type), VF (fraction de vegetation), GA (fraction de glace),
+#   J1 (pourcentage de sable) et J2 (pourcentage d'argile).  Pour obtenir 
+#   les champs desirees, il ne suffit que de passer les banques de donnees
+#   en argument aux cles appropriees.  Si ces fichiers sont manquants, le
+#   champ ne sera tout simplement pas produit.
+#
+#____ Repertoire ou se trouve les donnees sources.  Pour l'instant, elles
+#____ resident sur morgane
+#
+rep=/data/cmda/genesis/donnees/topo
+rep2=/data/cmda/genesis/donnees/masque
+rep3=/data/cmda/genesis/donnees/vege
+repa=/data/cmda/genesis/donnees/sols/argile
+reps=/data/cmda/genesis/donnees/sols/sable
+#
+$EDITFST -s $tictac -d $fileout <<EOF
+ desire(-1,['^^','>>'])
+EOF
+#
+r.filetype $tictac
+r.filetype $fileout
+GENTOPO=/users/dor/afsd/jud/geo/bigb/bigb
+#
+$GENTOPO   -ixy ${tictac} -i ${ni} -j ${nj} -gtyp ${typgrid} -ip1 0 \
+              -infmas ${rep2}/masq_us                               \
+                      ${rep2}/masq_usgs_can                         \
+                      ${rep2}/masq_usgs_euma                        \
+                      ${rep2}/masq_usgs_nord                        \
+              -infveg ${rep3}/veg_ccrn                              \
+                      ${rep3}/veg_usgs_can                          \
+                      ${rep3}/veg_usgs_euma                         \
+                      ${rep3}/veg_usgs_nord                         \
+              -infag1 $repa/arg1_ccrn                               \
+                      $repa/arg1_usda                               \
+                      $repa/arg1_agrc                               \
+              -infag2 $repa/arg2_ccrn                               \
+                      $repa/arg2_usda                               \
+                      $repa/arg2_agrc                               \
+              -infag3 $repa/arg3_ccrn                               \
+                      $repa/arg3_usda                               \
+                      $repa/arg3_agrc                               \
+              -infag4 $repa/arg4_ccrn                               \
+                      $repa/arg4_usda                               \
+                      $repa/arg4_agrc                               \
+              -infag5 $repa/arg5_ccrn                               \
+                      $repa/arg5_usda                               \
+                      $repa/arg5_agrc                               \
+              -infsb1 $reps/sab1_ccrn                               \
+                      $reps/sab1_usda                               \
+                      $reps/sab1_agrc                               \
+              -infsb2 $reps/sab2_ccrn                               \
+                      $reps/sab2_usda                               \
+                      $reps/sab2_agrc                               \
+              -infsb3 $reps/sab3_ccrn                               \
+                      $reps/sab3_usda                               \
+                      $reps/sab3_agrc                               \
+              -infsb4 $reps/sab4_ccrn                               \
+                      $reps/sab4_usda                               \
+                      $reps/sab4_agrc                               \
+              -infsb5 $reps/sab5_ccrn                               \
+                      $reps/sab5_usda                               \
+                      $reps/sab5_agrc                               \
+              -infich ${rep}/top_us                                 \
+                      ${rep}/top_ncar                               \
+                      ${rep}/top_crc                                \
+                      ${rep}/top_usgs_can                           \
+                      ${rep}/top_usgs_euma                          \
+                      ${rep}/top_usgs_nord                          \
+                      ${rep}/top_globe_estsud                       \
+                      ${rep}/top_globe_ouestsud                     \
+                      ${rep}/top_globe_e0065n0049                   \
+                      ${rep}/top_globe_e66155n0049                  \
+                      ${rep}/top_globe_estn5069                     \
+                      ${rep}/top_globe_estn7074                     \
+                      ${rep}/top_globe_estn7579                     \
+                      ${rep}/top_globe_estn8081                     \
+              -out $fileout 
+
+

@@ -1,0 +1,95 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***function set_dcst_8 - initializes geophysical constants
+*
+      logical function set_dcst_8 ( val, liste, nbre, iun, lun_out )
+      implicit none
+*
+      integer nbre,iun,lun_out
+      character * (*) liste(nbre)
+      real*8 val(nbre)
+*
+*author
+*     M. Desgagne
+*
+*revision
+*
+*object
+*	This subroutine reads the file containing the unified
+*	CMC-RPN constants to initialize the common starting
+*       with val(1) from the interface.
+*
+**
+      character*10  rdname
+      character*42  text
+      character*256 chemin,varenv,fname
+      logical flag(nbre),cte_ok
+      integer i, ier, longueur
+      real*8 rdval
+      external longueur
+*
+*     ---------------------------------------------------------------
+*
+      write (lun_out,1000)
+      do i=1,nbre
+         flag(i) = .false.
+      end do
+*
+      fname  = 'constantes'
+      chemin = ' '
+*
+      varenv = 'AFSISIO'
+      call getenvc (varenv,chemin)
+      chemin(longueur(chemin)+1:len(chemin)) = '/datafiles/constants/'
+      chemin(longueur(chemin)+1:len(chemin)) = 'thermoconsts'
+*
+      open(iun,file=fname,iostat=ier,form='FORMATTED',status='OLD',
+     $                                         access='SEQUENTIAL')
+*
+      if (ier.ne.0) then
+         write (lun_out,2000) chemin(1:longueur(chemin)),' (AFSISIO)'
+         open(iun,file=chemin,iostat=ier,form='FORMATTED',status='OLD',
+     $                                             access='SEQUENTIAL')
+      else
+         write (lun_out,2000) fname(1:longueur(fname)),' (local)'
+      endif
+*
+      if (ier.eq.0) then
+ 100     read (iun,'(2x,a10,2x,e20.13,2x,a42)',end=2) rdname,rdval,text
+         do i=1,nbre
+            if (liste(i).eq.rdname) then
+               val(i) = rdval
+               flag(i)= .true.
+               if (liste(i).eq.'KARMAN') val(i) = 0.4
+               goto 100
+            endif
+         end do
+         goto 100
+ 2       close (iun)
+      endif
+*
+      cte_ok = .true.
+*
+      do i=1,nbre
+         if (flag(i)) then
+            write (lun_out,1005) liste(i),val(i)
+         else            
+            write (lun_out,1006) liste(i)
+            cte_ok = .false.
+         endif
+      end do
+*
+      write (lun_out,*)
+*
+      set_dcst_8 = cte_ok
+*
+ 1000 format(
+     +/,'INITIALIZATION OF PHYSICAL CONSTANTS: (S/R SET_DCST_8)',
+     +/,'======================================================')
+ 1005 format(1x,"THE VALUE OF",1x,a10,2x,"=",1x,e22.13)
+ 1006 format(" WARNING ==> THE CONSTANT ",a10," DOES NOT EXIST.")
+ 2000 format (2a)
+*
+*     ---------------------------------------------------------------
+*
+      return
+      end

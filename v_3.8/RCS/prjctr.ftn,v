@@ -1,0 +1,125 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  PRJCTR
+*
+      SUBROUTINE PRJCTR(P,ALGO,SD,CAS,N,MAX)
+*
+#include "impnone.cdk"
+      INTEGER N,MAX
+      REAL P(MAX,2),ALGO,SD(N)
+      CHARACTER*2 CAS
+*
+*Author
+*          J. Cote (RPN 1984)
+*
+*Revision
+* 001      J. Cote RPN(Nov 1984)SEF version documentation
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+*
+*Object
+*          to prepare the finite-element projector,
+*          fourth order or explicit finite-element
+*
+*Arguments
+*
+*          - Output -
+* P        projector (MAX,2)
+*          P(J,1) sub-diagonal
+*          P(J,2) diagonal
+* ALGO     numeric code for the algorithm
+*
+*          - Input -
+* SD       intervals (N)
+* CAS      'EF'(E-F projector), '4E'(fourth order), 'EX'(explicit)
+* N        number of points
+* MAX      1st dimension of P
+*
+**
+*
+      REAL S,T
+      INTEGER J
+*
+      SD(N)=0.0
+*
+      IF (CAS.EQ.'EF') THEN
+*
+*     E-F
+*
+         T=1.0/3.0
+         ALGO=1.0
+*
+      ELSE IF (CAS.EQ.'4E') THEN
+*
+*     E-F 4IEME ORDRE
+*
+         T=5.0/12.0
+         ALGO=2.0
+*
+      ELSE IF (CAS.EQ.'EX') THEN
+*
+*     EXPLICITE
+*
+         T=1.0/2.0
+         ALGO=0.0
+*
+      ELSE
+*
+         WRITE (6,*) 'CAS = ',CAS,' STOP DANS PRJCTR'
+         STOP
+*
+      ENDIF
+*
+      S=1.0/2.0-T
+      P(1,1)=0.0
+      P(1,2)=T*SD(1)
+*
+      DO 1 J=2,N
+*
+         P(J,1)=S*SD(J-1)
+         P(J,2)=T*(SD(J-1)+SD(J))
+*
+    1 CONTINUE
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

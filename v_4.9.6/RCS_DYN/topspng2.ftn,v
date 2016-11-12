@@ -1,0 +1,66 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r topspng2
+*
+      subroutine topspng2 (wrk)
+      implicit none
+*
+      real wrk(*)
+*
+**
+#include "dynmem.cdk"
+#include "levels.cdk"
+#include "yomdyn1.cdk"
+*
+      integer k,kz,iter,niter
+*---------------------------------------------------------------------
+*
+      kz  = gnk-hord_zspng
+      niter= int(4.*hord_nutop+0.99)
+*
+      do iter=1,niter
+*
+*PDIR SERIAL
+      call rpn_comm_xch_halo (up,minx,maxx,miny,maxy,ldni,ldnj,
+     $                    4*gnk,hx,hy,period_x,period_y,ldni,0)
+*PDIR END SERIAL
+*
+      call smth2d ( up(1-hx,1-hy,kz),wrk,minx,maxx,miny,maxy,hord_zspng,
+     $                                                      nu(kz),1,0)
+      call smth2d ( vp(1-hx,1-hy,kz),wrk,minx,maxx,miny,maxy,hord_zspng,
+     $                                                      nu(kz),0,1)
+      call smth2d (swp(1-hx,1-hy,kz),wrk,minx,maxx,miny,maxy,hord_zspng,
+     $                                                      nu(kz),0,0)
+      call smth2d (tpp(1-hx,1-hy,kz),wrk,minx,maxx,miny,maxy,hord_zspng,
+     $                                                      nu(kz),0,0)
+*
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+@

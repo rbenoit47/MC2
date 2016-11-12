@@ -1,0 +1,322 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+*
+      subroutine mtn_cfg (prout,status)
+      implicit none
+*
+      logical prout
+      integer status
+*
+#include "lcldim.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "cdate.cdk"
+#include "levels.cdk"
+#include "nesting.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "filename.cdk"
+#include "physcom.cdk"
+#include "tracers.cdk"
+#include "nbcpu.cdk"
+#include "nestpnt.cdk"
+#include "mtn.cdk"
+#include "sor.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+#include "refer.cdk"
+*
+      integer unnml,pnerrdirf,pnflag1,pnflag2,i,j,k,err,longueur
+      real*8 dayfrac
+      character*12 nmlname
+      namelist /mtn_cfgs/ gni,gnj,gnk,nktop,Grd_dx,htop,gnnls,
+     $               gnnt,gnnrstrt,grdt,gnnpbl,zt,hord_zspng,
+     $               hblen_x,hblen_y,
+     $               gnpvw,grpilver,gnpilver,g_id,g_if,g_jd,g_jf,z_out,
+     $               grepsi,mtn_hwx,mtn_hwy,mtn_xpos,mtn_ypos,
+     $               mtn_heigth,mtn_flo,mtn_thrate,iscal,
+     $               blb_zp,blb_xs,blb_zs,blb_xp,mtn_typ,
+     $               tzero_star,ttop_star,ntrop_star,htrop_star,
+     $               period_x,period_y
+      data unnml /11/
+*
+      status  = -1
+      hx      = 3
+      hy      = hx
+      nmlname = 'mtn_cfgs'
+*
+      if (.not.modrstrt) then
+*
+*
+*        In what follows are the description of two
+*
+*              ################################################
+*              #                                              # 
+*              #  HYDROSTATIC LINEAR MOUNTAIN WAVE PROBLEMS   #
+*              #  (ref.:Pinty et al,1995:MWR,123,3042-3058)   #
+*              #                                              # 
+*              ################################################
+*
+*
+*       -the atmosphere is isothermal                  at T = 273.15 K
+*       -the mountain has a top elevation of                    1.   m
+*       -the model has an horizontal resolution of              3.2  km 
+*        and a vertical resolution of                         250.   m
+*        with                                         gni   = 162    grid pts
+*        in the x-direction and                       gnk   =  81    levels
+*        
+*        PINTY 1 (Pinty et al. FIG 1,p3046): the wind is       32    m/s
+*
+*        PINTY 2 (Pinty et al. FIG 3,p3047): the wind is        8    m/s
+*
+*        n.b. in these cases the Courant # is kept equal to 0.5
+*
+*
+*        Plus one 
+*
+*              ##################################################
+*              #                                                #
+*              #  NON-HYDROSTATIC LINEAR MOUNTAIN WAVE PROBLEM  #
+*              #  (ref.:Shaer et al,2002:MWR,             )     #
+*              #                                                #
+*              ##################################################
+*
+*       -the atmosphere is non-isothermal  with       tzero_star = 288.15 K
+*        and a temperature gradient given by          ntrop_star = 1.e-2  s-1
+*       -the mountain has a top elevation of                    2.5  m
+*       -the model has an horizontal resolution of            500.0  m
+*        and a vertical resolution of                         300.   m
+*        with                                         gni   = 402    grid pts
+*        in the x-direction and                       gnk   =  66    levels
+*
+*
+         if (theocase.eq.'MTN_PINTY1'.or.theocase.eq.'MTN_PINTY2') then
+*
+* pinty cases
+            tzero_star      = 273.15
+            ttop_star       = -1.
+            ntrop_star      = -1.
+            htrop_star      = 100000
+            iscal(1)   = 1000000
+            iscal(2)   = 1000000
+            mtn_heigth = 1.0
+            Grd_dx  = 3200.
+            htop       = 20000.
+            gni        = 162
+            gnj        = 2           ! requires slab=.true.
+            gnk        = 81
+            nk         = gnk-1
+            mtn_hwx    = 5
+            mtn_hwy    = 3
+            mtn_xpos   = 81
+            mtn_ypos   = 1
+            mtn_thrate = 2.
+*
+            hblen_x = 15
+*
+         else if (theocase.eq.'MTN_SHAER') then
+*
+* shaer case
+            tzero_star = 288.15
+            ttop_star  = -1.
+            ntrop_star = 1.0e-2
+            htrop_star = 50000.
+            iscal(1)   = 1000000
+            iscal(2)   = 1000000
+c           iscal(1)   = 5000
+c           iscal(2)   = 2000
+            mtn_heigth = 2.50
+            Grd_dx  = 500.
+            htop       = 19500.
+            gni        = 402
+            gnj        = 2           ! requires slab=.true.
+            gnk        = 66
+            nk         = gnk-1
+            mtn_hwx    = 10
+            mtn_hwy    = 3
+            mtn_xpos   = 201
+            mtn_ypos   = 1
+            mtn_thrate = 0.3
+*
+            hblen_x = 30
+*
+         endif
+*
+         if (theocase.eq.'MTN_PINTY1') then
+*
+*            PINTY  1
+*
+            mtn_flo  = 32.
+            grdt     = 50.0
+            gnnls    = 80
+            gnnt     = 800
+            gnpilver = 40
+*
+         else if (theocase.eq.'MTN_PINTY2') then
+*
+*            PINTY  2
+*
+            mtn_flo  = 8.
+            grdt     = 200.0
+            gnnls    = 160
+            gnnt     = 1600
+            gnpilver = 10
+*
+         else if (theocase.eq.'MTN_SHAER') then
+*
+*           SHAER
+*
+            mtn_flo  = 10.
+            grdt     = 8.0
+            gnnls    = 80
+            gnnt     = 1600
+            gnpilver = 30
+*
+         endif
+*
+         grpilver = 1.
+         grepsi   = 0.            ! No decentering of SI scheme
+         hord_lnr = 0.            ! No diffusion
+         gnmaphy  = 0             ! No physical parameterization
+         slab     = .true.        ! Slab-symmetry in y-direction.
+         ctebcs   = .true.        ! Fixed boundary conditions.
+         nofcms   = .true.        ! No rotation; cartesian coordinates.
+         flextop  = .false.
+*
+         nktop    = -1
+         gnnohyd  = 1             ! non-hydrostatic
+         gnnrstrt = 100000
+         gnnpbl   = -1
+         gnpvw    = 0
+         do k=1,maxdynlv
+            zt(k)=-1.0
+         end do
+         zt(1)    = 1.
+*
+         g_id  = -2
+         g_if  = gni+2
+         g_jd  = 1
+         g_jf  = 1
+         do k=1,maxlvl_out
+            z_out(k)=-1
+         end do
+*
+         hblen_y = 0
+         hord_zspng    = 0
+
+*---- Added nml parameters for the Color case
+         blb_zp  = 9000.
+         blb_xp  = 25
+         blb_xs  = 5
+         blb_zs  = 3
+         mtn_typ = 'w'
+*
+* *** Updating configuration with namelist mtn_cfgs
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $         form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9991
+         endif
+*
+         rewind ( unnml )
+         read (unnml, nml=mtn_cfgs, end = 9120)
+         write (6,601) nmlname
+*
+         close (unnml)
+      else
+*
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $         'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         stop
+*
+      endif
+*
+      status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*      
+      if (period_x) then
+         hblen_x = 0
+      endif
+      if (period_y) then
+         hblen_y = 0
+      endif
+      hblen_x = min(max(hblen_x,0),(gni/2-1))
+      hblen_y = min(max(hblen_y,0),(gnj/2-1))
+*
+      g_id = min(gni+hx,max(1-hx,g_id))
+      g_if = min(gni+hx,max(1-hx,g_if))
+      g_jd = min(gnj+hy,max(1-hy,g_jd))
+      g_jf = min(gnj+hy,max(1-hy,g_jf))
+      if (z_out(1).lt.0) then
+         do k=1,gnk
+            z_out(k)=k
+         end do
+         nk_out=gnk
+      else
+         nk_out=0
+         do k=1,maxlvl_out
+            if ((z_out(k).lt.gnk).and.(z_out(k).gt.0)) then
+               nk_out=nk_out+1
+               z_tmp(nk_out) = z_out(k)
+            endif
+         end do
+         do k=1,nk_out
+            z_out(k) = z_tmp(k)
+         end do
+      endif
+*
+      nktop = min(gnk-1,max(0,nktop))
+      hord_zspng = min(gnk-2,max(0,hord_zspng))
+      if (hord_zspng.gt.0) hord_zspng=max(4,hord_zspng)
+*
+      gcrunstrt = "19980101.000000"
+      gcjobstrt = gcrunstrt
+      dayfrac=(gnnt*grdt)/86400.0
+      call  incdatsd(gcjobend,gcrunstrt,dayfrac)
+      gcrunend = gcjobend
+      call datp2f (gnidate,gcrunstrt)
+      Grd_ni = gni
+      Grd_nj = gnj
+      Grd_proj_S = 'P'
+      
+      call hpalloc (paxp ,gni    , err,1)
+      call hpalloc (payp ,gnj    , err,1)
+*
+      xref = 1000000.
+      yref = 1005000.
+      Grd_dgrw  = 0.
+*
+      gnstepno= 0
+*
+      call gllvls (gnk)
+*      
+      gnlst     = int(grdt)
+      Pil_nesdt = 0
+c     trpil(1) = 'BU'
+      do i=1,maxntrpil
+         trpil(i) = '@#@#'
+      end do
+*
+      if (prout) then
+*
+*        Print control parameters
+*
+         print*
+         write (6, nml=mtn_cfgs)
+         print*
+*
+      endif
+*
+ 601  format (' CONFIGURATION UPDATED again WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+*
+      return
+      end

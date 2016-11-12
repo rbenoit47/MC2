@@ -1,0 +1,142 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine sorctrl (status)
+      implicit none
+*
+      integer status
+*
+*     ##########################################
+*     #  Initialization of controle parameters #
+*     #  (see MC2 user guide for descriptions) #
+*     ##########################################
+*
+#include "mc2nml.cdk"
+#include "path.cdk"
+      character*256 path
+      character*32  dumc
+      character*10  nmlname
+      integer i,k,unnml,pnerrdirf,pnflag1,pnflag2,longueur
+      data unnml /11/
+*
+*---------------------------------------------------------------------
+*
+      status  = -1
+*
+      call getenvc('rep_from_which_model_is_launched',path)
+      dfwmil = path(1:longueur(path))//'/process'
+      nml    = path(1:longueur(path))//'/process/model_settings'
+*
+      gtetikt  = 'MC2_V4.9.3'
+      fileout  = 'mc2_v4.9.3'
+      levtyp   = 'P'
+      gnstep1  = 0
+      gnstep2  = 100000
+      datyp    = 5
+      nbit     = 16
+      rndoseq  = 'RND'
+      v_interp = 'CUBIC_UQAM'
+      gnip1    = -1
+      gnip3    = -1
+      staguv   = .true.
+      flipit   = .false.
+      g_id = -1
+      g_if = -1
+      g_jd = -1
+      g_jf = -1  
+      do k=1,nkout
+           pres_o(k) = -1.
+         height_o(k) = -1.
+         udolist (k) = "#$%^&"
+      end do
+*
+* *** Updating configuration with namelist sor_cfgs
+*
+      open (unnml,file=nml,access='SEQUENTIAL',
+     $      form='FORMATTED',status='OLD',iostat=pnerrdirf)
+      if (pnerrdirf.ne.0) then
+         print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $         'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+         goto 9991
+      endif
+*
+      nmlname = 'sor_cfgs'
+      rewind ( unnml )
+      read (unnml, nml=sor_cfgs, end = 9120)
+      write (6,601) nmlname
+*
+      close (unnml)
+*
+      fileout = 'process/prog/'//fileout(1:longueur(fileout))
+      call low2up  (levtyp,dumc)
+      levtyp = dumc
+      if (nbit.ne.32) datyp = 1
+      call low2up  (rndoseq,dumc)
+      rndoseq = dumc
+      call low2up  (v_interp,dumc)
+      v_interp = dumc
+      do i=1,nkout
+         call low2up  (udolist(i),dumc)
+         udolist(i) = dumc
+      end do
+*
+      print*
+      write (6, nml=sor_cfgs_print)
+      print*
+*
+      nvardyn=0
+      do i=1, nkout
+         if (udolist(i).eq.'#$%^&') goto 11
+         nvardyn = nvardyn + 1
+         table_out(1,i) = -1
+         table_out(2,i) = -1
+         table_out(3,i) = -1
+         call decod_sor (dumc,table_out(1,i),table_out(2,i),
+     $                        table_out(3,i),udolist(i))
+         if ((dumc.eq."PN").or.(dumc.eq."P0")) then
+            table_out(1,i)=1
+            table_out(2,i)=1
+            table_out(3,i)=1
+         endif
+         udolist(i) = dumc
+      end do
+ 11   continue
+*
+      status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+*     
+#if defined (NEC)
+      call flush(6)
+#endif
+*
+ 601  format (' CONFIGURATION UPDATED WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+*---------------------------------------------------------------------
+*
+      return
+      end
+@

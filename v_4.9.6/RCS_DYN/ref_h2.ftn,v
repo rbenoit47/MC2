@@ -1,0 +1,56 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.08.15.19.08;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine ref_h2 ( hgeow,hgeot,hgeom,topo,ogl,ng,nk )
+      implicit none
+*
+      integer ng,nk
+      real hgeow (ng,*), hgeot (ng,*), hgeom(ng,*), topo(ng,2), ogl(*)
+*
+      integer i,k,iscal(2)
+      real ozt(nk),ozm(nk+1),olid
+*
+*---------------------------------------------------------------------
+*
+      olid    = ogl(nk+1)
+      iscal(1)= ogl(nk+2)
+      iscal(2)= ogl(nk+3)
+*     
+      do k=2,nk
+         ozm(k) = (ogl(k)+ogl(k-1))*0.5
+         ozt(k) = ogl(k)
+      end do
+*
+      ozm (1   ) =  ogl(1)
+      ozm (nk+1) =  ogl(nk)
+      ozt (1   ) =  ozm(2)*0.5
+      ozt (nk  ) = (ozm(nk+1)+ozm(nk))*0.5
+*
+      call hauteur2 ( hgeow,ogl,topo,olid,iscal,ng,1,nk  )
+      call hauteur2 ( hgeot,ozt,topo,olid,iscal,ng,1,nk  )
+      call hauteur2 ( hgeom,ozm,topo,olid,iscal,ng,1,nk+1)
+*
+*---------------------------------------------------------------------
+      return
+      end
+@

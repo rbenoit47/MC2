@@ -1,0 +1,48 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r inictes
+*
+      logical function inictes (lunout)
+      implicit none
+*
+      integer lunout
+*
+*AUTHOR     Michel Desgagne           Nov   1993
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJET
+*
+*IMPLICITES
+#include "lisctes.cdk"
+#include "consdyn_8.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+*
+      include 'mpif.h'
+      integer ier
+      logical cte_ok,set_dcst_8
+      external set_dcst_8
+*
+*----------------------------------------------------------------------
+*  
+      cte_ok = .false.
+      if (lunout.gt.0)
+     $      cte_ok = set_dcst_8 (cpd_8,lisctes,nbre,38,lunout)
+*
+      if (numproc.gt.1) then
+         call MPI_bcast (cte_ok ,1,MPI_LOGICAL  ,0,MPI_COMM_WORLD,ier )
+      	 if (cte_ok)
+     $     call MPI_bcast (cpd_8 ,nbre,MPI_DOUBLE_PRECISION,0,
+     $                                     MPI_COMM_WORLD,ier )
+      endif
+*
+      inictes = cte_ok
+*
+      return
+      end
+      

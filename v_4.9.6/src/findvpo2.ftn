@@ -1,0 +1,38 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine findvpo2 ( hgeow,hgeot,hgeom,zgeow,zgeot,zgeom,ng,nk,nkref )
+      implicit none
+*
+      integer ng,nk,nkref
+      real hgeow (ng,*), hgeot (ng,*), hgeom (ng,*),
+     $     zgeow(ng,nk), zgeot(ng,nk), zgeom(ng,nk)
+*
+#include "vinterpo.cdk"
+#include "yomdyn.cdk"
+#include "nbcpu.cdk"
+*
+      integer ktop(ng*nk), kbot(ng*nk)
+      integer i,k
+      real posv
+      pointer (paposv, posv(ng,nk,2,3))
+*
+*----------------------------------------------------------------------
+*      
+      paposv = paposit
+*     
+      if (gngalsig.ne.1) then
+*
+         call posiz3 (posv,         huv,hgeot,zgeom,ktop,kbot,ng,nk,nkref)
+         call posiz3 (posv(1,1,1,2),htt,hgeot,zgeot,ktop,kbot,ng,nk,nkref)
+         call posiz3 (posv(1,1,1,3),hww,hgeot,zgeow,ktop,kbot,ng,nk,nkref)
+*
+      else
+*
+         call posiz3 (posv,         huv,hgeom,zgeom,ktop,kbot,ng,nk,nkref+1)
+         call posiz3 (posv(1,1,1,2),htt,hgeot,zgeot,ktop,kbot,ng,nk,nkref)
+         call posiz3 (posv(1,1,1,3),hww,hgeow,zgeow,ktop,kbot,ng,nk,nkref)
+
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end

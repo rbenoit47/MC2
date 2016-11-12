@@ -1,0 +1,197 @@
+#!/bin/sh
+#
+eval `cclargs $0 -filtlc      "2"                \
+		 -nomasq      "0"   "1"          \
+                 -fileout     "champs_geo.std"  ++ $*`
+#
+#                DOCUMENTATION:
+#                =============
+#
+#                filtlc         "lc" parameter for the "fltmc2"
+#                               application (lc=4 normally)
+#                fileout        name of the file containing the
+#                               geophysical fields (output in
+#                               $dirwork)
+#
+tictac=tape1
+typgrid=Z
+#
+r.filetype $tictac
+ft=$?
+if [ $ft -eq 1 ] ; then
+  fst89=1
+else
+  fst89=0
+fi
+#
+ni=`r.fstliste -izfst $tictac -nomvar ">>" | sed 's/\://g' | awk '{print $6}'`
+nj=`r.fstliste -izfst $tictac -nomvar "^^" | sed 's/\://g' | awk '{print $7}'`
+#
+tmpfile1=genesis.tmpfile1.$$
+tmpfile2=genesis.tmpfile2.$$
+bigb_out=`pwd`/bigb_out
+rugos_out=`pwd`/rugos_out
+fileout=`pwd`/$fileout
+#
+/bin/rm -f  $bigb_out $rugos_out $fileout $tmpfile1 $tmpfile2
+cat <<EOF
+  --------------------------------------------------------------------
+  1st STEP:  BIGB FOR THE GENERATION OF TOPOGRAPHY, 
+             VEGETATION, AND SOIL FIELDS
+  --------------------------------------------------------------------
+$BIGB	        -ni      $ni       -nj      $nj    \
+                -tictac  $tictac   -fileout $bigb_out
+EOF
+$BIGB	        -ni      $ni       -nj      $nj        \
+                -tictac  $tictac   -fileout $bigb_out
+/bin/rm -f reso record
+#
+cat <<EOF
+  --------------------------------------------------------------------
+  2nd STEP: FILTERING OF THE TOPOGRAPHY 
+	    AND ASSURE CONSISTANCY BETWEEN ME AND MG
+  --------------------------------------------------------------------
+EOF
+#
+if [ $filtlc -gt 0 ] ; then
+$EDITFST -s bigb_out -d $tmpfile1 <<EOF
+  desire(-1,['>>','^^','ME','MG'])
+  end
+EOF
+#
+fltoro -s $tmpfile1 -d $tmpfile2 -lc $filtlc -iter 0
+if [ ${fst89} -gt 0 ] ; then
+  /bin/rm -f $tmpfile1 ; fstretro -s $tmpfile2 -d $tmpfile1
+else
+  /bin/mv $tmpfile2 $tmpfile1
+fi
+#
+$EDITFST -s bigb_out -d $tmpfile1 <<EOF
+  desire(-1,['>>','^^','MG'])
+  end
+EOF
+/bin/mv $tmpfile1 $tmpfile2
+fltoro -s $tmpfile2 -d $tmpfile1 -consis
+if [ ${fst89} -gt 0 ] ; then
+  /bin/rm -f $tmpfile2 ; fstretro -s $tmpfile1 -d $tmpfile2
+else
+  /bin/mv $tmpfile1 $tmpfile2
+fi
+#
+/bin/mv $tmpfile2 $tmpfile1
+$EDITFST -s $tmpfile1  -d $tmpfile2 -i /dev/null
+/bin/rm -f $tmpfile1
+$EDITFST -s $tictac $tmpfile2 -d $tmpfile1 -i /dev/null
+/bin/rm -f $tmpfile2
+else
+$EDITFST -s bigb_out -d $tmpfile1 <<EOF
+  desire(-1,['>>','^^','ME','MG'])
+  end
+EOF
+fi
+#
+$EDITFST -s bigb_out -d $fileout <<EOF
+  desire(-1,['>>','^^'])
+  end
+EOF
+#
+cat <<EOF
+  --------------------------------------------------------------------
+  3rd STEP: REMOVE SMALL LAKES AND ISLAND 
+	    FROM THE LAND-SEA MASQ MG
+  --------------------------------------------------------------------
+EOF
+#
+nomasq=1
+if [ x"$nomasq" = x"0" ]
+then
+
+$EDITFST -s $tmpfile1 -d $fileout <<EOF
+    desire(-1,ME)
+EOF
+#
+if [ ${fst89} -lt 1 ] ; then
+  /bin/rm -f $tmpfile2
+  fstretro -s $tmpfile1 -d $tmpfile2
+  mv $tmpfile2 $tmpfile1
+fi
+#
+cp $MODEL_PATH/scripts/masq.pro .
+r.idl <<EOF
+  initrmnlib
+  masq, in = \"$tmpfile1\", out = \"$tmpfile2\"
+  exit
+EOF
+#
+$EDITFST -s $tmpfile2 -d $fileout <<EOF
+    desire(-1,MG)
+EOF
+
+else
+
+$EDITFST -s $tmpfile1 -d $fileout <<EOF
+    desire(-1,ME)
+    desire(-1,MG)
+EOF
+
+fi
+/bin/rm -f $tmpfile1 $tmpfile2 masq.pro
+
+cat <<EOF
+  --------------------------------------------------------------------
+  4th STEP: COMPUTE RUGOSITY
+	    AND ASSURE CONSISTANCY BETWEEN ME, MG AND ZP
+  --------------------------------------------------------------------
+$RUGO     	   -ni        $ni          -nj       $nj        \
+                   -fileoutru rugos_out    -tictac   $tictac    \
+                   -fileout   $bigb_out    -filetopo $fileout
+EOF
+#
+$RUGO    	   -ni        $ni          -nj       $nj        \
+                   -fileoutru rugos_out    -tictac   $tictac    \
+                   -fileout  $bigb_out     -filetopo $fileout
+/bin/rm -f reso record
+#
+#------------------------------------------------
+#
+$EDITFST -s $fileout -d $tmpfile1 <<EOF
+    desire(-1,[ME,MG])
+EOF
+$EDITFST -s rugos_out -d $tmpfile1 <<EOF
+    desire(-1,ZP)
+EOF
+# 
+fltoro -s $tmpfile1 -d $tmpfile2 -consis
+if [ ${fst89} -gt 0 ] ; then
+  /bin/rm -f $tmpfile1 ; fstretro -s $tmpfile2 -d $tmpfile1
+  /bin/mv $tmpfile1 $tmpfile2
+fi
+
+cat <<EOF
+  --------------------------------------------------------------------
+  5th STEP: MERGE IT ALL
+  --------------------------------------------------------------------
+EOF
+#
+/bin/rm -f $tmpfile1
+$EDITFST -s $fileout -d $tmpfile1 -i 0
+#
+$EDITFST -s $tmpfile2 -d  $tmpfile1 << eof
+ desire(-1,ZP)
+eof
+#
+$EDITFST -s rugos_out -d  $tmpfile1 << eof
+ desire(-1,['Z0','LH','Y7','Y8','Y9'])
+eof
+$EDITFST -s bigb_out -d  $tmpfile1 << eof
+ exclure(-1,['MG','ME','^^','>>'])
+eof
+$EDITFST -s bigb_out -d  $tmpfile1 << eof
+ ZAP(-1,MT)
+ desire(-1,ME)
+eof
+#
+mv  $tmpfile1 $fileout
+/bin/rm -f rugos_out bigb_out $tmpfile2*
+#
+

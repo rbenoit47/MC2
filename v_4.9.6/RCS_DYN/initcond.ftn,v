@@ -1,0 +1,171 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r initcond
+*
+      subroutine initcond (trname,ntrname)
+      implicit none
+*
+      integer ntrname
+      character*8 trname(ntrname)
+*
+*OBJECT
+*     Obtains initial conditions at gcrunstrt
+*
+**
+#include "cdate.cdk"
+#include "nesting.cdk"
+#include "dynmem.cdk"
+#include "tracers.cdk"
+#include "nestpnt.cdk"
+#include "yomdyn.cdk"
+#include "lun.cdk"
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+*    
+      character*3 nmr,nmc
+      character*16 datev
+      character*28 filename
+      integer i,j,k,n,dim,halo,nia,nja,nka,open_bmf,err,
+     $        yy,mo,dd,hh,mm,ss,ncpu
+      real s,d
+      pointer (pas ,s(*)),(pad ,d(*))
+*---------------------------------------------------------------------
+*
+      write(nmr,100) mycol
+      write(nmc,100) myrow
+      filename='../bm'//gcrunstrt(1:15)//'_'//nmc//'_'//nmr
+*
+      err = open_bmf (filename,nia,nja,nka,gngalsig,halo)
+*
+      err = 0
+      if ((nia.ne.(ldni+hx*(west+east)+1))
+     $     .and.
+     $     (nja.ne.(ldnj+hy*(south+north)+1))
+     $     ) then
+         print*, 'WRONG GRID DIMENSION IN BMF FILE: ',filename,
+     $           ' --- ABORT ---'
+         err = -1
+      endif
+*
+      if (gngalsig.eq.1) then
+      call s_rdvint_c (up,vp,swp,tpp,hmp,qpp,clp,trname,ntrname,
+     $                 gcrunstrt,minx,maxx,miny,maxy,gnk,nia,nja,nka,0)
+      else
+      call s_rdvint   (up,vp,swp,tpp,hmp,qpp,clp,trname,ntrname,
+     $                 gcrunstrt,minx,maxx,miny,maxy,gnk,nia,nja,nka,0)
+      endif
+*
+      if ((glconta).and.(iconta.ne.0)) then
+         do k=1,gnk
+            do j=1-hy,ldnj+hy
+            do i=1-hx,ldni+hx
+               clnestt(i,j,k,iconta) = 1.
+            end do
+            end do
+         end do
+         call nesajr (clp(1-hx,1-hy,1,iconta),clnestt(1-hx,1-hy,1,
+     $        iconta),minx,maxx,miny,maxy,gnk,1,1,hblen_x,hblen_y)
+      endif
+*
+      dim = ndynvar*dim3d+dim2d
+      pas = paqpp
+      pad = paqp0
+      do i=1,dim
+         d(i) = s(i)
+      end do
+*
+      do k=1,gnk
+         do j=1-hy,ldnj+hy
+         do i=1-hx,ldni+hx
+            unestt(i,j,k)  =  up(i,j,k)
+            vnestt(i,j,k)  =  vp(i,j,k)
+            swnestt(i,j,k) = swp(i,j,k)
+            tpnestt(i,j,k) = tpp(i,j,k)
+            qpnestt(i,j,k) = qpp(i,j,k)
+            hmnestt(i,j,k) = hmp(i,j,k)
+         end do
+         end do
+         do 30 n = 1, ntr
+            if (n.eq.iconta) goto 30
+            do j=1-hy,ldnj+hy
+            do i=1-hx,ldni+hx
+               clnestt(i,j,k,n) = clp(i,j,k,n)
+            end do
+            end do
+ 30      continue
+      end do
+*
+      do j=1-hy,ldnj+hy
+      do i=1-hx,ldni+hx
+         qpnestt(i,j,0) = qpp(i,j,0)
+      end do
+      end do
+* 
+      current_nest = gcrunstrt
+      call prsdate (yy,mo,dd,hh,mm,ss,err,current_nest)
+      call pdfjdate2 (tf_nest,yy,mo,dd,hh,mm,ss)
+*
+      if (ctebcs) then
+         do k=1,gnk
+            do j=1-hy,ldnj+hy
+            do i=1-hx,ldni+hx
+               unesta(i,j,k)  =  unestt(i,j,k)
+               vnesta(i,j,k)  =  vnestt(i,j,k)
+               swnesta(i,j,k) = swnestt(i,j,k)
+               tpnesta(i,j,k) = tpnestt(i,j,k)
+               qpnesta(i,j,k) = qpnestt(i,j,k)
+               hmnesta(i,j,k) = hmnestt(i,j,k)
+            end do
+            end do
+            do n=1,ntr
+               do j=1-hy,ldnj+hy
+               do i=1-hx,ldni+hx
+                  clnesta(i,j,k,n) = clnestt(i,j,k,n)
+               end do
+               end do
+            end do
+         end do
+         do j=1-hy,ldnj+hy
+         do i=1-hx,ldni+hx
+            qpnesta(i,j,0) = qpnestt(i,j,0) 
+         end do
+         end do
+      endif
+*
+      wall    = .false. ! open boundaries
+*
+ 100  format (i3.3)
+ 102  format ('PE: ',i4,2x,2a,7i6)
+ 1005 format (/' Wrong grid dimension on ON PE ',i4,':  (',4i6,
+     $         ') --- ABORT in INITCOND ---'/)
+*---------------------------------------------------------------------
+      return
+      end
+
+
+
+
+
+
+@

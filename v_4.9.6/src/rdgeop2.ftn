@@ -1,0 +1,306 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r rdgeop2
+*
+      subroutine rdgeop2 (geobus,ngeop)
+      implicit none
+*
+      integer ngeop
+      real geobus(ngeop)
+*
+*AUTHOR  M. Desgagne      Nov 1995
+*
+*REVISION
+* 
+*LANGUAGE Fortran 77
+*
+*OBJECT (rdgeop)
+*      Reads the entire content of bus "geobus" on file
+*      un_geo for the MC2 integration along with the names
+*      of fields on "geobus" and their necessary attributes. 
+*      The map scale factor and the Coriolis factor on the
+*      regular MC2 model grid are also read.
+*
+*FILES
+*       un_geo (unit 31): geophysical fields
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    geobus     I    R     A  Bus of 2d geophysical fields for 
+*                             MC2 model integration
+*    ngeop      I    I     S  Size of "geobus"
+*    ungeo      I    I     S  Unit number of unformatted file 
+*
+*IMPLICIT
+#include "consdyn_8.cdk"
+#include "grd.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "lesbus.cdk"
+#include "dynmem.cdk"
+#include "phymem.cdk"
+#include "physcom.cdk"
+#include "partopo.cdk"
+#include "rec.cdk"
+#include "nestpnt.cdk"
+#include "lun.cdk"
+#include "topo.cdk"
+*
+*MODULES
+*
+**
+      integer i,j,ofi,ofj,err,dimi,dimj,dimgx,dimgy,dim,err_c,splice,
+     $        m,l2,l1,nw,fact,bidon(2)
+      real xxp(lani+2),yyp(lanj+2),xpf(lani+1),ypf(lanj+1),latf(lanj+1),
+     $   coriol(minx:maxx+1,miny:maxy+1),mapscf(minx:maxx+1,miny:maxy+1)
+      real topo_l,topo_h
+      pointer (pat_l, topo_l((gni+2*hx+1),(gnj+2*hy+1),2)),
+     $        (pat_h, topo_h((gni+2*hx+1),(gnj+2*hy+1),2))
+      real*8 c,d2r,half,quart,one80,oneth,one
+      parameter (half=0.5d0 , quart=0.25d0, one80=180.0d0, 
+     $           oneth=1000.0d0, one=1.0d0)
+      include "mpif.h"
+*
+*----------------------------------------------------------------------
+*
+      l2   = loc(bidon(2))
+      l1   = loc(bidon(1))
+      fact = l2 - l1
+*
+      dimgx = gni + 2*hx
+      dimgy = gnj + 2*hy
+      dimi  = lani + 1
+      dimj  = lanj + 1
+      if (myproc.eq.0) then
+         call hpalloc (paxpx  ,dimgx   , err,1)
+         call hpalloc (paypx  ,dimgy   , err,1)
+      endif
+      call hpalloc (paxpq  ,dimi    , err,1)
+      call hpalloc (paypq  ,dimj    , err,1)
+*
+      ofi = gc_ld(1,myproc)-1
+      ofj = gc_ld(3,myproc)-1
+*
+*     protect for undefined coordinates
+*
+      c    =0.
+      err_c=0
+*
+      if (Grd_proj_S.eq.'P') then
+         c = dble(Grd_dx)
+         call xpyp_n (xxp,yyp,xref,yref,ofi,ofj,c,dimi+1,dimj+1)
+      endif
+      if (Grd_proj_S.eq.'M') then
+         d2r = pi_8 / one80
+         c = dble(Grd_dx)/oneth/((rayt_8/oneth)
+     $        *cos(dble(Grd_phir)*d2r)*d2r)
+         call xpyp_m (xxp,yyp,xref,yref,ofi,ofj,c,dimi+1,dimj+1)
+      endif
+      if (Grd_proj_S.eq.'L') then
+         c = dble(Grd_dx)
+         call xpyp_l (xxp,yyp,xref,yref,ofi,ofj,c,dimi+1,dimj+1)
+      endif
+*
+      if (c.eq.0.) then
+         if (myproc.eq.0) 
+     $        print *,' RDGEOP2.  UNDEFINED COORDINATES.  GRD_PROJ_S=['
+     $        ,Grd_proj_S,']. TERMINATE'
+         err_c=-1
+      endif  
+      call mc2stop (err_c) ! to properly stop on coordinate system error
+*
+      do i=1,dimi
+         xpf (i) = (dble(xxp(i+1))+dble(xxp(i)))*half
+         xpq (i) = xxp(i+1)
+      end do
+      do j=1,dimj
+         ypf (j) = (dble(yyp(j+1))+dble(yyp(j)))*half
+         ypq (j) = yyp(j+1)
+      end do
+*
+      if (myproc.eq.0) then
+* xpx,ypx necessary only for output purposes (myproc=0)
+         if (Grd_proj_S.eq.'P') then
+            call xpyp_n (xpx,ypx,dble(xpq(1)),dble(ypq(1)),0,0,c,
+     $                                              dimgx,dimgy)
+         else if (Grd_proj_S.eq.'M') then
+            call xpyp_m (xpx,ypx,dble(xpq(1)),dble(ypq(1)),0,0,c,
+     $                                              dimgx,dimgy)
+         else if (Grd_proj_S.eq.'L') then
+            call xpyp_l (xpx,ypx,dble(xpq(1)),dble(ypq(1)),0,0,c,
+     $                                              dimgx,dimgy)
+         endif
+         call ac_posi (xpx,ypx,dimgx,dimgy)
+      endif
+*
+      l2 = loc(endGrdci )
+      l1 = loc(Grdc_ni)
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Grdc_ni   ,nw,MPI_INTEGER  ,0,MPI_COMM_WORLD,err)
+      l2 = loc(endGrdcr )
+      l1 = loc(Grdc_latr     )
+      nw = ( l2 - l1 ) / fact
+      call MPI_bcast (Grdc_latr ,nw,MPI_REAL     ,0,MPI_COMM_WORLD,err)
+      call MPI_bcast (Grdc_proj_S,1,MPI_CHARACTER,0,MPI_COMM_WORLD,err)
+      call inibusc
+      cmemsiz = cmemsiz + max(0,sizobus) + max(0,sizobusc)
+*
+      call fcorsm3 (coriol, mapscf, xpf, ypf, dimi, dimj) 
+*  
+      do j=1-hy,ldnj+hy
+      do i=1-hx,ldni+hx
+         fcor(i,j) = coriol(i,j)
+         smap(i,j) = mapscf(i,j)
+         sby(i,j) = (dble(mapscf(i,j+1)) + dble(mapscf(i,j))) *half
+         sbx(i,j) = (dble(mapscf(i+1,j)) + dble(mapscf(i,j))) *half
+         sbxy(i,j)= (dble(mapscf(i+1,j  ))+dble(mapscf(i,j  ))) *quart +
+     $              (dble(mapscf(i+1,j+1))+dble(mapscf(i,j+1))) *quart
+      end do
+      end do
+*
+      if (gnmaphy.gt.0) then
+         do j=0,ldnj
+         do i=0,ldni
+            msf (i,j) = sqrt(sbxy(i,j))
+            omsf(i,j) = 1.0/msf(i,j)
+         end do
+         end do
+      endif
+*
+      if (Grd_proj_S.eq.'P') then
+         do j=1-hy,ldnj+hy
+            latyv (j) = -999.   ! not meaningful for P
+            laty  (j) = -999.   ! not meaningful for P
+         end do
+      else if (Grd_proj_S.eq.'M'.or.Grd_proj_S.eq.'L') then
+         do j=1-hy,ldnj+hy
+            i=j+hy   ! ypf array starts at 1 ... add offset
+            latyv (j) =  ypf(i)
+            laty  (j) = (dble(ypf(i+1))+dble(ypf(i)))*half
+         end do
+      endif
+*
+*     compute odx, odxu, ody, odyv 
+*     code displaced from setup4 to rdgeop2
+*     ody, odyv can vary with j for the L case
+*     they are computed such that:
+*     dvdy(j)=(v(j+1)-v(j))*ody (j)
+*     dqdy(j)=(q(j)-q(j-1))*odyv(j)
+*
+      if (Grd_proj_S.eq.'M'.or.Grd_proj_S.eq.'P')  then  
+         grdx = Grd_dx
+         grdy = grdx
+         odx (1) = one / dble(grdx)
+         odxu(1) = one / dble(grdx)
+         do j=1-hy,ldnj+hy
+            ody (j) = one / dble(grdy)
+            odyv(j) = one / dble(grdy)
+         end do
+      endif
+      if (Grd_proj_S.eq.'L')  then
+         d2r = pi_8 / one80
+         c = rayt_8 * dble (Grd_dx*d2r)
+         grdx = c
+         grdy = c
+*     gives the metric delta_x
+         i=1-hx                 ! take first column 
+*     For Grd_proj_S=L, invariance with x
+         odx (1) = one / dble(grdx)
+         odxu(1) = one / dble(grdx)
+         do j=1-hy,ldnj+hy
+            ody (j) = one / (sqrt(sbxy(i,j))*c)
+            odyv(j) = one / (sqrt(sbx (i,j))*c)
+         end do
+      endif
+*
+      if (modrstrt.and.(gnstepno.gt.0)) return
+*
+      if ((theoc).or.(sfc_only)) call theo_sfc (geobus,ngeop)
+*
+      if (theoc) return
+*
+      if (myproc.eq.0) then   
+         read(un_geo) (geonm (i,1),i=1,geotop),(geonm (i,2),i=1,geotop)
+         read(un_geo) (geopar(i,1),i=1,geotop),(geopar(i,2),i=1,geotop),
+     $                (geopar(i,3),i=1,geotop)
+*
+         splice=gni
+         m = ngeop/splice
+         do j=1,splice
+            read(un_geo) (geobus(i),i=(j-1)*m+1,j*m)
+         end do
+         if (splice*m+1.le.geospc)
+     $        read(un_geo) (geobus(i),i=splice*m+1,geospc)
+         do i=1,geotop
+            print*, geonm (i,1),geopar(i,1),geopar(i,2),geopar(i,3),i
+         end do
+      endif
+*
+      if (gnmaphy.gt.0) then
+      call MPI_bcast(geonm ,maxbus*2,MPI_CHARACTER,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(geopar,maxbus*3,MPI_INTEGER  ,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(geobus,geospc  ,MPI_REAL     ,0,MPI_COMM_WORLD,err)
+      endif
+*
+      dim = (dimgx+1)*(dimgy+1) * 2
+      call hpalloc (pat_l, dim, err,1)
+*
+      if (myproc.eq.0) then  
+         read (un_geo) maxhh01_l,maxhh02_l,maxhh01_h,maxhh02_h
+         err = -1
+         read (un_geo,end=2) topo_l
+         err = 0
+      endif
+ 2    call MPI_bcast(err,1,MPI_INTEGER,0,MPI_COMM_WORLD,err)
+*
+      if (err.ne.0) then
+         write (6,901)
+         stop
+      endif
+*
+      call MPI_bcast(topo_l,dim,MPI_REAL,0,MPI_COMM_WORLD,err)
+      do j=-hy,ldnj+hy
+      do i=-hx,ldni+hx
+         hh0i(i,j,1)=topo_l(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,1)
+         hh0i(i,j,2)=topo_l(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,2)
+      end do
+      end do
+      do j = 1-hy, ldnj+hy
+      do i = 1-hx, ldni+hx
+         hh0 (i,j,1) = hh0i(i,j,1)
+         hh0 (i,j,2) = hh0i(i,j,2)
+      end do
+      end do
+*
+      if (myproc.eq.0) then 
+         call hpalloc (pat_h, dim, err,1)
+         read (un_geo) topo_h
+         call nesmt (topo_h,topo_l,dimgx+1,dimgy+1,2,hx,hy,
+     $               nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy)
+         call hpdeallc (pat_l  ,err,1)
+      else
+         pat_h = pat_l
+      endif
+      call MPI_bcast(topo_h,dim,MPI_REAL,0,MPI_COMM_WORLD,err)
+*
+      do j=-hy,ldnj+hy
+      do i=-hx,ldni+hx
+         hh0f(i,j,1)=topo_h(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,1)
+         hh0f(i,j,2)=topo_h(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy,2)
+      end do
+      end do
+*
+      if ((myproc.eq.0).and.(un_geo.gt.0)) then
+         call hpdeallc (pat_h  ,err,1)
+      else
+         call hpdeallc (pat_l  ,err,1)
+      endif
+      if (myproc.eq.0) close (un_geo)
+      if (sfc_only) theoc = .true.
+*
+ 901  format (/ 'FILE zmc2.geophys NOT AVAILABLE OR INCOMPLETED'/,
+     $          '      --- ABORT IN RDGEOP2 ---'/)
+*
+*----------------------------------------------------------------------
+      return
+      end

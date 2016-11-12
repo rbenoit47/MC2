@@ -1,0 +1,94 @@
+#!/bin/ksh
+#
+arguments=$*
+. r.entry.dot
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+     -reps    ""   ""  "[remote source directory]" \
+     -repd    ""   ""  "[remote destination directory]" \
+     -machs   ""   ""  "[remote source system]" \
+     -machd   ""   ""  "[remote destination system]" \
+     -attempts  "${attempts:-36}"   "1" "[Number of attempts to try each transfer before giving up]"\
+     -sleeptime "${sleeptime:-300}" "0" "[Interval in seconds between transfer attemps]"\
+     -_status "ABORT"    "ABORT"    "[return status]"  \
+  ++ $arguments`
+#
+if [ ! "${machs}" -o ! "${machd}" -o ! "${reps}" -o ! "${repd}" ] ; then
+  attempts=0
+fi
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+nbfiles=`rsh ${machs} -n "cd ${reps} ; ls -l 2> /dev/null | wc -l"`
+if [ $nbfiles -le 1 ] ; then
+   echo "\n NO FILE TO TRANFER: (Um_xfer_cpac)\n"
+   . r.return.dot
+   exit
+fi
+#
+rcrc_s=/usr/local/env/armnlib/bin/r.crc
+rcrc_d=/usr/local/env/armnlib/bin/r.crc
+bitestride=8
+if [ "${machd}" = "cfs" ] ; then
+  rcrc_d=r.crc
+  bitestride=16
+fi
+NRCP=${NRCP:-nrcp}
+#
+echo "\n ${NRCP} ${machs}:${reps}/${f} ${machd}:${repd}\n"
+#
+f_crc ()
+{
+rsh ${1} -n "cnt=0;cd ${2};for i in * ; do nbytes=\`${3} \$i ${4} | cut -f1 -d ' '\`; let cnt=cnt+\$nbytes ; done ; echo \$cnt"
+}
+attempt=${attempts}
+while [ ${attempt} -gt 0 ] ; do
+#
+  HHi=`hfract 0`
+  ${NRCP} ${machs}:${reps}/* ${machd}:${repd}
+  flag_rcp=$?
+  nsec=`hfract 1 ${HHi}`
+#
+  if [ ${flag_rcp} -eq 0 ] ; then
+    HHi=`hfract 0`
+    crc_src=`f_crc ${machs} ${reps} ${rcrc_s} ${bitestride}`
+    crc_dest=`f_crc ${machd} ${repd} ${rcrc_d} ${bitestride}`
+    if [ 0${crc_src} -ne 0${crc_dest} ] ; then
+       flag_rcp=1
+    fi
+    nsec_crc=`hfract 1 ${HHi}`
+  fi
+#
+  if [ ${flag_rcp} -ne 0 ] ; then
+#
+    attempt=$(( ${attempt} - 1 ))
+#
+    if [ ${attempt} -gt 0 ]; then
+      echo " Problem transferring ${f} from ${machs} at `date`"
+      echo " Process sleeps for ${sleeptime} seconds and will retry"
+      sleep ${sleeptime}
+    else
+      echo " Problem transferring ${f} from ${machs} after ${attempts} attempts"
+      echo " ${f} will remain on ${machs}"
+      attempt=0
+    fi
+#
+  else
+#
+    if [ ${attempt} -ne ${attempts} ]; then
+      echo ${ECHOARG} "\n Transfer succeeded at `date` \n"
+    fi
+    nbytes=`rsh ${machd} -n ls -l ${repd}/${f2t} | awk 'BEGIN{s=0}{s = s + $5}END{print s}'`
+    xfer_rate=$(echo "scale=10; ${nbytes}/1000000./${nsec}" | bc -l)
+    nbytes=$(echo "scale=10; ${nbytes}/1000000." | bc -l)
+    echo "Tranfer rate: ${machs}==>${machd} ${nbytes} (Mb) ${nsec} (sec) ${xfer_rate} (Mb / sec)"
+    echo "Total time to crc: ${nsec_crc} (sec)\n"
+    _status=OK
+    attempt=0
+#
+  fi
+#
+done
+#
+. r.return.dot
+#

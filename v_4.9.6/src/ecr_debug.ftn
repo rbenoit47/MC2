@@ -1,0 +1,44 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r ecr_debug
+*
+      subroutine ecr_debug ( f4, f8, vname, ireal, lnk,
+     $                             lminx,lmaxx,lminy,lmaxy )
+      implicit none
+*
+      character*2 vname
+      integer ireal,lnk,lminx,lmaxx,lminy,lmaxy
+      real    f4(lminx:lmaxx,lminy:lmaxy,*)
+      real*8  f8(lminx:lmaxx,lminy:lmaxy,*)
+*
+#include "lcldim.cdk"
+#include "levels.cdk"
+#include "rec.cdk"
+*
+      integer i,j,k,ip1,ier,fstecr
+*
+*--------------------------------------------------------------------
+*
+      if (ireal.eq.8) then
+         do k=1,lnk
+         do j=1-hy,ldnj+hy      
+         do i=1-hx,ldni+hx      
+            f4(i,j,k)=f8(i,j,k)
+         end do
+         end do
+         end do
+      endif
+*
+      do k=1,lnk
+         ip1=12001 + nint(zm(k)/5.)
+      ier= fstecr(f4(1-hx,1-hx,k),f4,-32,66,0,0,gnstepno,ldni+2*hx,
+     $        ldnj+2*hy,1,
+     $        ip1,0,gnstepno,'P',vname,'depla','Z',
+     $        0,3,1000,0,1,.false.)
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+

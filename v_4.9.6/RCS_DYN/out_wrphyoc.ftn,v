@@ -1,0 +1,139 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.07.04.18.26.52;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@*** empty log message ***
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r out_wrphyoc
+*
+      subroutine out_wrphyoc (outbus,wrpospc,wrponm,wrpopar,ngth,stepno)
+      implicit none
+*
+      character*8 wrponm(*)
+      integer wrpopar(3,*),wrpospc,ngth,stepno
+      real outbus(*)
+*
+*AUTHOR     Michel Desgagne                Dec   2002
+*
+*IMPLICIT
+*
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "path.cdk"
+#include "grd.cdk"
+#include "rec.cdk"
+#include "sor.cdk"
+#include "yomdyn1.cdk"
+#include "levels.cdk"
+*
+**
+      integer  fnom,fstouv,fstecr,prog_filename,fstfrm,longueur
+      external fnom,fstouv,fstecr,prog_filename,fstfrm,longueur
+*
+      character*3 ros
+      character*8 varname
+      character*512 progfile_fp
+      integer nis,njs,prognum,pnprog,nklvl(3),err,nfld3d,id,lislon,
+     $        im,offset,i,j,k,kind,ng,ip3,glphys,onelvl(3)
+      real lv, ztp(gnk)
+      data onelvl /3*1/
+      data ros /'RND'/
+*----------------------------------------------------------------------
+*
+      ng = ldni*ldnj
+      nis = Grdc_gif - Grdc_gid + 1
+      njs = Grdc_gjf - Grdc_gjd + 1
+      nklvl(1) = 1
+      nklvl(2) = gnk
+      nklvl(3) = 1
+*
+      if (myproc.eq.0) then
+         if (stepno.lt.1) then
+            out_clostep = 0
+         else
+            if ( Grdc_nsor.le.Grdc_ndt) then
+               out_clostep = min (endstepno,stepno)
+            else
+               out_clostep = min (endstepno,out_clostep+Grdc_nsor)
+            endif
+         endif
+         prognum = out_clostep
+         err = prog_filename (out_progfile,out_lt,out_dat2,out_h0,
+     $                             -1,-1,myrow,mycol,prognum,6,'P')
+         progfile_fp = dfwmil(1:longueur(dfwmil))//'/output/casc/'
+     $                    //out_progfile(1:longueur(out_progfile))
+         err = fnom  (out_unf,progfile_fp,'STD+'//ros,0)
+         err = fstouv(out_unf,ros)
+         write (6,101) out_unf,out_progfile(1:longueur(out_progfile))
+      endif
+*
+      pnprog = int (dble(stepno) * grdt / 3600. + 1.e-12)
+*     
+      nfld3d=0
+      do id=1,ngth
+         if (wrpopar(2,id).gt.1) nfld3d = nfld3d +1
+      end do
+*
+      if (nfld3d.gt.0) then
+*     
+         do k = 2, gnk
+            ztp(k) = ztr(k-1)
+         end do
+         ztp(1) = zt(1)
+*
+      endif
+*
+      do id=1,ngth
+      do im=1,wrpopar(3,id)
+         offset  = wrpopar(1,id) + (im-1)*ng*wrpopar(2,id)
+         varname = wrponm(id)
+         lv   =  0.
+         kind = -1
+         if ((wrpopar(3,id).gt.1) .and. 
+     $     (.not.((wrponm(id).eq.'RAIN').or.(wrponm(id).eq.'SFCDIA'))))
+     $   then
+            lv   = real(im)
+            kind = 3
+         endif
+         if (wrpopar(2,id).lt.2) then  ! 2D fields
+            call ecrisp_fst ( outbus(offset),1,ldni,1,ldnj,lv,varname,
+     $                  1.0,pnprog,stepno,kind,1,onelvl,'CSC',out_unf )
+         else
+            ip3 = 0
+            if (wrpopar(3,id).gt.1) ip3 = im
+            call ecrisp_fst ( outbus(offset),1,ldni,1,ldnj,ztp,varname,
+     $              1.0,pnprog,stepno,out_kind,gnk,nklvl,'CSC',out_unf )
+         endif
+      end do
+      end do
+*
+      if (myproc.eq.0) then
+         err = fstfrm(out_unf)
+         call fclos(out_unf)
+         write (6,102) out_unf,out_progfile(1:longueur(out_progfile))
+         out_unf = 0
+      endif
+*
+ 101  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS OPENED')
+ 102  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS CLOSED')
+*----------------------------------------------------------------------
+      return
+      end
+@

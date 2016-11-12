@@ -1,0 +1,139 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r wtopo
+*
+      subroutine wtopo ( topo, topo_h, ni, nj, wrtopo )
+      implicit none
+*
+      logical wrtopo
+      integer ni,nj
+      real topo(ni,nj,2),topo_h(ni,nj,2)
+**
+#include "lcldim.cdk"
+#include "yomdyn1.cdk"
+#include "halo.cdk"
+#include "partopo.cdk"
+#include "lun.cdk"
+*
+      integer i,ii,j,jj,k,iproc,cnt,i0,in,j0,jn
+      real wk2(ni*nj)
+*
+*----------------------------------------------------------------------
+* 
+      if (wrtopo) then
+         write (un_geo) maxhh01_l,maxhh02_l,maxhh01_h,maxhh02_h
+         write (un_geo) topo
+         write (un_geo) topo_h
+      endif
+*
+      if (halo.le.0) then
+         do j=0,npey-1
+         do i=0,npex-1
+            iproc = j*npex + i
+            call bmf_write ( gc_ld2(5,iproc),'HALO',1,1,1,
+     $                       1,1,1,1,1,1,0,0,0,0,40,0,1,halo )
+         end do
+         end do
+      else
+         iproc=0
+	 do i=0,3
+            call bmf_write ( gc_ld2(5,iproc)+i,'HALO',1,1,1,
+     $                       1,1,1,1,1,1,0,0,0,0,40,0,1,halo )
+         end do	
+      endif	
+*     
+      do 110 k=1,2
+*
+      if (halo.le.0) then
+*
+         do j=0,npey-1
+         do i=0,npex-1
+            iproc = j*npex + i
+            i0 = gc_ld2(1,iproc) - hx*max(0,1-i) + hx
+            in = gc_ld2(1,iproc) + gc_ld2(2,iproc) - 1
+     $                           + hx*max(0,i-npex+2) + hx + 1
+            j0 = gc_ld2(3,iproc) - hx*max(0,1-j) + hx
+            jn = gc_ld2(3,iproc) + gc_ld2(4,iproc) - 1
+     $                           + hx*max(0,j-npey+2) + hx + 1
+            cnt = 0
+            do jj = j0, jn
+            do ii = i0, in
+               cnt = cnt+1
+               wk2(cnt)= topo(ii,jj,k)
+            end do
+            end do
+            call bmf_write ( gc_ld2(5,iproc), 'MX  ',in-i0+1,1,in-i0+1,
+     $                    jn-j0+1,1,jn-j0+1,2,k,k,0,0,0,0,41,0,cnt,wk2 )
+         end do
+         end do
+*
+      else
+*
+         cnt = 0
+         do j = 1, halox
+         do i = 1, ni
+            cnt = cnt+1
+            wk2(cnt)= topo(i,j,k)
+         end do
+         end do
+         call bmf_write ( gc_ld2(5,0)  , 'MX  ',ni,1,ni,halox,1,halox,
+     $                                 2,k,k,0,0,0,0,41,0,cnt,wk2 )
+         cnt = 0
+         do j = nj-halox+1,nj
+         do i = 1, ni
+            cnt = cnt+1
+            wk2(cnt)= topo(i,j,k)
+         end do
+         end do
+         call bmf_write ( gc_ld2(5,0)+1, 'MX  ',ni,1,ni,halox,1,halox,
+     $                                 2,k,k,0,0,0,0,41,0,cnt,wk2 )
+         cnt = 0
+         do j = halox,nj-halox+1
+         do i = 1, halox
+            cnt = cnt+1
+            wk2(cnt)= topo(i,j,k)
+         end do
+         end do
+         call bmf_write ( gc_ld2(5,0)+2, 'MX  ', halox,1,halox, 
+     $                    nj-2*halox+2,1,nj-2*halox+2,2,k,k,
+     $                    0,0,0,0,41,0,cnt,wk2 )
+         cnt = 0
+         do j = halox,nj-halox+1
+         do i = ni-halox+1,ni
+            cnt = cnt+1
+            wk2(cnt)= topo(i,j,k)
+         end do
+         end do
+         call bmf_write ( gc_ld2(5,0)+3, 'MX  ', halox,1,halox, 
+     $                    nj-2*halox+2,1,nj-2*halox+2,2,k,k,
+     $                    0,0,0,0,41,0,cnt,wk2 )
+*
+      endif
+*
+  110 continue
+*----------------------------------------------------------------------
+      return
+      end
+      
+@

@@ -1,0 +1,91 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  SETTRIV
+*
+      SUBROUTINE SETTRIV(A,B,C,V,W,N)
+*
+#include "impnone.cdk"
+      INTEGER N
+      REAL A(N),B(N),C(N),V(N),W(N)
+*
+*Author
+*          J. Cote (RPN 1983)
+*
+*Revision
+* 001      J. Cote RPN(Nov 1984)SEF version documentation
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+*
+*Object
+*          to prepare the solution on a tri-diagonal matrix problem
+*
+*Arguments
+*
+*          - Input -
+* A        lower-diagonal of the matrix
+* B        diagonal of the matrix
+* C        upper diagonal of the matrix
+*
+*          - Output -
+* V        work space
+* W        work space
+*
+*          - Input -
+* N        matrix dimension
+*
+*Notes
+*          The solution is obtained with 'SOLTRIV'. The matrix must
+*          be a dominant diagonal. Refer to R.S. Varga's "Matrix
+*          Iterative Analysis", pp.195 FF
+*
+**
+*
+      INTEGER J
+*
+      V(1)=1.0/B(1)
+      DO 1 J=2,N
+         W(J-1)=C(J-1)*V(J-1)
+    1    V(J)=1.0/(B(J)-A(J)*W(J-1))
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

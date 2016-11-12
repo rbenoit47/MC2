@@ -1,0 +1,416 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r traject -- Compute TRAJECTORIES
+*
+#if defined (NEC)
+#define UPWND3 v_upwnd3
+#endif
+      subroutine traject ( xyzd, t1, dtm, dtp )
+      implicit none
+*
+      real t1(*)
+      real*8 xyzd(*), dtm, dtp
+*
+*AUTHORs    M. Desgagne & C. Girard
+*
+*OBJECT
+*
+*    *******************************************************************
+*    *                                                                 *
+*    *               ANDRE ROBERT  SEMI-LAGRANGIAN SCHEME              *
+*    *                                                                 *
+*    *                            CALCULATES                           *
+*    *                                                                 *
+*    *                       TRAJECTORIES: x , y , z                   *
+*    *                                      d   d   d                  *
+*    *                                                                 *
+*    *    1. MID-POINT trajectories                                    *
+*    *                                                                 *
+*    *               ___________________________________               *
+*    *              |                                   |              *
+*    *              |                                   |              *
+*    *              | dr/2  =   [ x (r), y (r), z (r) ] |              *
+*    *              |              d      d      d      |              *
+*    *              |___________________________________|              *
+*    *                                                                 *
+*    *                                                                 *
+*    *             FUNCTIONS OF UPSTREAM WIND ux , vy , wz             *
+*    *                                          d    d    d            *
+*    *                                                                 *
+*    *        ux (r)  = u0 (r-dr/2)                                    *
+*    *          d         d                     _____x                 *
+*    *                                             _y                  *
+*    *                       where     u0  =  [ u0*s  ] * dt/dx        *
+*    *                                   d                             *
+*    *                                                                 *
+*    *                                                                 *
+*    *        vy (r)  = v0 (r-dr/2)                                    *
+*    *          d         d                     _____y                 *
+*    *                                             _x                  *
+*    *                       where     v0  =  [ v0*s  ] * dt/dy        *
+*    *                                   d                             *
+*    *                                                                 *
+*    *                                                                 *
+*    *        wz (r)  = w0 (r-dr/2)                                    *
+*    *          d         d                                            *
+*    *                                           __z                   *
+*    *                       where     w0  =  [  w0   ] * dt/dz        *
+*    *                                   d                             *
+*    *                                                                 *
+*    *      FOR STRAIGTH TRAJECTORIES: x  = ux , y  = vy , z  = wz     *
+*    *                                  d     d   d     d   d     d    *
+*    *                                                                 *
+*    *      FOR GREAT CIRCLE TRAJECTORIES    cf    gc_itraj            *
+*    *                                                                 *
+*    *                                                                 *
+*    *    2. DOUBLING the DISPLACEMENTS                                * 
+*    *                                                                 * 
+*    *               ___________________________________               *
+*    *              |                                   |              *
+*    *              |                                   |              *
+*    *              |  [ x (r), y (r), z (r) ]  =  dr   |              *
+*    *              |     d      d      d               |              *
+*    *              |___________________________________|              *
+*    *   
+*    *                                                                 * 
+*    *      FOR GREAT CIRCLE TRAJECTORIES    cf    gc_ddisp            * 
+*    *                                                                 * 
+*    ******************************************************************* 
+* 
+*ARGUMENTS 
+*     _________________________________________________________________ 
+*    |         |                                                 |     |
+*    |  NAME   | DESCRIPTION                                     | I/O |
+*    |---------|-------------------------------------------------|-----|
+*    |         |                                                 |     |
+*    |    xd   | lagrangian displacement along X                 |  o  |
+*    |    yd   | lagrangian displacement along  Y                |  o  |
+*    |    zd   | lagrangian displacement along   Z               |  o  |
+*    |         |                                                 |     |
+*    |    w0   | vertical motion in Z-coord at time t    (work)  |     |
+*    |    wm   | vertical motion in Z-coord at time t-dt (work)  |     |
+*    |         |                                                 |     |
+*    |   u0d   | velocity at departure point along X     (work)  |     |
+*    |   v0d   | velocity at departure point along  Y    (work)  |     |
+*    |   w0d   | velocity at departure point along   Z   (work)  |     |
+*    |         |                                                 |     |
+*    |   uxd   | upstream velocity along X               (work)  |     |
+*    |   vyd   | upstream velocity along  Y              (work)  |     |
+*    |   wzd   | upstream velocity along   Z             (work)  |     |
+*    |         |                                                 |     |
+*    |   dtm   | timestep lenght (-)                             |  i  |
+*    |   dtp   | timestep lenght (+)                             |  i  |
+*    |         |                                                 |     |
+*    |_________|_________________________________________________|_____|
+*
+#include "levels.cdk"
+#include "dynmem.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "topo.cdk"
+#include "semilag.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+#include "grd.cdk"
+*
+      real u0d,v0d,w0d,h0d,w0,wm,uxd,vyd,wzd,h2d
+      pointer (pau0d, u0d(minx:maxx,miny:maxy,*)),
+     $        (pav0d, v0d(minx:maxx,miny:maxy,*)),
+     $        (paw0d, w0d(minx:maxx,miny:maxy,*)),
+     $        (pah0d, h0d(minx:maxx,miny:maxy,*)),
+     $        (paw0,   w0(minx:maxx,miny:maxy,*)),
+     $        (pawm,   wm(minx:maxx,miny:maxy,*)),
+     $        (pauxd, uxd(minx:maxx,miny:maxy,*)),
+     $        (pavyd, vyd(minx:maxx,miny:maxy,*)),
+     $        (pawzd, wzd(minx:maxx,miny:maxy,*)),
+     $        (pah2d, h2d(minx:maxx,miny:maxy,*))
+      real*8 xd,yd,zd,xd2,yd2,fxx,fyy,fzz
+      pointer (paxd,   xd(minx:maxx,miny:maxy,*)),
+     $        (payd,   yd(minx:maxx,miny:maxy,*)),
+     $        (pazd,   zd(minx:maxx,miny:maxy,*)),
+     $        (paxd2, xd2(minx:maxx,miny:maxy,*)),
+     $        (payd2, yd2(minx:maxx,miny:maxy,*)),
+     $        (pafxx, fxx(minx:maxx,miny:maxy,*)),
+     $        (pafyy, fyy(minx:maxx,miny:maxy,*)),
+     $        (pafzz, fzz(minx:maxx,miny:maxy,*))
+      integer   i, j, k, id, jd, iff, jf, iter
+      real*8  zero, pt5, one, two, epsilon, pt5dt, double, c1,
+     $        ebound, wbound, sbound, nbound, tbound, bbound
+      character*3 lag_intp ! main choices: 'cub', 'qua', 'lin'
+      real*8  lat0      ! to come from dynmem
+      logical gc_traj   ! to come from yomdyn?
+      logical lin_advec ! to come from semilag?
+      real hor_wind     ! to come from?
+      parameter (zero = 0.0d0, pt5 = 0.5d0, one = 1.0d0,
+     $           two = 2.0d0, epsilon = 1.d-8)
+*
+*--------------------------------------------------------------------
+      paxd  = loc(xyzd(        1))
+      payd  = loc(xyzd(  dim3d+1))
+      pazd  = loc(xyzd(2*dim3d+1))
+      paxd2 = loc(xyzd(3*dim3d+1))
+      payd2 = loc(xyzd(4*dim3d+1))
+      pafxx = loc(xyzd(5*dim3d+1))
+      pafyy = loc(xyzd(6*dim3d+1))
+      pafzz = loc(xyzd(7*dim3d+1))
+      pau0d = loc(t1  (        1))
+      pav0d = loc(t1  (  dim3d+1))
+      paw0d = loc(t1  (2*dim3d+1))
+      pah0d = loc(t1  (3*dim3d+1))
+      paw0  = loc(t1  (4*dim3d+1))
+      pawm  = loc(t1  (5*dim3d+1))
+      pauxd = loc(t1  (6*dim3d+1))
+      pavyd = loc(t1  (7*dim3d+1))
+      pawzd = loc(t1  (8*dim3d+1))
+      pah2d = loc(t1  (9*dim3d+1))
+*
+      lag_intp = "cub"
+*
+      gc_traj=.false.
+      gc_traj=gc_traj.and.(Grd_proj_S.eq.'L'.or.Grd_proj_S.eq.'M')
+*
+*     Free-slip solid wall on top and bottom boundaries
+*
+      bbound = one          + epsilon
+      tbound = dble(gnk-1)  - epsilon
+*
+*     Free-slip solid wall on processor horizontal boundaries
+*     if courant number exceeds what is allowed by hx and hy
+*
+      wbound = dble(1            - hx + 1) + epsilon
+      ebound = dble(ldni - east  + hx - 1) - epsilon
+      sbound = dble(1            - hy + 1) + epsilon
+      nbound = dble(ldnj - north + hy - 1) - epsilon
+*
+      pt5dt = pt5 * dble(grdt)
+*
+*    1A) Compute vertical motion in coordinate space
+*
+      call sw2w3(w0,u0,v0,sw0,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                        minx,maxx,miny,maxy,gnk)
+      call sw2w3(wm,um,vm,swm,sbxy,gg1,gg2,gg0wr,dhdt,
+     $                        minx,maxx,miny,maxy,gnk)
+*
+*    1B) Compute u0d, v0d, w0d
+*        and first guesses for xd,  yd,  zd
+*        based on extrapolated winds: 2*u0-um,2*v0-vm,2*w0-wm
+*
+*  upwind-point range
+*
+      id =1-hx*west
+      jd =1-hy*south
+      iff=ldni+(hx-1)*east
+      jf =ldnj+(hy-1)*north
+*
+      call hauteur_omp (h0d,'HM',hh0,maxx-minx+1,maxy-miny+1,gnk)
+*
+!$omp do
+      do k=1,gnk-1
+      do j=jd,jf
+      do i=id,iff
+         xd(i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,dble(pt5dt
+     $        * ((two*u0(i  ,j,k)-um(i  ,j,k))*sby(i  ,j)*odxu(1) +
+     $           (two*u0(i+1,j,k)-um(i+1,j,k))*sby(i+1,j)*odxu(1) ))))
+         u0d(i,j,k)= pt5dt * ( u0(i  ,j,k) *sby(i  ,j)*odxu(1)
+     $                       + u0(i+1,j,k) *sby(i+1,j)*odxu(1) )
+         yd(i,j,k) = min(dble(j)-sbound,max(dble(j)-nbound,dble(pt5dt
+     $        * ((two*v0(i,j  ,k)-vm(i,j  ,k))*sbx(i,j  )*odyv(j  ) +
+     $           (two*v0(i,j+1,k)-vm(i,j+1,k))*sbx(i,j+1)*odyv(j+1) ))))
+         v0d(i,j,k)= pt5dt * ( v0(i,j  ,k) *sbx(i,j  )*odyv(j  )
+     $                       + v0(i,j+1,k) *sbx(i,j+1)*odyv(j+1) )
+         zd(i,j,k) = min(dble(k)-bbound,max(dble(k)-tbound,dble(pt5dt
+     $        * ((two*w0(i,j,k  )-wm(i,j,k  )) +
+     $           (two*w0(i,j,k+1)-wm(i,j,k+1)) ))))
+         w0d(i,j,k)= pt5dt * ( sw0(i,j,k  ) - dhdt(i,j,k  )
+     $                       + sw0(i,j,k+1) - dhdt(i,j,k+1) )
+      end do
+      end do
+      end do
+!$omp enddo
+*
+      lin_advec=.false.
+      if (lin_advec) then
+         hor_wind=10.  ! obviously a case dependent value !
+!$omp do
+         do k=1,gnk-1
+         do j=jd,jf
+         do i=id,iff
+            xd (i,j,k) = min(dble(i)-wbound,max(dble(i)-ebound,
+     $                   dble(grdt)*dble(hor_wind)*odxu(1)))
+            u0d(i,j,k) = dble(grdt)*dble(hor_wind)*odxu(1)
+            zd (i,j,k) = 0.0
+            w0d(i,j,k) = 0.0
+         end do
+         end do
+         end do
+!$omp enddo
+      endif
+*
+!$omp single
+      call rpn_comm_xch_halo (u0d,minx,maxx,miny,maxy,ldni,ldnj,
+     $                        4*gnk,hx,hy,period_x,period_y,ldni,0)
+!$omp end single
+*
+*    1C) Compute iteratively u0 (r-dr),v0 (r-dr),w0 (r-dr)
+*                              d         d         d
+      do 100 iter = 1, Tsl_iter
+*
+      call UPWND3 ( uxd, u0d, xd, yd, zd, fxx, fyy, fzz,
+     $              minx,maxx,miny,maxy,gnk-1,0,0,lag_intp)
+*
+      if (.not.gc_traj) then
+!$omp do
+         do k=1,gnk-1
+         do j=1,ldnj-north
+         do i=1,ldni-east
+            xd(i,j,k) = min(dble(i)-wbound,
+     $                  max(dble(i)-ebound,dble(uxd(i,j,k))))
+         end do
+         end do
+         end do
+!$omp enddo
+      endif
+*
+      call UPWND3 ( vyd, v0d, xd, yd, zd, fxx, fyy, fzz,
+     $              minx,maxx,miny,maxy,gnk-1,0,0,lag_intp)
+*
+      if (.not.gc_traj) then
+!$omp do
+         do k=1,gnk-1
+         do j=1,ldnj-north
+         do i=1,ldni-east
+            yd(i,j,k) = min(dble(j)-sbound,
+     $                  max(dble(j)-nbound,dble(vyd(i,j,k))))
+         end do
+         end do
+         end do
+!$omp enddo
+*
+      else
+!$omp single
+         call gc_itraj ( xd, yd, uxd, vyd, lat0, minx,maxx,miny,maxy )
+!$omp end single
+      endif
+*
+*     semi-lagrangian calculation of W
+*
+!$omp do
+      do k=1,gnk-1
+         do j=1,ldnj-north
+         do i=1,ldni-east
+            xd2(i,j,k) = min(dble(i)-wbound,
+     $                   max(dble(i)-ebound,two*xd(i,j,k)))
+            yd2(i,j,k) = min(dble(j)-sbound,
+     $                   max(dble(j)-nbound,two*yd(i,j,k)))
+         end do
+         end do
+      end do
+!$omp enddo
+*
+      call UPWND3 ( wzd, w0d, xd, yd, zd, fxx, fyy, fzz,
+     $              minx,maxx,miny,maxy,gnk-1,0,0,lag_intp)
+*
+      call UPWND3 ( h2d, h0d, xd2, yd2, zd, fxx, fyy, fzz,
+     $              minx,maxx,miny,maxy,gnk-1,0,0,'bcu')
+*
+!$omp do
+      do k=1,gnk-1
+      do j=1,ldnj-north
+      do i=1,ldni-east
+         c1 = (wzd(i,j,k)-pt5*(h0d(i,j,k)-h2d(i,j,k)))*gg0r(i,j,k)
+         zd(i,j,k) = min(dble(k)-bbound,max(dble(k)-tbound,c1))
+      end do
+      end do
+      end do
+!$omp enddo
+*
+ 100  continue
+*
+      double = ( dtm + dtp ) / dble(grdt)
+*
+*--------------------------------------------------------------------
+*
+*    2) Doubling the displacements
+*
+      double = ( dtm + dtp ) / dble(grdt)
+*
+      if (gc_traj.and.double.gt.1.01d0) then
+*
+!$omp do
+         do j=1,ldnj-north
+         do i=1,ldni-east
+            xd(i,j,gnk) = double *xd(i,j,gnk-1)
+            yd(i,j,gnk) = double *yd(i,j,gnk-1)
+            zd(i,j,gnk) = 0.0d0
+         end do
+         end do
+!$omp enddo
+*
+!$omp single
+         call gc_ddisp ( xd, yd, lat0, minx, maxx, miny, maxy )
+!$omp end single
+*
+!$omp do
+         do k=1,gnk
+            do j=1,ldnj-north
+            do i=1,ldni-east
+               zd(i,j,k) = double * zd(i,j,k)
+            end do
+            end do
+         end do
+!$omp enddo
+*
+      else
+*
+!$omp do
+         do k=1,gnk-1
+         do j=1,ldnj-north
+         do i=1,ldni-east
+            xd(i,j,k) = double * xd(i,j,k)
+            yd(i,j,k) = double * yd(i,j,k)
+            zd(i,j,k) = double * zd(i,j,k)
+         end do
+         end do
+         end do
+!$omp enddo
+*
+!$omp do
+         do j=1,ldnj-north
+         do i=1,ldni-east
+            xd(i,j,gnk) = xd(i,j,gnk-1)
+            yd(i,j,gnk) = yd(i,j,gnk-1)
+            zd(i,j,gnk) = 0.d0
+         end do
+         end do
+!$omp enddo
+*
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+
+
+@

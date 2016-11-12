@@ -1,0 +1,243 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine bulle_cfg (prout,status)
+      implicit none
+*
+      logical prout
+      integer status
+*
+#include "lcldim.cdk"
+#include "rec.cdk"
+#include "cdate.cdk"
+#include "grd.cdk"
+#include "levels.cdk"
+#include "nesting.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "filename.cdk"
+#include "physcom.cdk"
+#include "tracers.cdk"
+#include "nbcpu.cdk"
+#include "bubble.cdk"
+#include "nestpnt.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+#include "sor.cdk"
+*
+      integer unnml,pnerrdirf,pnflag1,pnflag2,i,k,err,longueur
+      real*8 dayfrac
+      character*12 nmlname
+      namelist /bubble_cfgs/ gni,gnj,gnk,Grd_dx,htop,
+     $                       gnnls,gnnt,gnnrstrt,grdt,gnnpbl,
+     $                       grepsi,hord_lnr,wall,
+     $                       bb_dpth,bb_radius,bb_xcntr,bb_zcntr,
+     $               tzero_star,ttop_star,ntrop_star,htrop_star,
+     $                       g_id,g_if,g_jd,g_jf,z_out
+      data unnml /11/
+*
+      status  = -1
+      nmlname = 'bubble_cfgs'
+*
+*
+*     In what follows is the set up for 
+*
+*
+*            #############################################
+*            #                                           #
+*            #      Andre Robert's bubble experiment     #
+*            #       (ref:J.A.S.,V50,p.1865-1873)        #
+*            #                                           #
+*            #############################################
+*
+*     Attempting to reproduce in particular his FIGURES 1 & 2
+*
+*
+*     N.B. results reproduced with bubble initially positionned 5 m
+*          above the underlying surface (C.G.)
+*
+*     warning: for perfect central symmetry gni and gnj must be odd
+*              as the number of cells is (gni-1)*(gnj-1)
+*     warning: the minimum value for gnj is 2, i.e. one cell
+*
+      if (.not.modrstrt) then
+*
+* Mandatory configuration (original settings)
+*
+         tzero_star    = 273.15
+         ttop_star     =-1.
+         ntrop_star    =-1.
+         htrop_star    = 100000.
+         nstrat_star   =-1.
+         iscal(1) =1000000
+         iscal(2) =1000000
+         gni      = 101
+         gnj      = 2                    ! requires slab=.true.
+         gnk      = 101
+          nk      = gnk-1
+         Grd_dx= 10.
+         htop     = 1000.
+         gnnls    = 12
+         gnnt     = 120
+         grdt     = 5.0
+         gnnrstrt = 200
+         gnnpbl   = -1
+         do k=1,maxdynlv
+            zt(k)=-1.0
+         end do
+         zt(1)    = 1.
+
+         bb_radius= 250.
+         bb_xcntr = 500.
+         bb_zcntr = 255.
+         bb_dpth  = 0.5
+
+         g_id  = 1
+         g_if  = gni-1
+         g_jd  = 1
+         g_jf  = 1
+         do k=1,maxlvl_out
+            z_out(k)=-1
+         end do
+*
+         grepsi   = 0.           ! No decentering of SI scheme
+         hord_lnr = 0.           ! No diffusion
+         gnmaphy  = 0            ! No physical parameterization
+         hblen_x  = 0
+         hblen_y  = 0
+         wall     = .true.       ! Solid wall conditions.
+         slab     = .true.       ! Slab-symmetry in y-direction.
+         ctebcs   = .true.       ! Fixed boundary conditions.
+         nofcms   = .true.       ! No rotation; cartesian coordinates.
+*
+* *** Updating configuration with namelist bubble_cfgs
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $         form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9991
+         endif
+*
+         rewind ( unnml )
+         read (unnml, nml=bubble_cfgs, end = 9120)
+         write (6,601) nmlname
+*
+         close (unnml)
+*
+      else
+*
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $         'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         stop
+*
+      endif
+*
+      status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+*
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+      hx      = min(3,gni-1)
+      hy      = hx
+*
+*     units changed to number of grid points
+*
+      bb_xcntr = bb_xcntr /Grd_dx + 0.5 + hx
+      bb_zcntr = bb_zcntr /Grd_dx + 1.0
+      bb_radius= bb_radius/Grd_dx
+*  
+      g_id = min(gni+hx,max(1-hx,g_id))
+      g_if = min(gni+hx,max(1-hx,g_if))
+      g_jd = min(gnj+hy,max(1-hy,g_jd))
+      g_jf = min(gnj+hy,max(1-hy,g_jf))
+      if (z_out(1).lt.0) then
+         do k=1,nk
+            z_out(k)=k
+         end do
+         nk_out=nk
+      else
+         nk_out=0
+         do k=1,maxlvl_out
+            if ((z_out(k).le.nk).and.(z_out(k).gt.0)) then
+               nk_out=nk_out+1
+               z_tmp(nk_out) = z_out(k)
+            endif
+         end do
+         do k=1,nk_out
+            z_out(k) = z_tmp(k)
+         end do
+      endif
+*
+      gcrunstrt = "19980101.000000"
+      gcjobstrt = gcrunstrt
+      dayfrac=(gnnt*grdt)/86400.0
+      call  incdatsd(gcjobend,gcrunstrt,dayfrac)
+      gcrunend = gcjobend
+      call datp2f (gnidate,gcrunstrt)
+      Grd_ni = gni
+      Grd_nj = gnj
+      Grd_proj_S = 'P'
+      
+      call hpalloc (paxp ,gni    , err,1)
+      call hpalloc (payp ,gnj    , err,1)
+      xp(1) = 1000000.
+      yp(1) = 1005000.
+      do i=1,gni
+         xp(i) = xp(i-1) + 1.
+      end do
+      do i=1,gnj
+         yp(i) = yp(i-1) + 1.
+      end do
+      Grd_dgrw  = 0.
+      
+      gnstepno= 0
+      call gllvls (gnk)
+*      
+      gnlst     = int(grdt)
+      Pil_nesdt = 0
+      do i=1,maxntrpil
+         trpil(i) = '@@#@@#'
+      end do
+*
+*     Print control parameters
+*
+      if (prout) then
+      print*
+      write (6, nml=bubble_cfgs)
+      print*
+      endif
+*
+ 601  format (' CONFIGURATION UPDATED WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+*
+      return
+      end
+@

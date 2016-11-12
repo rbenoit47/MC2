@@ -1,0 +1,336 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+* *S/P  INTWAT1
+*
+      SUBROUTINE INTWAT1(ICW,IWV,LWP,TLWP,T,HU,QC,
+     +                  CTP,CTT,IWP,SLWP,SLWP2,
+     +                  SLWP3,SLWP4,FICE,ISTCOND,
+     +                  RNFLX,SNOFLX,S,PS,N,NK)
+#include "impnone.cdk"
+      INTEGER N,NK
+      INTEGER ISTCOND
+*
+      REAL ICW(N),IWV(N),TLWP(N),LWP(N)
+      REAL CTP(N),CTT(N),IWP(N),SLWP(N)
+      REAL SLWP2(N),SLWP3(N),SLWP4(N),FICE(N,NK)
+      REAL HU(N,NK),T(N,NK),QC(N,NK)
+      REAL RNFLX(N,NK),SNOFLX(N,NK)
+      REAL S(N,NK),PS(N)
+*
+*Author
+*          R.Sarrazin, G. Pellerin, B. Bilodeau - (Sept 1996)
+*
+*Revision
+* 001      A. Glazer (Nov 1999) Add the vertical integrals of ice,
+*          supercooled liquid water (total and by layers),
+*          cloud top pressure and temperature
+*
+*Object
+*          to compute the vertical integrals of water vapor,
+*          liquid water and cloud water.
+*
+*Arguments
+*
+*          - Output -
+* ICW      vertical integral of cloud water/ice (total condensate)
+* IWV      vertical integral of water vapor
+* LWP      vertical integral of liquid water (from QC)
+* TLWP     vertical integral of the total water (QC + RNFLX) (SKOCON or CONSUN)
+* CTP      cloud top pressure
+* CTT      cloud top temperature
+* IWP      vertical integral of ice 
+* SLWP     vertical integral of supercooled liquid water
+* SLWP2    vertical integral of supercooled liquid water (from surface  to sigma=s2)
+* SLWP3    vertical integral of supercooled liquid water (from sigma=s2 to sigma=s3)
+* SLWP4    vertical integral of supercooled liquid water (from sigma=s3 to sigma=s4)
+*
+*          - Input/Output -
+* T        virtual temperature
+* HU       specific humidity
+* QC       cloud water content
+* FICE     ice fraction of total condensate calculated in MIXPHASE
+* ISTCOND  stratiform condensation scheme used (ISTCOND=5 for MIXPHASE)
+* RNFLX    water flux calculated in SKOCON or CONSUN
+* SNOFLX   snow  flux calculated in SKOCON or CONSUN (not used)
+* S        local sigma level values
+* PS       surface pressure
+* N        horizontal dimension
+* NK       vertical   dimension
+*
+*
+*Notes
+*          The different constants used in the integrals are from
+*          typical droplet/crystal sizes and terminal velocities. 
+*          See "Need for the creation of new variables as output 
+*               from models using the Sundqvist parameterization
+*               for condensation", G. Deblonde, 19 July 1995.
+*
+*A. Glazer (Nov 1999) For the calculations of cloud top
+*          	the emissivity threshold is emin=0.99 
+*               combined ice/water cloud emissivity as in cldoptx
+*IMPLICITES
+*
+#include "dintern.cdk"
+#include "consphy.cdk"
+*
+      integer i,k,im,k1,k2,k3,k4
+      real dsg,dpsg,airden,qctemp
+      real apri,tci,tscale,topeq0,todpmx,tabice
+      real ewat,eice,emis,re,emin,elsa
+      real s1,s2,s3,s4
+      logical ctop,scool
+*
+      data re,emin,elsa/25.,0.99,1.66/
+      data s1,s2,s3,s4/1.,0.8,0.6,0.4/
+      data ctop/.true./,scool/.true./
+*
+      tci=232.
+      topeq0=268.
+      todpmx=256.
+      tscale=(todpmx-tci)*sqrt(2.)
+      apri=1./(1.-exp(-((topeq0-tci)/tscale)**2))
+*
+*     INITIALIZE OUTPUT FIELDS (CTP en Pa, CTT en deg Kelvin)
+*
+      do i = 1,N
+         ICW (i) = 0.
+         IWV (i) = 0.
+         TLWP(i) = 0.
+         LWP (i) = 0.
+         CTP (i) = 100000.
+         CTT (i) = 300.
+         IWP (i) = 0.
+         SLWP(i) = 0.
+         SLWP2(i)= 0.
+         SLWP3(i)= 0.
+         SLWP4(i)= 0.
+      end do
+*
+*     CLOUD TOP PRESSURE AND TEMPERATURE
+*     Based on combined ice-water emissivity of cloud: 
+*     	ewat (Stephens 1978; JAS, 35, 2123-2132)
+*     	eice (Ebert and Curry 1992; JGR, 97(D4), 3831-3836)
+*
+      if (ISTCOND.eq.5 .and. ctop) then
+      do i = 1,N
+         do k = 1,NK
+            dsg = 0.5 * ( s(i,min(k+1,NK)) - s(i,max(k-1,1)) )
+            if (k.eq.NK) dsg = 1. - 0.5 * ( s(i,NK) + s(i,NK-1) )
+            dpsg = max(ps(i)*dsg/grav,0.)
+            tabice = fice(i,k)
+            qctemp = 1.e3*max( QC(i,k) , 0. )*dpsg
+            LWP (i)= LWP (i) + (1.-tabice)*qctemp
+            IWP (i)= IWP (i) + tabice*qctemp
+            ewat=1.-exp(-0.087*elsa*LWP(i))
+            eice=1.-exp(-(0.0003+1.290/re)*elsa*IWP(i))
+            emis=1.-(1.-ewat)*(1.-eice)
+            if (emis .gt. emin) then
+               CTP(i) = s(i,k)*ps(i)
+               CTT(i) = T(i,k)
+               go to 100
+           end if
+         end do
+ 100     continue
+      end do
+      end if
+*
+*     REINITIALIZE FIELDS  
+*
+      do i = 1,N
+         LWP (i) = 0.
+         IWP (i) = 0.
+      end do
+*
+*     SUPERCOOLED LIQUID WATER BY LAYERS
+*
+      if (ISTCOND.eq.5 .and. scool) then
+*
+*     Find k1, k2, k3 and k4 from s1, s2, s3 and s4
+*
+      im = int(N/2 + 1)
+*
+      do k = 1,NK
+         if (s(im,k) .gt. s4) go to 200
+      end do
+ 200  continue  
+         k4 = k-1
+*
+      do k = k4+1,NK
+         if (s(im,k) .gt. s3) go to 300
+      end do
+ 300  continue  
+         k3 = k-1
+*
+      do k = k3+1,NK
+         if (s(im,k) .gt. s2) go to 400
+      end do
+ 400  continue  
+         k2 = k-1
+*
+      if (s1 .eq. 1.) then
+         k1 = NK
+      else
+      do k = k1+1,NK
+         if (s(im,k) .gt. s1) go to 500
+      end do
+ 500  continue  
+         k1 = min(NK,k-1)
+      end if
+*
+      do i = 1,N
+         do k = k2+1,k1
+            if ( T(i,k) .lt. tcdk) then
+            dsg = 0.5 * ( s(i,min(k+1,NK)) - s(i,max(k-1,1)) )
+            if (k.eq.NK) dsg = 1. - 0.5 * ( s(i,NK) + s(i,NK-1))
+            dpsg = max(ps(i)*dsg/grav,0.)
+            tabice = fice(i,k)
+            qctemp  = ((1.-tabice)*max( QC(i,k), 0. ))*dpsg
+            SLWP2 (i)= SLWP2(i) + qctemp
+            end if
+         end do
+      end do
+*
+      do i = 1,N
+         do k = k3+1,k2
+            if ( T(i,k) .lt. tcdk) then
+            dsg = 0.5 * ( s(i,min(k+1,NK)) - s(i,max(k-1,1)) )
+            if (k.eq.NK) dsg = 1. - 0.5 * ( s(i,NK) + s(i,NK-1))
+            dpsg = max(ps(i)*dsg/grav,0.)
+            tabice = fice(i,k)
+            qctemp  = ((1.-tabice)*max( QC(i,k), 0. ))*dpsg
+            SLWP3 (i)= SLWP3(i) + qctemp
+            end if
+         end do
+      end do
+*
+      do i = 1,N
+         do k = k4+1,k3
+            if ( T(i,k) .lt. tcdk) then
+            dsg = 0.5 * ( s(i,min(k+1,NK)) - s(i,max(k-1,1)) )
+            if (k.eq.NK) dsg = 1. - 0.5 * ( s(i,NK) + s(i,NK-1))
+            dpsg = max(ps(i)*dsg/grav,0.)
+            tabice = fice(i,k)
+            qctemp  = ((1.-tabice)*max( QC(i,k), 0. ))*dpsg
+            SLWP4 (i)= SLWP4(i) + qctemp
+            end if
+         end do
+      end do
+      end if
+*
+*     VERTICAL INTEGRALS FOR TOTAL CONDENSATE (ICW), VAPOR (IWV),
+*     LIQUID (LWP), SUPERCOOLED (SLWP) AND SOLID (IWP) 
+*
+      do i = 1, N
+         dsg= 0.5 * ( s(i,2) - s(i,1) )
+         dpsg= ps(i)*dsg/grav
+         ICW(i) = ICW(i) + max( QC(i,1) , 0. ) * dpsg
+         IWV(i) = IWV(i) + max( HU(i,1) , 0. ) * dpsg
+         airden = s(i,1)*ps(i)/ (rgasd *T(i,1))
+*
+         tabice=max(apri*(exp(-(((max(T(i,1),tci)-tci)/
+     +              tscale)**2))-1.)+1.,0.0)
+         if (ISTCOND.eq.5) tabice=fice(i,k)
+         qctemp  = ((1.-tabice)*QC(i,1))*dpsg
+         LWP (i) =  LWP(i) + qctemp
+         if (ISTCOND.eq.5) then
+            if (T(i,k).lt.tcdk) SLWP (i) =  SLWP(i) + qctemp
+         else
+         TLWP(i) = TLWP(i) + qctemp +
+     +             ((0.0866*RNFLX(i,1)**0.8385)/airden)*dpsg
+         end if
+      end do
+*
+      do k = 2,NK-1
+         do i = 1 , N
+            dsg= 0.5 * ( s(i,k+1) - s(i,k-1) )
+            dpsg= ps(i)*dsg/grav
+            ICW(i) = ICW(i) + max( QC(i,k) , 0. ) * dpsg
+            IWV(i) = IWV(i) + max( HU(i,k) , 0. ) * dpsg
+            airden = s(i,k)*ps(i)/ (rgasd *T(i,k))
+*
+            tabice = max(apri*(exp(-(((max(T(i,k),tci)-tci)/
+     +                   tscale)**2))-1.)+1.,0.0)
+            if (ISTCOND.eq.5) tabice=fice(i,k)
+            qctemp  = ((1.-tabice)*QC(i,k))*dpsg
+            LWP (i) =  LWP(i) + qctemp
+            if (ISTCOND.eq.5) then
+               if (T(i,k).lt.tcdk) SLWP (i) =  SLWP(i) + qctemp
+            else
+            TLWP(i) = TLWP(i) + qctemp +
+     +                ((0.0866*RNFLX(i,k)**0.8385)/airden)*dpsg
+            end if
+         end do
+      end do
+*
+      do i = 1, N
+         dsg= 1. - 0.5 * ( s(i,NK) + s(i,NK-1) )
+         dpsg= ps(i)*dsg/grav
+         ICW(i) = ICW(i) + max( QC(i,NK) , 0. ) * dpsg
+         IWV(i) = IWV(i) + max( HU(i,NK) , 0. ) * dpsg
+         airden = s(i,NK)*ps(i)/ (rgasd *T(i,NK))
+*
+         tabice=max(apri*(exp(-(((max(T(i,NK),tci)-tci)/
+     +              tscale)**2))-1.)+1.,0.0)
+         if (ISTCOND.eq.5) tabice=fice(i,k)
+         qctemp  = ((1.-tabice)*QC(i,NK))*dpsg
+         LWP (i) =  LWP(i) + qctemp
+         if (ISTCOND.eq.5) then
+            if (T(i,k).lt.tcdk) SLWP (i) =  SLWP(i) + qctemp
+         else
+         TLWP(i) = TLWP(i) + qctemp +
+     +             ((0.0866*RNFLX(i,NK)**0.8385)/airden)*dpsg
+         end if
+      end do
+*
+*
+      if (ISTCOND.eq.5) then 
+         do i = 1, N
+            TLWP(i) = LWP(i)
+            IWP(i)  = ICW(i) - LWP(i)
+         end do
+      else
+      end if
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

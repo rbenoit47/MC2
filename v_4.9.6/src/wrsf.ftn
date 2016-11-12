@@ -1,0 +1,27 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine wrsf (iun1)
+      implicit none
+*
+      integer iun1
+*
+#include "dynmem.cdk"
+#include "sor.cdk"
+#include "partopo.cdk"
+*
+      integer ztmp
+      real wk1(g_if-g_id+1,g_jf-g_jd+1)
+      data ztmp /1/
+*--------------------------------------------------------------------
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,fcor,minx,maxx,miny,maxy,1,
+     $                                                          ztmp,1)
+      if (myproc.eq.0) write (iun1) wk1
+*
+      call glbcolc2 (wk1,g_id,g_if,g_jd,g_jf,smap,minx,maxx,miny,maxy,1,
+     $                                                          ztmp,1)
+      if (myproc.eq.0) write (iun1) wk1
+*
+*--------------------------------------------------------------------
+      return
+      end

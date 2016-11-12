@@ -1,0 +1,92 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r fcorsm3
+*
+      subroutine fcorsm3 (f,s,xpl,ypl,ni,nj)
+      implicit none
+*
+      integer ni,nj
+      real f(ni,nj), s(ni,nj), xpl(ni), ypl(nj)
+*
+*OBJECT
+*      this program computes the coriolis parameter and stores it in
+*      f. it also computes the map scale factor and stores it in s.
+*
+**
+#include "lcldim.cdk"
+#include "grd.cdk"
+#include "consdyn_8.cdk"
+#include "yomdyn.cdk"
+#include "partopo.cdk"
+*
+      integer i,j,g1,g2,g3,g4,gid,ezgdef_fmem,err,gdll,gdrls
+      real*8 latref,rot,d2r,two,three,c1
+      parameter (two = 2.d0, three = 3.d0, c1 = 180.d0)
+      real xps,yps,lat,lon,deglat(ni,nj),deglon(ni,nj)
+*---------------------------------------------------------------------
+      latref = pi_8/three
+      rot    = two*omega_8
+      d2r    = pi_8 / c1
+*
+      if (.not. nofcms) then
+         if (Grd_proj_S.eq.'P') then
+         do j=1,nj
+         yps = ypl(1)*1000./Grd_dx + real(j-1)
+         do i=1,ni
+            xps = xpl(1)*1000./Grd_dx + real(i-1)
+            call llfxy(lat,lon,xps,yps,Grd_dx,Grd_dgrw,0)
+            s(i,j) = ((1.+sin(latref))/(1.+sin(lat*d2r)))**2.
+            f(i,j) = rot * sin(lat*d2r)
+         end do
+         end do
+         endif
+         if ((Grd_proj_S.eq.'M').or.(Grd_proj_S.eq.'L')) then
+            call cxgaig ('E',g1,g2,g3,g4,Grd_xlat1,Grd_xlon1,
+     $                                   Grd_xlat2,Grd_xlon2)
+            gid = ezgdef_fmem (ni,nj,'Z','E',g1,g2,g3,g4,xpl,ypl) 
+            err = gdll  (gid,deglat,deglon)
+            err = gdrls (gid)
+            if (Grd_proj_S.eq.'M') then
+               do j=1,nj
+               do i=1,ni
+                  s(i,j) = (cos(Grd_phir*d2r) / cos(ypl(j)*d2r))**2.
+               end do
+               end do
+            else
+               do j=1,nj
+               do i=1,ni
+                  s(i,j) = 1. /  cos(ypl(j)*d2r)**2.
+               end do
+               end do
+            endif
+            do j=1,nj
+            do i=1,ni
+               f(i,j) = rot * sin(deglat(i,j)*d2r)
+            end do
+            end do
+         endif
+      else
+         do j=1,nj
+         do i=1,ni
+            s(i,j) = 1.0
+            f(i,j) = 0.0
+         end do
+         end do
+      endif
+*
+      if (no_coriol) then
+         do j=1,nj
+         do i=1,ni
+            f(i,j) = 0.0
+         end do
+         end do
+      endif
+      if (no_msf) then
+         do j=1,nj
+         do i=1,ni
+            s(i,j) = 1.0
+         end do
+         end do
+      endif
+*---------------------------------------------------------------------
+      return
+      end

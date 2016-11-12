@@ -1,0 +1,143 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r mc2ntr
+*
+      subroutine mc2ntr
+      implicit none
+*
+**
+#include "mc2nml.cdk"
+#include "geobus.cdk"
+#include "lesbus.cdk"
+#include "partopo.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+#include "lisctes.cdk"
+#include "version.cdk"
+#include "consdyn_8.cdk"
+* 
+      character*256 path
+      logical restart_L, set_dcst_8 
+      integer status,err,ipas,longueur
+      external set_dcst_8 , longueur
+*
+      real , dimension (:) , allocatable :: topo
+*
+      data restart_L/.false./
+*
+*----------------------------------------------------------------------
+*
+      call open_status_file ()
+      call write_status_file ('_status=ABORT;')
+*
+      write (6,100) Version_S
+*
+*     *** Open fortran files
+*
+      un_rstrt = 61
+      open ( un_rstrt,file='process/00-00/restart',
+     $  access='SEQUENTIAL',iostat=err,status='OLD',form='UNFORMATTED' )
+*
+      if (err.ne.0) then
+         un_rstrt   = -1
+         restart_L = .false.
+         un_geo = 53
+         open(un_geo,file='process/geophy.bin',access='SEQUENTIAL',
+     $                                          form='UNFORMATTED')
+      else
+         un_geo = -1
+         rewind (un_rstrt)
+         restart_L = .true.
+      endif
+*
+      call getenvc('rep_from_which_model_is_launched',path)
+      dfwmil = path(1:longueur(path))//'/process'
+      nml    = path(1:longueur(path))//'/process/model_settings'
+*
+*     *** Establishing configuration
+*
+      numproc  = 1
+      gnstepno = 0
+*
+      call gridcfg (un_rstrt,.true.,status)
+      if (status.ne.1) goto 9991
+      call pilctrl (un_rstrt,.true.,status)
+      if (status.ne.1) goto 9991
+      call mc2ctrl (.false.,status)
+      if (status.ne.1) goto 9991
+      if (gnmaphy.eq.1) then
+         call phyctrl (.false.,status)
+         if (status.ne.1) goto 9991
+      endif
+*
+*     *** Initialization of physical constants
+*
+      if (.not.set_dcst_8 (cpd_8,lisctes,nbre,38,6)) stop
+*
+*     Positional parameters
+*    
+      call posipar
+*
+      call infiles
+*
+      allocate (topo(Grd_ni*Grd_nj*2))
+      if (.not.restart_L) call e_geopfld ( topo )
+*
+      if (.not.sfc_only) call e_dynfld  ( topo, restart_L )
+*
+      if (.not.restart_L) then
+         close (un_geo)
+      else
+         close (un_rstrt)
+      endif
+      write (6,500)
+*
+      call write_status_file ('_status=ED;')
+      call close_status_file ()
+*
+ 9991 continue
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+*-------------------------------------------------------------------
+ 100  format (/10x,'***** MC2NTR ',a,'  --  RUN TIME *****'//)
+ 500  format (/1x,'MC2NTR ENDED NORMALLY'/)
+*
+      stop
+      end
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+@

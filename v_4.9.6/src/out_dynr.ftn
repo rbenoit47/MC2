@@ -1,0 +1,226 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine out_dynr (trname)
+      implicit none
+*
+      character*8 trname(*)
+*
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "cdate.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "levels.cdk"
+#include "topo.cdk"
+#include "yomdyn1.cdk"
+#include "vinterpo.cdk"
+#include "path.cdk"
+#include "sor.cdk"
+*
+      integer  fnom,fstouv,fstecr,prog_filename,fstfrm,fstinl,longueur
+      external fnom,fstouv,fstecr,prog_filename,fstfrm,fstinl,longueur
+      character*3 ros,lt
+      character*128 progfile
+      character*512 progfile_fp
+      logical isopen,file_isopen(3),boot,ontime,init
+      integer nlis
+      parameter (nlis = 1024)
+      integer liste (nlis)
+      integer pnprog,i,j,k,clostep,ncharf,nl,nkk,nis,njs,ip1,nrec,
+     $        nklvl(3),fortout,f_unit(3),prognum,err,n1,n2,n3,lislon
+      real tmod(dim3d), prw(dim3d), prt(dim3d), prm(dim3d+dim2d),
+     $     hw (dim3d),ht (dim3d),hm (minx:maxx,miny:maxy,gnk+1),
+     $     intlev(nkout)
+      pointer (paisop, isopen(1)), (paun, fortout(1))
+      real*8 ONE, OV_day, OV_hour, OV_min, grdt_8
+      parameter ( ONE = 1.0d0, OV_day = ONE/86400.0d0,
+     $            OV_hour = ONE/3600.0d0, OV_min = ONE/60.0d0 )
+*
+      data ros /'RND'/
+      data f_unit,clostep,nklvl /3*0,-1,3*1/
+      data file_isopen,boot /3*.false.,.true./
+      save f_unit,file_isopen,clostep,progfile,ncharf,boot,nis,njs,lt
+*
+*------------------------------------------------------------------
+*
+      if (gnnls.lt.0) return
+*
+      ontime = .false.
+      if (gnnls.eq.0) then
+         nstepsor_d = 0
+         if (gnstepno.eq.0) ontime = .true.
+      else
+         if (mod(gnstepno,gnnls).eq.0) then
+            ontime = .true.
+         endif
+      endif
+*
+      if (boot) then
+         nis = g_if - g_id + 1
+         njs = g_jf - g_jd + 1
+         if (nstepsor_d.gt.0) then
+            i = gnstepno / nstepsor_d
+            clostep = i * nstepsor_d
+         endif
+      endif
+      if (levtyp.eq.'G') then
+         lt = 'dm'
+         paisop = loc (file_isopen(1))
+         paun   = loc (f_unit     (1))
+      endif
+      if (levtyp.eq.'P') then
+         lt = 'dp'
+         paisop = loc (file_isopen(2))
+         paun   = loc (f_unit     (2))
+      endif
+      if (levtyp.eq.'H') then
+         lt = 'dh'
+         paisop = loc (file_isopen(3))
+         paun   = loc (f_unit     (3))
+      endif
+*
+      if ( ontime .and. (.not.boot.or.(gnstepno.lt.1)) ) then
+         if (myproc.eq.0) then
+            if (nstepsor_d.le.gnnls) then
+               clostep = min (endstepno,gnstepno)
+            else
+               clostep = min (endstepno,clostep+nstepsor_d)
+            endif
+            prognum = clostep
+            grdt_8  = dble(clostep)*dble(grdt)
+            if (out_unit_S.eq.'D') prognum = nint(grdt_8 * OV_day )
+            if (out_unit_S.eq.'H') prognum = nint(grdt_8 * OV_hour)
+            if (out_unit_S.eq.'M') prognum = nint(grdt_8 * OV_min )
+            if (out_unit_S.eq.'S') prognum = nint(grdt_8)
+            err = prog_filename (progfile,lt,out_dat2,out_h0,-1,-1,
+     $                            myrow,mycol,prognum,6,out_unit_S)
+            progfile_fp = dfwmil(1:longueur(dfwmil))//'/output/'//
+     $                    progfile(1:longueur(progfile))
+            err = fnom(fortout,progfile_fp,'STD+'//ros,0)
+            err = fstouv(fortout,ros)
+            write (6,101) fortout,progfile(1:longueur(progfile))
+            nrec= fstinl (fortout,n1,n2,n3,' ',' ',-1,-1,-1,' ','>>',
+     $                                            liste,lislon,nlis)
+            if ((lislon.lt.1).and.(.not.flipit)) then
+            err = fstecr (xpx(g_id+hx),xpq, -32,fortout,0,0,0,nis,1,1,
+     $              Grd_ig1,Grd_ig2,Grd_ig3,'X', '>>','POS_X',gtgrtyp,
+     $              igs(1), igs(2), igs(3), igs(4), 5, .true.)
+            err = fstecr (ypx(g_jd+hy),ypq, -32,fortout,0,0,0,1,njs,1,
+     $              Grd_ig1,Grd_ig2,Grd_ig3,'X', '^^','POS_Y',gtgrtyp,
+     $              igs(1), igs(2), igs(3), igs(4), 5, .true.)
+            endif
+         endif
+*
+         pnprog = int (dble(gnstepno) * grdt / 3600. + 1.e-12)
+*
+         call ecris_fst ( hh0,minx,maxx,miny,maxy,0.,'ME  ',1.0,pnprog,
+     $                                        -1,1,nklvl,'DYN',fortout )
+*
+         call hauteur_omp (hw             ,'HW',hh0,dim2d,1,gnk)
+         call hauteur_omp (ht             ,'HT',hh0,dim2d,1,gnk)
+         call hauteur_omp (hm(minx,miny,2),'HM',hh0,dim2d,1,gnk)
+         do j = miny, maxy
+         do i = minx, maxx
+            hm(i,j,1) = hh0(i,j,1)
+         end do
+         end do
+*
+         call padbuf ( qpp,minx,maxx,miny,maxy,gnk+1 )
+         call padbuf (  up,minx,maxx,miny,maxy,gnk   )
+         call padbuf (  vp,minx,maxx,miny,maxy,gnk   )
+         call padbuf ( swp,minx,maxx,miny,maxy,gnk   )
+         call padbuf ( tpp,minx,maxx,miny,maxy,gnk   )
+         call padbuf ( hmp,minx,maxx,miny,maxy,gnk   )
+*
+         call fullpr ( prw,prt,prm,qpp,ht,hm,dim2d,gnk )
+*
+         if (levtyp.ne.'G') then
+            call out_lev (intlev,nl,pres_o,prw,height_o,dim2d,gnk,nkout)
+            nkk = nl
+         else
+            nl  = 0
+            nkk = gnk
+         endif
+*
+         init = .false.
+         if (levtyp.eq.'P') then
+            call hpalloc (papositd, dim2d*     nkk*6  , err,1)
+            call hpalloc (pahuvd  , dim2d* (gnk+4)*2  , err,1)
+            call hpalloc (pahttd  , dim2d* (gnk+3)*2  , err,1)
+            call hpalloc (pahwwd  , dim2d* (gnk+3)*2  , err,1)
+            init = .true.
+         elseif (levtyp.eq.'H') then
+            if (papositdh.eq.0) then
+               call hpalloc (papositdh, dim2d*     nkk*6  , err,1)
+               call hpalloc (pahuvdh  , dim2d* (gnk+4)*2  , err,1)
+               call hpalloc (pahttdh  , dim2d* (gnk+3)*2  , err,1)
+               call hpalloc (pahwwdh  , dim2d* (gnk+3)*2  , err,1)
+               init = .true.
+            endif
+            papositd = papositdh
+            pahuvd   = pahuvdh
+            pahttd   = pahttdh
+            pahwwd   = pahwwdh
+         endif
+*
+         if (myproc.eq.0) print 
+     $   '(/" PROG ",i3,"HR",10x,"TIME STEP NO: ",i5)',pnprog,gnstepno
+*
+         do i=1,nvardyn
+           table_out(1,i)=table_outn(1,i)
+           table_out(2,i)=table_outn(2,i)
+           table_out(3,i)=table_outn(3,i)
+         end do
+         if (nkk.gt.0) call adjtblo (table_out,nkk,nvardyn)
+*
+*        Geopotential, Temperature and PNM.
+*
+         call out_tgz (tpp,hmp,tmod,prw,prt,prm,hw,ht,hm,intlev,dim2d,
+     $                                    gnk,nkk,pnprog,init,fortout)
+*
+*        Horizontal Winds and pressure (QX)
+*
+         call out_uv (up,vp,prm,qpp,ht,hm,smap,intlev,dim2d,gnk+1,
+     $                                         nkk,pnprog,fortout)
+*
+*        Humidity, Vertical motion and surface pressure (P0,PN)
+*
+         call out_eshw(swp,tmod,hmp,prw,prt,intlev,dim2d,gnk,nkk,
+     $                                            pnprog,fortout)
+*
+*        Tracers
+*
+         if (ntr.gt.0) then
+            call padbuf (clp,minx,maxx,miny,maxy,gnk*ntr)
+            call out_tr (clp,prt,intlev,trname,dim2d,gnk,nkk,
+     $                                        pnprog,fortout)
+         endif
+*
+         if (levtyp.eq.'P') then
+            call hpdeallc (papositd,err,1)
+            call hpdeallc (pahuvd  ,err,1)
+            call hpdeallc (pahttd  ,err,1)
+            call hpdeallc (pahwwd  ,err,1)
+            papositd = 0
+            pahuvd   = 0
+            pahttd   = 0
+            pahwwd   = 0
+         endif
+*
+         if (myproc.eq.0) then
+            err = fstfrm(fortout)
+            call fclos(fortout)
+            write (6,102) fortout,progfile(1:longueur(progfile))
+            fortout = 0
+         endif
+*
+      endif
+*
+      boot=.false.
+*
+ 101  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS OPENED')
+ 102  format (' FST FILE UNIT=',i3,' FILE = ',a,' IS CLOSED')
+*
+*------------------------------------------------------------------
+      return
+      end

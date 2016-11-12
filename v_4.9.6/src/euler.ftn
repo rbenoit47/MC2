@@ -1,0 +1,80 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r euler -- Compute so-called Q terms
+*
+      subroutine euler ( t1, dtm, dtp )
+      implicit none
+*
+      real   t1(*)
+      real*8 dtm,dtp
+*
+*
+#include "grd.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynmem.cdk"
+#include "wrnmem.cdk"
+#include "nbcpu.cdk"
+#include "partopo.cdk"
+*
+** 
+      integer i,j,k,n,id,jd,iff,jf,err
+      real*8 dt
+      real cla(minx:maxx,miny:maxy,gnk,max(1,ntr))
+      real pa,ua,va,wa,ba,hma
+      pointer (papa ,  pa(minx:maxx,miny:maxy,0:gnk)),
+     $        (paua ,  ua(minx:maxx,miny:maxy,*)),
+     $        (pava ,  va(minx:maxx,miny:maxy,*)),
+     $        (pawa ,  wa(minx:maxx,miny:maxy,*)),
+     $        (paba ,  ba(minx:maxx,miny:maxy,*)),
+     $        (pahma, hma(minx:maxx,miny:maxy,*))
+*----------------------------------------------------------------------
+      papa  = loc(t1(              1))
+      paua  = loc(t1(  dim3d+dim2d+1))
+      pava  = loc(t1(2*dim3d+dim2d+1))
+      pawa  = loc(t1(3*dim3d+dim2d+1))
+      paba  = loc(t1(4*dim3d+dim2d+1))
+      pahma = loc(t1(5*dim3d+dim2d+1))  
+*
+      call adveul ( ua, va, wa, ba, pa, hma, cla, 
+     $                                      minx,maxx,miny,maxy,gnk)
+*
+      id =1
+      jd =1
+      iff=ldni-east
+      jf =ldnj-north
+      dt = dtm+dtp
+*
+      do k=1,gnk
+         if(k.ne.gnk) then
+            do j=jd,jf
+            do i=id+west,iff
+               up (i,j,k) = up (i,j,k) + dt * (ur(i,j,k)+ua(i,j,k))
+            end do
+            end do
+            do j=jd+south,jf
+            do i=id,iff
+               vp (i,j,k) = vp (i,j,k) + dt * (vr(i,j,k)+va(i,j,k))
+            end do
+            end do
+         endif
+         do j=jd,jf
+         do i=id,iff
+            swp(i,j,k) = swp(i,j,k) + dt * (swr(i,j,k) + wa(i,j,k))
+            tpp(i,j,k) = tpp(i,j,k) + dt * (tpr(i,j,k) + ba(i,j,k))
+            qpp(i,j,k) = qpp(i,j,k) + dt *               pa(i,j,k)
+            hmp(i,j,k) = hmp(i,j,k) + dt *              hma(i,j,k)
+c           if(qpp(i,j,k).ne.0.) print*,'qpp(',i,',',j,',',k,')=',qpp(i,j,k)
+         end do
+         end do
+         do n=1,ntr
+            do j=jd,jf
+            do i=id,iff
+               clp(i,j,k,n) = clp(i,j,k,n) + dt * cla(i,j,k,n)
+            end do
+            end do
+         end do
+      end do
+*
+*----------------------------------------------------------------------
+      return
+      end

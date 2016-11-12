@@ -1,0 +1,200 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@      subroutine eole_sfc (geobus,ngeop)
+      implicit none
+*
+*REVISION
+*
+* Wei Yu (Jan. 2003)
+* Use I0 instead of TS for surface temperature (MC2 4.9.5)
+*
+      integer ngeop,offj
+      real geobus(ngeop),newts
+*
+#include "dynmem.cdk"
+#include "topo.cdk"
+#include "nestpnt.cdk"
+#include "partopo.cdk"
+#include "yomdyn.cdk"
+#include "lesbus.cdk"
+#include "eole.cdk"
+      include 'mpif.h'
+*
+      integer i,j,k,n,nix,njx,dim,err,ni,nj,ivar
+      real wk1,wk2,hauteur
+      pointer (pawk1, wk1(gni+2*hx+1,gnj+2*hy+1)),
+     $        (pawk2, wk2(gni+2*hx+1,gnj+2*hy+1)),
+     $        (pahaut, hauteur(gni,gnj))
+
+      real zdi, zdj, zfak, xpos, ypos, hwx, hwy
+      real rayonij
+*
+*
+      ni=gni
+      nj=gnj
+*
+c MDMD On ne peut passer par ici (vraies_mtn.eq.2)
+c MDMD appel a intcub_2pts_2d2 commente
+c MDMD geobus pas defini
+      if (vraies_mtn.eq.2) then
+*     Adaptation de la Tsol avec la hauteur
+         call hpalloc (pahaut, ni*nj, err, 1)
+         if (meth_ts.eq.1) then
+            do i=1,ni
+               do j=1,nj
+                  hauteur(i,j)=hh0f(i,j,1)
+               enddo
+            enddo
+         endif
+*
+         if ((meth_ts.eq.2).or.(meth_ts.eq.3)) then
+            ! Au temps init on passe par geobus car busper inactif
+            ! Apres on passe par busper (physlb.ftn)
+            do i=1,ni
+               do j=1,nj
+                  hauteur(i,j)=hh0(i,j,1)
+               enddo
+            enddo
+         endif
+*
+         do ivar=1,geotop
+c      Line changed (WY, Jan. 2003)
+            if (geonm(ivar,2).eq.'I0') then
+               do j=1,nj
+               offj=ni*(j-1)
+               do i=1,ni
+c MDMD                  call intcub_2pts_2d2('t',hauteur(i,j),newts)
+                    ! Tsol en surface
+                  geobus(geopar(ivar,1)+offj+i-1)=newts
+                    ! Tsol profond
+*                  geobus(geopar(ivar,1)+ni*nj+offj+i-1)=tprofil1
+                  geobus(geopar(ivar,1)+ni*nj+offj+i-1)=298.
+               enddo
+               enddo
+            endif
+         enddo         
+*
+         call hpdeallc(pahaut ,err,1)
+         goto 10
+      endif
+*
+      nix  = gni+2*hx+1
+      njx  = gnj+2*hy+1
+      call hpalloc (pawk1, nix*njx, err, 1)
+*
+c---- set the initial topo
+
+      do j=miny-1,maxy
+      do i=minx-1,maxx
+         hh0i(i,j,1) = 0.
+      end do
+      end do
+*
+c---- Define the final topo
+      if (myproc.eq.0) then
+         call hpalloc (pawk2, nix*njx, err, 1)
+         hwx = real(mtn_hwx)**2.
+         hwy = real(mtn_hwy)**2.
+         xpos  = real(mtn_xpos + hx + 1)
+         ypos  = real(mtn_ypos + hy + 1)
+         if (mtn_typ.eq.'w') then
+            do j=1,njx
+               zdj = (ypos - real(j))**2. 
+               do i=1,nix
+                  zdi  = (xpos - real(i))**2.
+                  zfak = zdi/hwx
+                  if (.not.slab) zfak = zfak + zdj/hwy
+                  wk2(i,j) = 0.
+                  wk1(i,j) = mtn_heigth / (zfak+1.0)
+               end do
+            end do
+         endif
+*
+         if (mtn_typ.eq.'3') then
+            do j=1,njx
+               do i=1,nix
+c               zfac = 1. + sin(real(i-ypos)**2.*real(ypos/3.1416))
+c     $                     * real(i-ypos)**2.
+c               wk2(i,j) = mtn_heigth * zfac
+                  zfak = (cos(abs(real(i-xpos))*3.1416/hwx))**2.
+     $                   /(1+(real(i-xpos)/hwx)**6)
+                  wk2(i,j) = 0.
+                  wk1(i,j) = mtn_heigth * zfak
+               end do
+            end do
+         endif
+*
+         if (mtn_typ.eq.'e') then
+            do j=1,njx
+               do i=1,nix
+                  rayonij = sqrt ((real(i-mtn_xpos))**2.+
+     $                   (real(j-mtn_ypos))**2.)
+                  if (rayonij.lt.mtn_ray) then
+                     wk1(i,j) = mtn_heigth * ((mtn_ray-rayonij)/
+     $                      mtn_ray)**2
+                  else
+                     wk1(i,j) = 0.
+                  endif
+                  wk2(i,j) = 0.
+               enddo
+            enddo
+         endif
+*
+         if (mtn_typ.eq.' ') then
+            do j=1,njx
+            do i=1,nix
+               wk1(i,j) = 0.
+               wk2(i,j) = 0.
+            end do
+            end do
+         endif
+*
+         if (.not.slab) call nesmt (wk1,wk2,nix,njx,1,hx,hy,
+     $                  nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy)
+*
+         call hpdeallc(pawk2 ,err,1)
+      endif
+*
+      call MPI_bcast(wk1,nix*njx,MPI_REAL,0,MPI_COMM_WORLD,err)      
+*
+      do j=miny-1,maxy
+      do i=minx-1,maxx
+         hh0f(i,j,1) = wk1(gc_ld(1,myproc)+i+hx,gc_ld(3,myproc)+j+hy)
+      end do
+      end do
+*
+      call hpdeallc(pawk1 ,err,1)
+*
+c MDMD geobus pas defini
+      if (gnmaphy.eq.1) then
+      if (myproc.eq.0) call inibus (geobus,ngeop,gni,gnj)
+      call MPI_bcast(geonm,maxbus*2,MPI_CHARACTER,0,MPI_COMM_WORLD,err)
+      call MPI_bcast(geopar,maxbus*3,MPI_INTEGER,0,MPI_COMM_WORLD,err )
+      call MPI_bcast(geobus,geospc  ,MPI_REAL   ,0,MPI_COMM_WORLD,err )
+      endif
+*
+ 10   continue
+      return
+      end
+
+@

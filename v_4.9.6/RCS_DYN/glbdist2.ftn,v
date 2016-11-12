@@ -1,0 +1,104 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r glbdist2
+      subroutine glbdist2 (f2bc,f2rc,lminx,lmaxx,lminy,lmaxy,
+     $                                   glbmaxx,glbmaxy,lnk)
+      implicit none
+      integer lminx,lmaxx,lminy,lmaxy,glbmaxx,glbmaxy,lnk
+      real f2bc(lminx:glbmaxx,lminy:glbmaxy,lnk),
+     $     f2rc(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+#include "partopo.cdk"
+#include "lcldim.cdk"
+      include 'mpif.h'
+*
+      integer i, j, k, iproc, tag, err
+      integer len, lenx, leny
+      integer MPI_status(MPI_status_size)
+      real buf
+      pointer (pabuf, buf(*))
+      data    tag /10/
+*
+*----------------------------------------------------------------------
+*
+*     Send global field f2bc, Receive local array f2rc
+*
+      if (myproc.eq.0) then
+*         
+         len = (maxldni+2*hx) * (maxldnj+2*hy) * lnk
+         call hpalloc (pabuf, len, err, 1)
+*         
+*     Send local partitions of global field to all processors
+*
+         do iproc = 1, numproc-1
+            len = 0
+            do k = 1, lnk
+               do j = gc_ld(3,iproc)-hy, gc_ld(4,iproc)+hy
+               do i = gc_ld(1,iproc)-hx, gc_ld(2,iproc)+hx
+                  len      = len + 1
+                  buf(len) = f2bc(i,j,k)
+               end do
+               end do
+            end do 
+            call MPI_send (buf, len, MPI_REAL, iproc, tag, 
+     $                               MPI_COMM_WORLD, err)
+         end do
+*
+*       Initialize local data (LD) segment on processor 0
+*
+         do k = 1, lnk
+            do j = 1-hy, ldnj+hy
+            do i = 1-hx, ldni+hx
+               f2rc(i,j,k) = f2bc(i,j,k)
+            end do
+            end do
+         end do
+*
+      else
+*
+*       Receive the local data (LD) segment from processor 0
+*
+         lenx = gc_ld(2,myproc) - gc_ld(1,myproc) + 2*hx + 1
+         leny = gc_ld(4,myproc) - gc_ld(3,myproc) + 2*hy + 1
+         len  = lenx*leny*lnk
+         call hpalloc (pabuf, len, err, 1)
+         call MPI_recv (buf, len, MPI_REAL, 0, tag,
+     $                             MPI_COMM_WORLD, MPI_status, err)
+         do k = 1, lnk
+            do j = 1-hy, ldnj+hy
+            do i = 1-hx, ldni+hx
+               f2rc(i,j,k) = buf((k-1)*lenx*leny+(j+hy-1)*lenx+i+hx)
+            end do
+            end do
+         end do
+*
+      endif
+*
+      call hpdeallc (pabuf ,err,1)
+*
+*----------------------------------------------------------------------
+      return
+      end
+
+@

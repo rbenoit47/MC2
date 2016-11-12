@@ -1,0 +1,60 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r inv_posiz  -- 
+*
+      subroutine inv_posiz (p,h,href,hint,ktop,kbot,ng,nk,nkref)
+      implicit none
+*
+      integer ng,nk,nkref
+      real p(ng,nk,2),href(ng,nkref),hint(ng,nk),
+     $     h(ng,0:nkref+2),ktop(ng,nk),kbot(ng,nk)
+*
+      integer i,k
+      real dum,w1(ng,nk,2),w2(ng,0:nkref+2)
+*
+*----------------------------------------------------------------------
+*     
+      do k=1,nkref/2
+      do i=1,ng
+         dum               = href (i,k)
+         href(i,k)         = href (i,nkref-k+1)
+         href(i,nkref-k+1) = dum
+      end do
+      end do
+*
+      call posiz3 ( p,h,href,hint,ktop,kbot,ng,nk,nkref )
+*
+      do k=1,nkref/2
+      do i=1,ng
+         dum               = href (i,k)
+         href(i,k)         = href (i,nkref-k+1)
+         href(i,nkref-k+1) = dum
+      end do
+      end do
+*
+*----------------------------------------------------------------------
+*    
+      return
+      end
+@

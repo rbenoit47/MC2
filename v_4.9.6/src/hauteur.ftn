@@ -1,0 +1,42 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r hauteur
+      subroutine hauteur (htr,zz,hh0,ni,nj,nk)
+      implicit none
+*
+      character*2 zz
+      integer ni,nj,nk
+      real htr(ni,nj,nk), hh0(ni,nj,2)
+*
+      integer i,j,k
+#include "h_geop2.cdk"
+*
+      if (zz.eq."HW") then
+      do k=1,nk
+      do j=1,nj
+      do i=1,ni
+         htr(i,j,k) = h_geopw(i,j,k)
+      end do
+      end do
+      end do
+      endif
+      if (zz.eq."HT") then
+      do k=1,nk
+      do j=1,nj
+      do i=1,ni
+         htr(i,j,k) = h_geopt(i,j,k)
+      end do
+      end do
+      end do
+      endif
+      if (zz.eq."HM") then
+      do k=1,nk
+      do j=1,nj
+      do i=1,ni
+         htr(i,j,k) = h_geopm(i,j,k)
+      end do
+      end do
+      end do
+      endif
+*
+      return
+      end

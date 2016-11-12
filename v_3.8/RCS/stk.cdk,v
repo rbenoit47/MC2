@@ -1,0 +1,143 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.52.10;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+#ifdef DOC
+c Declare stack's variables:
+c     zstkb[pt]  Bottom of stack and its pointer.
+c     zstkc[pt]  Current position in stack and its pointer.
+c     zstkt[pt]  Top of stack and its pointer.
+c     zstkdim    Number of REALs allocatable on the stack.
+c     zstksta    Status of hpalloc or hpdeallc.
+c     zstkvar    If 1 then space is allocated using hpalloc.
+c                If 2 then space comes from an array argument.
+c
+c Example:
+c     program test
+c     #include "stk.cdk" ! Declarations.
+c     real a(10)
+c     pointer (pta,a)
+c     STK_INIT(10)       ! Reserve space on stack for 10 reals.
+c     STK_ALLOC(pta,10)
+c     ...
+c     STK_DEALL(pta)
+c     STK_FREE           ! Free everything on current stack.
+c     end
+c
+c Note: STK_DEALL frees the named pointer and everything after.
+c    Example:
+c       STK_ALLOC(pta)
+c       STK_ALLOC(ptb)
+c       STK_DEALL(pta) ... PTB Also deallocated.
+c Also, to inhibit generation of allocation validation code,
+c define STKNOVAL in your ".ftn".
+c
+c Author: Marc Gagnon
+c Revision 001 : Bernard Bilodeau (Jan 2001) - Eliminate stkmemw
+#endif
+      real zstkb(1), zstkc(1), zstkt(1)
+      pointer (zstkbpt,zstkb), (zstkcpt,zstkc), (zstktpt,zstkt)
+      integer zstkdim, zstkvar, zstksta
+      external hpalloc,hpdeallc
+#ifndef STKDEF
+#define STKDEF
+#define STK_INITA(AAptr,AAnb)\
+zstkvar = 2~~\
+zstkdim = AAnb~~\
+zstkbpt = loc(AAptr)~~\
+zstkcpt = zstkbpt~~\
+zstktpt = loc(zstkb(zstkdim+1))~~
+
+#ifndef STKNOVAL
+
+
+#define STK_INITM(AAnb)\
+zstkvar = 1~~\
+zstkdim = AAnb~~\
+call hpalloc(zstkbpt,zstkdim,zstksta,1)~~\
+if( zstksta .ne. 0 ) then~~\
+  write(0,*) 'Cannot allocate a ',zstkdim,' words stack in file ',\
+__FILE__,' at line ',__LINE__~~\
+  call qqexit(1)~~\
+endif~~\
+zstkcpt = zstkbpt~~\
+zstktpt = loc(zstkb(zstkdim+1))~~
+
+#define STK_ALLOC(AAptr,AAnb)\
+AAptr=zstkcpt~~\
+zstkcpt=loc(zstkc((AAnb)+1))~~\
+if( zstkcpt .gt. zstktpt ) then~~\
+  write(0,*) 'Cannot allocate ',AAnb,' reals to pointer AAptr in file ',\
+__FILE__,' at line ',__LINE__~~\
+  call qqexit(1)~~\
+endif~~
+
+#define STK_DEALL(AAptr)\
+if( AAptr .eq. 0 .or. AAptr .lt. zstkbpt .or. AAptr .ge. zstkcpt ) then~~\
+  write(0,*) 'Bad deallocation of pointer AAptr (',AAptr,') in file ',\
+__FILE__,' at line ',__LINE__~~\
+  call qqexit(1)~~\
+endif~~\
+zstkcpt=AAptr~~\
+AAptr=0~~
+
+#else
+
+
+#define STK_INITM(AAnb)\
+zstkvar = 1~~\
+zstkdim = AAnb~~\
+call hpalloc(zstkbpt,zstkdim,zstksta,1)~~\
+zstkcpt = zstkbpt~~\
+zstktpt = loc(zstkb(zstkdim+1))~~
+
+#define STK_ALLOC(AAptr,AAnb)AAptr=zstkcpt~~zstkcpt=loc(zstkc((AAnb)+1))
+#define STK_DEALL(AAptr)zstkcpt=AAptr
+#endif
+
+#define STK_FREE if(zstkvar .eq. 1) then~~\
+call hpdeallc(zstkbpt,zstksta,1)~~endif~~
+#define STK_STAT\
+print *,'Stack status at line ',__LINE__,' in file ',__FILE__~~\
+print *,'bottom=',zstkbpt,' top=',zstktpt,' cur. pos.=',zstkcpt,\
+' free=',zstktpt-zstkcpt,' max=',zstkdim
+#endif
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,99 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***fonction calces  -  passage de hu a es
+*
+      function calces (hu,tx,px,lnps,modp,swtt,swph)
+      implicit none
+      real calces, hu, tx, px, lnps
+      integer modp
+      logical swtt, swph
+*
+*author
+*          n. brunet  (jan91)
+*
+*object
+*          to return dew point depression (celsius) calculated from
+*          specific humidity, temperature and pressure
+*
+*arguments
+*
+*          - input -
+* hu       specific humidity in kg/kg
+* tx       temperature or virtual temperature in kelvins
+* px       see modp
+* lnps     see modp
+* modp     pressure mode(si units only):
+*          =0; pressure level in px
+*          =1; sigma level in px and ps(surface pressure) in lnps
+*          =2; sigma level in px and logarithm of sigma level in
+*          lnps
+*          =3; all points of pressure in lnps(ni,*) in pascals
+*          =4; sigma level in px and logarithm of sigma level in
+*          lnps(in millibars unless using si units)
+*          =5; logarithm of pressure level in px(in millibars unless
+*          using si units)
+* swtt     .true. to pass tt for argument
+*          .false. to pass tv for argument
+* swph     .true. to consider water and ice phase
+*          .false. to consider water phase only
+*
+*notes
+*     if hu <=0, we don't change the value of hu, but we take
+*     the maximum value of: max(hu,0.0000000001).
+*     to avoid the occurence of taking the log of a negative
+*     number
+*
+*implicites
+#include "consdyn_8.cdk"
+*
+*
+**
+*--------------------------------------------------------------------
+      real e, cte, td, petit, tp, pn
+*
+#include "dtherfct2.cdk"
+#include "ftherfct2.cdk"
+*--------------------------------------------------------------------
+      petit = 0.0000000001
+*
+      if (modp.eq.0) then
+         pn = px
+      else if (modp.eq.1) then
+         pn = px * lnps
+      else if (modp.eq.2) then
+         pn = exp(px + lnps)
+      else if (modp.eq.3) then
+         pn = lnps
+      else if (modp.eq.4) then
+         pn = exp(px + lnps) * 100.
+      else if (modp.eq.5) then
+         pn = exp(px) * 100.
+      else
+         print *,'***** MAUVAISE SPECIFICATION DE MODP ****'
+         stop
+      endif
+*
+      if (swtt) then
+         tp = tx
+      else
+         tp = fottv(tx,hu)
+      end if
+*
+      e = foefq(max(petit,hu),pn)
+      cte = alog(e/610.78)
+      td = (35.86*cte - 17.269*trpl_8)/(cte - 17.269)
+      if(td.lt.trpl_8.and.swph)then
+         td = (7.66*cte - 21.875*trpl_8)/(cte - 21.875)
+      end if
+*
+      calces = tp-td
+*
+      return
+      end
+
+
+
+
+
+
+
+

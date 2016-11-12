@@ -1,0 +1,62 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r sis_1d
+*
+      subroutine sis_1d
+      implicit none
+*
+#include "partopo.cdk"
+#include "dynmem.cdk"
+#include "consdyn_8.cdk"
+#include "grd.cdk"
+#include "rec.cdk"
+#include "nbcpu.cdk"
+#include "solver.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "dynpar.cdk"
+#include "transpose.cdk"
+
+      integer nlim, i, j, k, nx, ny, nz, ierr, nn
+      real*8  t1(dim3d),t2(dim3d),t3(dim3d),t4(dim3d),t5(dim3d)
+*
+      real*8   rhs, sol, czz
+      pointer (parhs, rhs(*)), (pasol, sol(*)), (paczz, czz(*))
+*
+*---------------------------------------------------------------------
+*
+      nx     = ldni-east
+      ny     = ldnj-north
+      nz     = nk_solv
+      nn     = nx*ny*nz
+*
+      call hpalloc (parhs,nn       *2         ,ierr,1)
+      call hpalloc (pasol,nn       *2         ,ierr,1)
+      call hpalloc (paczz,3*nn     *2         ,ierr,1)
+*
+      call cnt2_s ( czz, nx, ny, nz )
+*
+      call rhs3_p_1d ( rhs, t1, nx, ny )
+*
+      call matinv_1d ( sol, rhs, czz, t1,t2,t3,t4,t5, nx,ny,nz )
+*
+      do k = 1, nz
+         do j = 1, ny
+         do i = 1, nx
+            qpp(i,j,k) = sol((k-1)*nx*ny+(j-1)*nx+i)
+         end do
+         end do
+      end do
+*
+      call hpdeallc (parhs ,ierr,1)
+      call hpdeallc (pasol ,ierr,1)
+      call hpdeallc (paczz ,ierr,1)
+*
+*---------------------------------------------------------------------
+      return
+      end
+*
+
+
+
+
+

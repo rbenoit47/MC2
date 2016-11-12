@@ -1,0 +1,657 @@
+#!/bin/ksh
+#
+script=${0##*/}
+args="$@"
+#
+arguments=$*
+#
+echo 'date_start: '`date`
+exper_name=${1}
+#
+if [ -s ${HOME}/exper_configs/${exper_name}.generic/.config_file.dot.cfg ] ; then
+  set -x
+  . r.get_config.dot -exper ${exper_name} -file .config_file.dot
+  set +x
+fi
+#
+# set -x
+#
+#====> Obtaining the arguments:
+eval `cclargs_lite $0 \
+     -s          ""                  ""  "[source]"                                    \
+     -d          "${xfer}"           ""  "[destination]"                               \
+     -fst89      "${fst89:-0}"       "1" "[produce older 89 FST files]"                \
+     -d2z        "${d2z:-0}"         "0" "[re-assemble output if -gt 0]"               \
+     -prefix     "${prefix}"         ""  "[prefix added to filenames during transfer]" \
+     -tailjob    "${tailjob}"        ""  "[Tail job to be qsubed at the end]"          \
+     -npe        "1"                 "1" "[number of subdomains]"                      \
+     -fularch    "${fularch}"        ""  "[Name of archive for restart. Turns on archiving of all other products]"\
+     -strip_phy  "${strip_phy:-0}"   "1" "[Comvert multi-level outputs in physics to pressure]"\
+     -etaname    "${etaname}"        ""  "[Vertical coordinate name used by strip_phy]"\
+     -diagnos    "${diagnos}"        ""  "[Run diagnostic script Climat_lancer_diag]"  \
+     -deltat     "${deltat}"         ""  "[timestep length in seconds]"                \
+     -arch_mach  "${arch_mach}"      ""  "[Achive destination]"                        \
+     -prntdiag   "${prntdiag}"       ""  "[Printer for metacode]"                      \
+     -clean      "${clean}"          "0" "[Clean after archiving]"                     \
+     -repack     "${repack}"         ""  "[Packing density iff we repack the samples before archiving ?]"\
+     -gaussout   "${gaussout:-1}"    "0" "[Interpoler les sorties sur des grilles gaussiennes ?]"\
+     -zoncal     "${zoncal:-1}"      "0" "[Calcul des moyennes zonales en sus]"\
+     -pilout     "${pilout:-0}"      "1" "[Sauvegarder les fichier d'origine pour piloter LAM?]"\
+     -continue   ""                  ""  "[Indicates that the execution stream will be continued]"\
+  ++ $arguments`
+#
+#
+# Auteurs...
+#    Bernard Dugas et Didier Davignon
+#
+# Revisions...
+#    001 - hiver   2001: version initiale
+#    002 - automne 2001: adaptation a GEM/DM v2.3.1
+#    003 - mai     2002: adaptation a GEM/DM v3.0.1 (Um_xfer_climat --> Climat_xfer)
+#    004 - aout    2002: account for lam and splitout modes (Katja Winger)
+#    005 - octobre 2002: modification pour utiliser "delayed crontab jobs"
+#    006 - decembre 2002: construire deux listes differentes de
+#                         fichiers pour d2z et Climat_strip_phy
+#    007 - janvier 2003: 1) ajouter la possibilite de controler la
+#                        compaction des archives apres diagnostiques
+#                        2) s'assurer que le repertoire d'archive
+#                        associe a ${fularch} existe reellement
+#
+if [ ${ARCH:-none} = Linux ]; then ECHOARG=-e ; fi
+#
+d=`echo $d | sed 's/:/ /g'`
+#
+export src_mach=${s%% *}
+src_rept=${s##* }
+export dest_mach=${d%% *}
+dest_rept=${d##* }
+pivot_rept=WORKING_ON_${src_rept##*/}_files
+dest_rept_tmp=${dest_rept}/${pivot_rept}
+lehost=`hostname`
+#
+mkdir -p ${HOME}/delayed_jobs/${dest_mach} 2> /dev/null
+#
+NRCP=${NRCP:-nrcp}
+#
+if [ "${repack}" ]; then
+  pack="OUI -npg ${repack}"
+else
+  pack=NON
+fi
+#
+attempts=2
+lam=${lam:-0} ; if [ ${lam} -gt 0 ] ; then splitout=0 ; fi
+#
+if [ "${dest_mach}" = "cfs" ] ; then
+  d2z=0
+fi
+#
+if [ -d ${HOME}/huge/travail ]; then
+  reptmp=${HOME}/huge/travail/$$
+else
+  reptmp=${BIG_TMPDIR}/$$
+fi
+#
+/bin/rm -rf ${reptmp} 2> /dev/null
+mkdir -p ${reptmp} ; cd ${reptmp}
+#
+HHi=`hfract 0`
+#
+. r.call.dot Um_xfer_mach -attempts ${attempts}
+if [ "${_status}" = "ABORT" ] ; then
+  echo "On `date`, ${src_mach} or ${dest_mach} unavailable" |\
+  tee -a  ${HOME}/delayed_jobs/${TRUE_HOST}/logfile
+  cd ; /bin/rm -rf ${reptmp} 2> /dev/null
+  exit 1
+fi
+#
+#====> Do we save driving files for LAM?
+if [ ${pilout} -gt 0 ] ; then 
+  pilout=OUI
+else
+  pilout=NON
+fi
+#
+#====> Do we have any files to transfer ?
+#
+nbfiles=`rsh ${src_mach} -n "cd ${src_rept} ; ls -x 2> /dev/null | wc -w"`
+laliste="dm dp pm"
+#
+if [ ${nbfiles} -eq 0 ] ; then
+  #
+  echo ${ECHOARG} "\n No file to transfert from ${src_mach}:${src_rept}\n"
+  #
+else
+  #
+  if [ ${fst89} -gt 0 ] ; then
+    delamine=delamineur_89
+    feseri=feseri.Abs
+  else
+    delamine=${DELAMINEUR:-delamineur2000}
+    feseri=feseri_2000.Abs
+  fi
+  #
+  erreur_mkdir=erreur_mkdir_`basename ${dest_rept_tmp}`
+  rsh ${dest_mach} -n "mkdir -p ${dest_rept_tmp}" 2> ${erreur_mkdir}
+  if [ -s ${erreur_mkdir} ]; then
+    if [ `grep "File exists" ${erreur_mkdir} | wc -l` = 0 ]; then
+      echo "On `date`, unable to create ${dest_rept_tmp} on ${dest_mach}" |\
+      tee -a ${HOME}/delayed_jobs/${TRUE_HOST}/logfile
+      exit 2
+    fi
+  fi
+  /bin/rm -f ${erreur_mkdir}
+  #
+  echo ${ECHOARG} "\n ${src_mach}:${src_rept} ===> ${lehost} ===> ${dest_mach}:${dest_rept}\n"
+  nf_cnt=0
+  #
+  for i in ${laliste} ; do
+    #
+    flag_rm1=0
+    flag_rm2=0
+    flag_rm3=0
+    #
+    f2t=${i}\*
+    nf2t=`rsh ${src_mach} -n "ls -x ${src_rept}/${f2t}" 2> /dev/null | wc -w`
+    nf2t=${nf2t##* }
+    #
+    if [ ${nf2t} -gt 0 ] ; then
+      let nf_cnt=${nf_cnt}+${nf2t}
+      echo "\n Transferring ${f2t} from ${src_mach} to ${dest_mach} via a bump on ${lehost}"
+      #
+      _status=ABORT
+      . r.call.dot Um_xfer_mvf -f ${f2t} -machs ${src_mach} -reps ${src_rept} \
+                    -machd ${lehost} -repd ${reptmp} -attempts ${attempts}
+      if [ "${_status}" = "OK" ] ; then
+        flag_rm1=1
+        mkdir ${pivot_rept}
+        for ii in ${f2t} ; do
+          mv ${ii} ${pivot_rept}/${prefix}${ii} 2> /dev/null
+        done
+        echo "delam ${pivot_rept} $delamine \n"
+        ulimit -m 500000
+        ulimit -s 500000
+        ulimit -d 500000
+        _status=ABORT
+        . r.call.dot delam -reps ${pivot_rept} -wdelam $delamine 1> /dev/null 2> /dev/null
+#       . r.call.dot delam -reps ${pivot_rept} -wdelam $delamine 1> $HOME/delam.txt 2> $HOME/delam.txt
+        if [ "${_status}" = "OK" ] ; then
+          flag_rm2=1
+          _status=ABORT
+          . r.call.dot Um_xfer_rsync -machs ${lehost} -reps ${reptmp}/${pivot_rept} \
+                        -machd ${dest_mach} -repd ${dest_rept} -attempts ${attempts}
+          if [ "${_status}" = "OK" ] ; then flag_rm3=1 ; fi
+        fi
+        /bin/rm -rf ${pivot_rept}
+      fi
+      #
+      if [ $(( ${flag_rm1} * ${flag_rm2} * ${flag_rm3} )) -eq 1 ] ; then
+        echo " Transfer succeeded - Removing ${src_rept}/${f2t} on ${src_mach}"
+        rsh ${src_mach} -n "/bin/rm ${src_rept}/${f2t}"
+      else
+        echo "On `date`, problems retreiving ${src_rept}/${f2t} on ${src_mach}" |\
+        tee -a ${HOME}/delayed_jobs/${TRUE_HOST}/logfile
+        cd ; /bin/rm -rf ${reptmp} 2> /dev/null
+        exit 3
+      fi
+      #
+      attempts=1
+      #
+    else
+      echo " NO ${f2t} files to transfer from from ${src_mach}"
+    fi
+    #
+  done
+  #
+  if [ ${nbfiles} -gt ${nf_cnt} ] ; then
+    echo "\n Transferring remaining files from ${src_mach} to ${dest_mach} via a bump on ${lehost}"
+    rsh ${src_mach} -n "cd ${src_rept} ; ls -l"
+    flag_rm1=0
+    flag_rm2=0
+    #
+    _status=ABORT
+    . r.call.dot Um_xfer_cpac -machs ${src_mach} -reps ${src_rept} \
+             -machd ${lehost} -repd ${reptmp} -attempts ${attempts}
+    if [ "${_status}" = "OK" ] ; then
+      flag_rm1=1
+      if [ -f time_series.bin ] ; then
+        echo " ${feseri} -iserial time_series.bin -omsorti time_series.fst \n"
+        ${feseri} -iserial time_series.bin -omsorti time_series.fst 1> /dev/null
+        if [ $? -ne 0 ]; then
+          echo ${ECHOARG} "\n ${feseri} aborted on ${i} which is"
+          echo ${ECHOARG}   " being kept for further processing\n"
+          /bin/rm -f time_series.fst 2> /dev/null
+        else
+          /bin/rm -f time_series.bin
+        fi
+      fi 
+      _status=ABORT
+      mkdir ${pivot_rept}
+      for ii in * ; do
+        mv ${ii} ${pivot_rept}/${prefix}${ii} 2> /dev/null
+      done
+      . r.call.dot Um_xfer_rsync -machs ${lehost} -reps ${reptmp}/${pivot_rept} \
+                   -machd ${dest_mach} -repd ${dest_rept} -attempts ${attempts} 
+      if [ "${_status}" = "OK" ] ; then flag_rm2=1 ; fi
+      /bin/rm -rf ${pivot_rept}
+    fi
+    if [ $(( ${flag_rm1} * ${flag_rm2} )) -eq 1 ] ; then
+      echo " Transfer succeeded "
+    else
+      echo "On `date`, still some files left in ${src_rept} on ${src_mach}" |\
+      tee -a ${HOME}/delayed_jobs/${TRUE_HOST}/logfile
+      cd ; /bin/rm -rf ${reptmp} 2> /dev/null
+      exit 4
+    fi
+  fi
+  #
+  nsec=`hfract 1 $HHi`
+  nmin=$(echo "scale=10; ${nsec}/60" | bc -l)
+  echo ${ECHOARG} "\nTOTAL transfer&delamineur time: ${nmin} minutes"
+  #
+  echo ${ECHOARG} "\n All pending transfers succeeded"
+  echo ${ECHOARG} " Removing ${src_rept}/ on ${src_mach} \n"
+  rsh ${src_mach} -n "/bin/rm -rf  ${src_rept}"
+  #
+  if [ "`echo ${dest_rept} | cut -c1`" != "/" ]; then dest_rept=${HOME}/${dest_rept} ; fi
+  #
+  #
+  #====> Build a job to re-assemble/re-name output files
+  #
+  echo "\
+    #
+    # set -x
+    #
+    if [ ${d2z} -lt 1 ]; then echo Ignoring d2z = ${d2z} ; fi
+    . r.sm.dot ${MODEL} ${MODEL_VERSION}
+    #
+    cd ${dest_rept}
+    dest_rept=\`pwd\`
+    cd ${pivot_rept}
+    #
+    c1=\`echo \"${prefix}\" | wc -c\`
+    c2=\$(( \${c1} + 1 ))
+    #
+    #====> listed2z holds the list of files that d2z will work on
+    #
+    listed2z=\"\"
+    listezero=\`ls -x ${prefix}pm*-00-00*p\`
+    if [ \$? = 0 ]; then
+      for nomz in \${listezero} ; do
+        if [ \`echo \${nomz} | cut -c\${c1}-\${c2}\` = pm ]; then
+          listed2z=\"\${listed2z} \${nomz%%-*}_\${nomz##*_}\"
+        fi
+      done
+    fi
+    #
+    if [ ${splitout} -gt 0 ]; then
+      res_files=\"/high/ /coarse/\"
+    else
+      res_files=\"/\";
+    fi
+    #
+    for resolution in \${res_files}; do
+      mkdir .\${resolution} 2> /dev/null
+    done
+    #
+
+
+    #====> save p0 for torque in rotated grid than continue with d2z
+    if [ ${splitout} -gt 0 ]; then
+      listedm=\`ls -x ${prefix}dm*-??-*p\`
+      for dmfile in \${listedm} ; do
+        echo \"desire (-1,['P0','>>','^^'])\" | editfst2000 -s \${dmfile} -d coarse/\${dmfile}
+      done
+      d2z -rep coarse -nbf ${npe} -fst89 ${fst89} -prefix ${prefix} -split 0 || exit 5
+      cd coarse
+      listedm=\`ls -x ${prefix}dm*_*p\`
+      for dmfile in \${listedm} ; do
+        if [ -s ts${exp}_p0_2d -o -s ../../coarse/ts${exp}_p0_2d ] ; then
+          echo \"desire (-1,['P0'])\" | editfst2000 -s \${dmfile} -d ts${exp}_p0_2d
+        else
+          echo \"desire (-1,['P0','>>','^^'])\" | editfst2000 -s \${dmfile} -d ts${exp}_p0_2d
+        fi
+      done
+      /bin/rm -f \${listedm}
+      cd ..
+    fi
+
+
+
+    #====> continue with d2z
+    if [ \"\${listed2z}\" ]; then
+      d2z -rep . -nbf ${npe} -fst89 ${fst89} -prefix ${prefix} -split ${splitout} || exit 1
+    fi
+    #
+    #====> (OPTIONAL) strip multi-level physics files
+    #        (generally required in climate mode)
+    #
+    if [ ${strip_phy} -gt 0 ]; then
+      #
+      if [ ${gaussout} -gt 1000 ]; then
+        lonlat=\$(( 10000000 + ${gaussout} ))
+        lon=\`echo \${lonlat} | cut -c2-5 \`
+        lat=\`echo \${lonlat} | cut -c6-8 \`
+        lonlat=\"-outlon \${lon} -outlat \${lat}\"
+      else
+        lonlat=\"\"
+      fi
+      #
+      #====> listepm will hold the list of files to pass to Climat_strip_phy
+      #
+      listepm=\"\"
+      #
+      for resolution in \${res_files}; do
+        cd .\${resolution}
+        #
+        if [ ! \"\${listepm}\" ]; then
+          listepm=\`ls -x ${prefix}pm[0123456789]*_[0123456789]*p\` || exit 2
+        fi
+        #
+        if [ ${gaussout} -gt 0 ]; then gauss=OUI ; else gauss=NON ; fi
+        if [ ${lam} -eq 1 -o \${resolution} = /high/ ]; then gauss=NON ; fi
+        #
+        Climat_strip_phy -prefix ${prefix} -etaname ${etaname} \\
+       -exp \"\${listepm}\" -gaussout \${gauss} -pilout ${pilout} \\
+        \${lonlat} || exit 3
+        #
+        if [ \${resolution} = /high/ -o \${resolution} = /coarse/ ]; then cd .. ; fi
+      done
+      #
+    fi
+    #
+    for resolution in \${res_files}; do
+      mkdir ..\${resolution} 2> /dev/null
+
+
+      if [ \${resolution} == \"/coarse/\" ] ; then 
+        editfst2000 -s coarse/ts${exp}_p0_2d -d ../coarse/ts${exp}_p0_2d -i 0
+        /bin/rm -f coarse/ts${exp}_p0_2d
+      fi
+
+
+      mv .\${resolution}* ..\${resolution}
+    done
+    #    
+    #====> Finished all pending re-assembling operations
+    #
+    cd \${dest_rept}
+    /bin/rm -rf ${pivot_rept} rassemble_${pivot_rept} 
+    /bin/rm -f ${HOME}/.WORKING_ON/${exp}_${pivot_rept}
+    #
+    exit 0" \
+  > rassemble_${pivot_rept}
+  #
+  if [ ${nf_cnt} -gt 0 ]; then
+    rcp rassemble_${pivot_rept} ${dest_mach}:${dest_rept}
+    echo "\
+    ksh ${dest_rept}/rassemble_${pivot_rept} \
+    1> ${HOME}/listings/${dest_mach}/rassemble_${exp}_${pivot_rept}_$$ 2>&1" \
+    > ${HOME}/delayed_jobs/${dest_mach}/post_${exp}_${pivot_rept}.jobtmp
+  fi
+  #
+  /bin/rm -f rassemble_${pivot_rept}
+  #
+fi
+#
+#
+#
+#====> Diagnostics and archiving
+#
+if [ "${fularch}" ] ; then
+   archdir=${fularch%/*}
+   if [ "${archdir}" != "${fularch}" ]; then
+     rsh ${arch_mach} -n "mkdir -p ${archdir} 2> /dev/null"
+   else
+     archdir=.
+   fi
+fi
+if [ ${clean} -gt 0 ] ; then 
+  clean=OUI
+else
+  clean=NON
+fi
+#
+bnce=NON
+if [ "${fularch}" ] ; then bnce=OUI ; fi
+if [ ${diagnos} -gt 0 ] ; then
+  echo ${ECHOARG} "\n Diagnostics were requested for the current run. \n"
+  do_diag=OUI
+else
+  do_diag=NON
+fi
+#
+if [ ${do_diag} = OUI -o ${bnce} = OUI ]; then
+  #
+  #====> Build diagnostic and post-processing job
+  #
+  if [ "`echo ${dest_rept} | cut -c1`" != "/" ]; then dest_rept=${HOME}/${dest_rept} ; fi
+  #
+  cat -u > diag_${exp} <<EOF1
+#
+. r.sm.dot ${MODEL} ${MODEL_VERSION}
+#
+#====> Wait for all previous transfers to finish (max ${attempts}*${sleeptime} seconds)
+#
+for job_en_transfert in ${HOME}/.WORKING_ON/${exp}_WORKING_ON* ; do
+  if [ -f \${job_en_transfert} ]; then
+    echo "On `date`, waiting for \${job_en_transfert} on ${dest_mach}" |\
+    tee -a ${HOME}/delayed_jobs/${dest_mach}/logfile
+    exit 1
+  fi
+done
+#
+# set -x
+#
+c1=\`echo ${prefix}xx | wc -c\`
+c2=\$(( \${c1} + 9 ))
+#
+if [ ${splitout} -gt 0 ]; then
+  res_files=\"high coarse\"
+else
+  res_files=\"0\";
+fi
+#
+for resolution in \${res_files}; do
+
+  if [ ${gaussout} -gt 0 ]; then gauss=OUI ; else gauss=NON ; fi
+  if [ ${zoncal}   -gt 0 ]; then zonal=OUI ; else zonal=NON ; fi
+  if [ ${lam} -eq 1 -o \${resolution} = high ]; then gauss=NON ; zonal=NON ; fi
+
+  if [ \${resolution} = '0' ]; then 
+    new_dest_rept=${dest_rept}
+    suffix=\"\"
+  else
+    new_dest_rept=${dest_rept}/\${resolution}
+    if [ \${resolution} = high ]; then
+      suffix=_hi
+    else
+      suffix=_lo
+    fi
+  fi
+  #
+  cd \${new_dest_rept} ; set \`ls ${prefix}md*\` ; premier=\$1
+  start=\`echo \${premier} | cut -c\${c1}-\${c2} \`
+  #
+  Climat_lancer_diag \
+     -exp ${exp} -rep \${new_dest_rept} -start \${start} \
+     -dt ${deltat} -bnce ${bnce} -b_mach ${arch_mach} \
+     -b_addres ${archdir:-court_terme} -clean ${clean} \
+     -do_diag ${do_diag} -travail ${dest_rept}/\$\$ \
+     -prefix ${prefix} -suffix \${suffix} -gaussout \${gauss} \
+     -zoncal \${zonal} -repack ${pack} ; status_diag_climat=\$?
+  #
+  if [ \${status_diag_climat} -ne 0 ] ; then 
+    echo "Cimat_lancer_diag ENDED ABNORMALLY, with errcod=\${status_diag_climat}"
+    exit \${status_diag_climat}
+  elif [ ${do_diag} = OUI ] ; then
+    if [ "${prntdiag}" ] ; then
+      echo ${ECHOARG} "\n Sending metacode to printer: ${prntdiag} "
+      for xx in metacod_??${exp}*
+      do
+        laser -P ${prntdiag} -mc \$xx
+        status_laser=\$?
+        if [ \${status_laser} != 0 ] ; then
+          echo ${ECHOARG} "\nERROR: Print command failed for \$xx (errcod=\${status_laser}). Resuming."
+        fi
+      done
+    fi
+    if [ ${bnce} = OUI ]; then
+      echo "Now archiving diagnostic results"
+      diaglist=\`ls ${prefix}pr${exp}* ${prefix}md${exp}* ${prefix}ts${exp}* metacod_??${exp}* res*\`
+      diagnam=diag_results_${exp}\${suffix}.ca
+      if [ ${arch_mach} = ${dest_mach} ]; then
+         cmcarc -v -a \${diaglist} -f \${diagnam} && /bin/rm -f \${diaglist}
+      elif [ "${clean}" = "NON" ]; then
+        cmcarc -v -p -o -a \${diaglist} | rsh ${arch_mach} dd ibs=64k obs=128k of=${archdir}/\${diagnam}
+      else
+        if [ -s \${diagnam} ]; then
+          echo "WARNING: erasing previous \${diagnam}"
+          rm -f \${diagnam}
+        fi
+        cmcarc -a \${diaglist} -f \${diagnam}
+        cmcarc -t -v -f \${diagnam}
+        stat_cmcarc=\$?
+        diagcrc=\`r.crc \${diagnam} 16 | cut -d' ' -f1\`
+        r.smcp \${diagcrc} \${diagnam} ${archdir}/\${diagnam} -dmach ${arch_mach} -crc -rm
+        stat_smcp=\$?
+        if [ \${stat_cmcarc} != 0 -o \${stat_smcp} != 0 ]; then
+          echo ${ECHOARG} "\nERROR: Failed to archive diagnostic results properly"
+        else
+          echo "Diagnostic results are archived on ${arch_mach} under ${archdir}/\${diagnam}"
+          rsh ${arch_mach} -n "ls -al ${archdir}/\${diagnam}"
+          echo "Removing transfer directory \${new_dest_rept}"
+          cd ; /bin/rm -Rf \${new_dest_rept}
+        fi
+      fi
+    fi
+  fi
+  /bin/rm -f ${dest_rept}/diag_${exp}
+done
+exit \${status_diag_climat}
+EOF1
+  #
+  rcp diag_${exp} ${dest_mach}:${dest_rept} && \
+  echo "\
+  ksh ${dest_rept}/diag_${exp} 1> ${HOME}/listings/${dest_mach}/diag_${exp}_\$\$ 2>&1" \
+  >> ${HOME}/delayed_jobs/${dest_mach}/post_${exp}_${pivot_rept}.jobtmp
+  /bin/rm -f diag_${exp}
+  #
+fi
+#
+if [ -s ${HOME}/delayed_jobs/${dest_mach}/post_${exp}_${pivot_rept}.jobtmp ]; then
+  cd ${HOME}/delayed_jobs/${dest_mach}
+  mv post_${exp}_${pivot_rept}.jobtmp post_${exp}_${pivot_rept}.job
+fi
+#
+#====> Saving EXECDIR as a restart backup
+#
+if [ "${fularch}" ] ; then
+  #
+  arcnam="${fularch%.tar}"
+  arcbase=`basename ${arcnam}`
+  exename=`basename ${EXECDIR}`
+  #
+  cat -u > ${HOME}/delayed_jobs/${TRUE_HOST}/save_${exp} <<EOF2
+  #
+  echo ${ECHOARG} "\n Archiving full restart info \n"
+  #
+  # While on ${src_mach}, cleanup $EXECDIR,
+  # create the restart archive and transfer it
+  cat << EOT | rsh ${src_mach} /usr/local/env/-ksh 2> ARCH_ERRORS
+#
+cd ${EXECDIR}
+#
+# Check if directory is in use 
+#
+while [ -f BUSY_WITH_RELAUNCH ] ; do
+  echo "EXECDIR is in use..." 2>&1
+  exit 1
+done
+#
+cd ..
+#
+if [ -s ${arcbase}.ca ]; then
+  echo "WARNING: erasing any previous ${arcbase}.ca"
+  /bin/rm -f ${arcbase}.*
+fi 
+#
+if [ ${clean} = OUI ]; then
+  if [ -h ${exename}/output ]; then
+    rm -f ${exename}/output
+  else
+    rmdir ${exename}/output 2> /dev/null
+  fi
+  rm -f ${exename}/*.Abs ${exename}/ozoclim*
+fi
+#
+echo "Size of ${EXECDIR} ..."
+du -k ${exename}
+#
+echo "Creating ${arcbase}.ca"
+cmcarc -v -a ${exename} -f ${arcbase}.ca
+EOT
+  cat ARCH_ERRORS | grep -v stty > ARCH_ERRORS.2
+  mv ARCH_ERRORS.2 ARCH_ERRORS
+  #
+  /bin/rm -rf ${reptmp} 2> /dev/null
+  mkdir -p ${reptmp} ; cd ${reptmp}
+  #
+  echo ${ECHOARG} "\nTransfering ${arcbase}.ca from ${src_mach} to ${arcnam}.ca on ${arch_mach}"
+  ${NRCP} ${src_mach}:${EXECDIR}/../${arcbase}.ca ${reptmp}/${arcbase}.ca ; status_nrcp1=\$?
+  ${NRCP} ${reptmp}/${arcbase}.ca ${arch_mach}:${arcnam}.ca ; status_nrcp2=\$? 
+  #
+  status_nrcp=\$(( \${status_nrcp1} + \${status_nrcp2} ))
+  #
+  if [ ! -s ARCH_ERRORS -a \${status_nrcp} = 0 ]; then 
+    echo "Restart ${arcnam}.ca saved on ${arch_mach}"
+    if [ "${clean}" = "OUI" ]; then
+      echo "Cleaning $EXECDIR on ${src_mach}"
+      rsh ${src_mach} -n  "/bin/rm -f ${EXECDIR}/../${arcbase}.ca"
+      if [ "${continue}" ]; then rsh ${src_mach} -n  "/bin/rm -Rf ${EXECDIR}" ; fi
+    fi
+  else
+    rsh ${src_mach} -n "/bin/rm -f ${EXECDIR}/../${arcbase}.ca"
+    echo ${ECHOARG} "\n${NRCP} status = \${status_nrcp}"
+    if [ \${status_nrcp} -eq 0 ]; then rsh ${arch_mach} -n "ls -al ${arcnam}.ca" ; fi
+    if [ -s ARCH_ERRORS ]; then
+      echo ${ECHOARG} "\n-------- ARCH_ERRORS during xfer ---------"
+      cat ARCH_ERRORS ; rm -f ARCH_ERRORS
+      echo ${ECHOARG} "-------- ARCH_ERRORS during xfer ---------\n"
+    fi
+    cd ; /bin/rm -rf ${reptmp}
+    exit 1
+  fi
+  #
+  cd ; /bin/rm -rf ${HOME}/delayed_jobs/${TRUE_HOST}/save_${exp} ${reptmp}
+  #
+  exit 0
+EOF2
+  #
+  echo "\
+  ksh ${HOME}/delayed_jobs/${TRUE_HOST}/save_${exp} \
+  1> ${HOME}/listings/${TRUE_HOST}/save_${exp}_\$\$ 2>&1" \
+  > ${HOME}/delayed_jobs/${TRUE_HOST}/save_${exp}.job
+  #
+else
+  #
+  #====> Remove temporary workdir
+  #
+  cd ; /bin/rm -rf ${reptmp} 2> /dev/null
+  #
+fi
+#
+#====> Submit tailjob
+#
+if [ "${tailjob}" ] ; then
+  if [ ${fularch} ] ; then
+    echo ${ECHOARG} "\nERROR: Cannot submit a tailjob after archiving EXECDIR"
+    echo ${ECHOARG} "-----> Ignoring\n"
+  else
+    cd
+    echo ${ECHOARG} "\n Submitting ${tailjob} \n"
+    soumet_lajob ${tailjob}
+  fi
+fi
+#
+echo 'date_end: '`date`

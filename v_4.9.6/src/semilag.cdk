@@ -1,0 +1,7 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      logical Tsl_ic,endsl_L
+      integer Tsl_iter,endsl_i
+*
+      common /sl_L/ Tsl_ic,endsl_L
+      common /sl_i/ Tsl_iter,endsl_i
+*

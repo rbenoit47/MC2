@@ -1,0 +1,106 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine mirror
+      implicit none
+
+*
+#include "dynmem.cdk"
+*
+      integer i,j,k,n,iin,jin
+*
+*----------------------------------------------------------------------
+*
+      if (north+south+east+west.eq.0) return 
+*
+      if(north.eq.1) then
+         do k=1,gnk
+            do i=1-hx,ldni+hx
+               vp(i,ldnj,k) = 0.
+            enddo
+            do j=1,hy
+* n.b.  when ldnj-1<hy, we are in trouble unless in 2-dim. symmetry
+               jin=max(ldnj-j,1)
+               do i=1-hx,ldni+hx
+                   vp(i,ldnj  +j,k)     =   - vp(i,jin,k)
+                   up(i,ldnj-1+j,k)     =     up(i,jin,k)
+                  tpp(i,ldnj-1+j,k)     =    tpp(i,jin,k)
+                  qpp(i,ldnj-1+j,k)     =    qpp(i,jin,k)
+                  swp(i,ldnj-1+j,k)     =    swp(i,jin,k)
+                  hmp(i,ldnj-1+j,k)     =    hmp(i,jin,k)
+                  do n = 1, ntr
+                    clp(i,ldnj-1+j,k,n) =    clp(i,jin,k,n)
+                  enddo
+               enddo
+            enddo
+         enddo
+      endif
+*
+      if(south.eq.1) then
+         do k=1,gnk
+            do i=1-hx,ldni+hx
+             vp(i,1,k) = 0.
+            enddo
+            do j=1,hy
+               do i=1-hx,ldni+hx
+                   vp(i,1-j,k)   =  - vp(i,1+j,k)
+                   up(i,1-j,k)   =    up(i,  j,k)
+                  tpp(i,1-j,k)   =   tpp(i,  j,k)
+                  qpp(i,1-j,k)   =   qpp(i,  j,k)
+                  swp(i,1-j,k)   =   swp(i,  j,k)
+                  hmp(i,1-j,k)   =   hmp(i,  j,k)
+                  do n = 1, ntr
+                    clp(i,1-j,k,n) = clp(i,  j,k,n)
+                  enddo
+               enddo
+            enddo
+         enddo
+      endif
+*
+      if(east.eq.1) then
+         do k=1,gnk
+            do j=1-hy,ldnj+hy
+                up(ldni,j,k) = 0.
+            enddo
+            do i=1,hx
+               iin=max(ldni-i,1)
+* n.b.  when ldni-1<hx, we are in trouble unless in 2-dim. symmetry
+               do j=1-hy,ldnj+hy
+                   up(ldni  +i,j,k)     =   - up(iin,j,k)
+                   vp(ldni-1+i,j,k)     =     vp(iin,j,k)
+                  tpp(ldni-1+i,j,k)     =    tpp(iin,j,k)
+                  qpp(ldni-1+i,j,k)     =    qpp(iin,j,k)
+                  swp(ldni-1+i,j,k)     =    swp(iin,j,k)
+                  hmp(ldni-1+i,j,k)     =    hmp(iin,j,k)
+                  do n = 1, ntr
+                   clp(ldni-1+i,j,k,n)  =    clp(iin,j,k,n)
+                  enddo
+               enddo
+            enddo
+         enddo
+      endif
+*
+      if(west.eq.1) then
+         do k=1,gnk
+            do j=1-hy,ldnj+hy
+                up(1,j,k) = 0.
+            enddo
+            do i=1,hx
+               do j=1-hy,ldnj+hy
+                   up(1-i,j,k)   =  - up(1+i,j,k)
+                   vp(1-i,j,k)   =    vp(  i,j,k)
+                  tpp(1-i,j,k)   =   tpp(  i,j,k)
+                  qpp(1-i,j,k)   =   qpp(  i,j,k)
+                  swp(1-i,j,k)   =   swp(  i,j,k)
+                  hmp(1-i,j,k)   =   hmp(  i,j,k)
+                  do n = 1, ntr
+                    clp(1-i,j,k,n) = clp(  i,j,k,n)
+                  enddo
+               enddo
+            enddo
+         enddo
+      endif
+
+*
+*----------------------------------------------------------------------
+      return
+      end

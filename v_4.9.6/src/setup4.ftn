@@ -1,0 +1,89 @@
+copyright (C) 2001 MSC-RPN COMM %%%MC2%%%
+***s/r setup4
+      subroutine setup4
+      implicit none
+*
+**
+#include "dynmem.cdk"
+#include "levels.cdk"
+#include "rec.cdk"
+#include "grd.cdk"
+#include "cdate.cdk"
+#include "yomdyn.cdk"
+#include "yomdyn1.cdk"
+#include "consdyn_8.cdk"
+#include "partopo.cdk"
+#include "nbcpu.cdk"
+#include "physnml.cdk"
+*
+      integer j,k,km1
+      real cflh,grdx
+      real*8 one,one80,d2r
+      parameter(one=1.0d0, one80=180.0d0)
+*
+*---------------------------------------------------------------------
+*
+      call cxxpar
+*
+      if (myproc.eq.0) then
+*
+         grdx = Grd_dx
+         write (6,610) gcrunstrt,gcjobstrt,gcjobend,gcrunend
+         if (Grd_proj_S.eq.'P') then
+            write (6,612) Grd_dgrw
+         else
+            if (Grd_proj_S.eq.'M') then
+               write (6,613) Grd_phir
+            else
+               if (Grd_proj_S.eq.'L') then
+                  write (6,614)
+                  d2r = pi_8 / one80
+                  grdx= rayt_8 * dble(Grd_dx) * d2r
+               else
+                  write (6,615)
+                  stop
+               endif
+            endif
+         endif
+         write (6,620) gni,gnj,xpq(1),ypq(1),Grd_dx
+         write (6,630) gnk,htop
+*     
+         do k=gnk,1,-1
+            km1=max(k-1,1)
+            write (6,631) k,zt(k),zt(k)-zt(km1),zm(k),zm(k)-zm(km1)
+         end do
+         write (6,632) zm(1)/2.,(zm(gnk)+zm(gnk-1))/2.
+*
+         cflh  = gnlst / (grdx  / 50.)
+         write (6,640) gnnt,gnlst,gnstepno,gnnrstrt,gnnls,cflh
+*
+      endif
+*
+*--------------------------------------------------------------------
+*
+ 610  format (' RUN START TIME= ',a16,/,' JOB START TIME= ', a16,/,
+     $        ' JOB END TIME=   ',a16,/,' RUN END TIME=   ', a16,//,
+     $        ' GRID SPECIFICATIONS:')
+ 612  format ('   Polar Stereographic Projection true at 60N'/
+     $        '   with ',f10.4,' degrees rotation (Grd_dgrw)')
+ 613  format ('   Mercator Projection true at latitude ',f10.4)
+ 614  format ('   Spherical coordinates.' )
+ 615  format (' Grid Projection not supported --- ABORT ---')
+ 620  format ('   (NI x NJ)= ',i5,' x ',i5,4x,
+     $        '(xpq,xpq)= ',f12.4,',',f12.4,/3x,'Resolution= ',f9.2/)
+*
+ 630  format (/' INTEGRATING ON THE FOLLOWING',I4,' GAL-CHEN LEVELS:'
+     $         ' (HTOP:',f10.2,' m)'//
+     $        16x,'THERMO',6x,'DZT',10x,'MOMENT',6x,'DZM')
+ 631  format (5x,i4,3x,2(f10.2,f9.2,6x))
+ 632  format (
+     $     ' WARNING: HEIGHTS OF FIRST AND LAST THERMODYNAMIC LEVELS'/
+     $     '          FOR T, HU AND CL ARE:',f10.2,' meters and ',
+     $     f10.2,' meters respectively'/)
+ 640  format (' NUMBER OF STEPS   :',i4,' OF TIME STEP:',i6,' SEC.',/,
+     $     ' CURRENT STEP NO: ',i6, ' NSTEPS RESTART: ', i6,/,
+     $     ' FIELDS SAVED EVERY:',i4,' TIMESTEP.',/
+     $     ' CFLH             :',f8.4,/)
+*
+      return
+      end

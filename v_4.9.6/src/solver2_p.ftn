@@ -1,0 +1,211 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r solver2_p
+*
+#if defined (NEC)
+#define JACPC v_jacpc2
+#define MATVEC v_matvec3
+#else
+#define JACPC jacpc2
+#define MATVEC matvec3
+#endif
+      subroutine solver2_p ( wrk_sol, wrk_sol2 )
+      implicit none
+*
+      real*8 wrk_sol(*),wrk_sol2(*)
+*
+#include "partopo.cdk"
+#include "dynmem.cdk"
+#include "solver.cdk"
+#include "dynpar.cdk"
+#include "gcrk.cdk"
+
+      logical rsol,wsol
+      integer i, j, k, nlim
+      real*8 dge,r3,ccc
+*
+      real*8 t1,t2,t3,t4,rhs,sol,w,w1,w2,w3,w4,vv,s,czz,wrk8
+      pointer (pat1, t1(*)),(pat2, t2(*)),(pat3, t3(*)),(pat4, t4(*)),
+     $        (parhs, rhs(*)), (pasol, sol(nx,ny,*)), (paw, w(nn,*)),
+     $        (paw1, w1(*)), (paw2, w2(*)), (paw3, w3(nn,*)),
+     $        (paw4, w4(*)), (pavv, vv(nn,*)), (pas, s(*)), 
+     $        (paczz, czz(*)),(pawrk8, wrk8(*))
+      real  , dimension (:,:,:), allocatable :: wk6,wk7
+*
+*     Bit pattern validity test should be done with Mercator grid only
+      data rsol,wsol /.false.,.false./
+*
+      real*8 two
+      parameter (two = 2.0d0)
+*---------------------------------------------------------------------
+*
+      if (rsol) goto 9988
+*
+      pat1 = loc (wrk_sol(        1))
+      pat2 = loc (wrk_sol(  dim3d+1))
+      pat3 = loc (wrk_sol(2*dim3d+1))
+      pat4 = loc (wrk_sol(3*dim3d+1))
+      parhs= loc (wrk_sol(4*dim3d+1))
+      pasol= loc (wrk_sol(4*dim3d+  nn+1))
+      paw2 = loc (wrk_sol(4*dim3d+2*nn+1))
+      paw  = loc (wrk_sol(4*dim3d+3*nn+1))
+      paw3 = loc (wrk_sol(4*dim3d+3*nn+  nksp*nn+1))
+      paw4 = loc (wrk_sol(4*dim3d+3*nn+2*nksp*nn+1))
+      pas  = loc (wrk_sol(4*dim3d+3*nn+3*nksp*nn+1))
+      paczz= loc (wrk_sol(4*dim3d+3*nn+3*nksp*nn+dim_s+1))
+      paw1 = loc (wrk_sol(4*dim3d+3*nn+3*nksp*nn+dim_s+dim_czz+1))
+      pavv = loc (wrk_sol2(1))
+      pawrk8 = loc (wrk_sol2(dim3d*(im+1)+1))
+*
+      r3     = c00*orts(1,1,1)
+*
+      if (precond.eq.'ADI_3D') then
+         call cofadi2 (dge,ccc,nlim,adi_pre,gni-1,nz)
+c      else if (precond.eq.'FCT' ) then
+c         allocate ( wfft(lfft), lx(nx), ly(ny), work(lwork),
+c     $              b(nz), d(nz), x(nz), y(nz), dx(nx), dy(ny) )
+c         call cosq2i ( nx, ny,  wfft, lfft, ierr )
+c         do i = 1, nx
+c            lx(i) = two * dsin ( dble(i-1)*pi_8/(two*dble(nx) ) )
+c            lx(i) = - lx(i)*lx(i) 
+c         enddo
+c         do j = 1, ny
+c            ly(j) = two * dsin ( dble(j-1)*pi_8/(two*dble(ny) ) )
+c            ly(j) = - ly(j)*ly(j) 
+c         enddo
+      endif
+*
+      call cnt3_s  ( czz, nx, ny, nz, niterj )
+      call rhs3_qp ( sol, rhs, s, t1,t2,t3,t4,nx, ny, niterj )
+*
+      if (gcrk_l) then
+         call MATVEC  ( w2, sol, s, czz, t1, t2, t3, w1, nx, ny, nz, 
+     $                                   minx,maxx,miny,maxy,niterj )
+!$omp do
+         do i=1,nn
+            w(i,1) = rhs(i) - w2(i)
+         end do
+!$omp enddo
+         call JACPC  ( w(1,2),  w, s, czz, w1, nx, ny, nz, niterj)
+         call MATVEC ( w2, w(1,2), s, czz, t1, t2, t3, w1, nx, ny, nz, 
+     $                                     minx,maxx,miny,maxy,niterj )
+*
+      else
+         call MATVEC  ( w2, sol, s, czz, t1, t2, t3, w1, nx, ny, nz,
+     $                                   minx,maxx,miny,maxy,niterj )
+      endif
+*
+      sol_it   = 0
+      sol_code = 1
+*
+      if (gcrk_l) then
+ 1    call gcrk ( sol,w,w2,w3,w4,nn,maxite,diagres,sol_code,sol_it )
+*
+      if ( sol_code.gt.0 ) then
+*
+         if ( precond.eq.'ADI_3D' ) then
+            call adipc2_3d (w(1,2), w,s,czz,r3,dge,ccc,nlim,nx,ny,nz,
+     $                                                        niterj)
+         else if ( precond.eq.'FCT' ) then 
+c            call fct ( w2, w1, s, wfft, lfft, work, lwork, lx, ly,
+c     $                       czz, b, d, x, y, dx, dy, nx, ny, nz )
+         else if ( precond.eq.'JACOBI' ) then
+            call JACPC ( w(1,2), w, s, czz, w1, nx, ny, nz, niterj )
+         else
+            print*, ' INVALID CHOICE OF PRECONDITIONER'
+            stop
+         endif
+         call MATVEC ( w2, w(1,2), s, czz, t1, t2, t3, w1, nx, ny, nz, 
+     $                                     minx,maxx,miny,maxy,niterj )
+         sol_code = 2
+         goto 1
+*
+      else
+         goto 555
+      endif
+      endif
+*
+      if (.not.gcrk_l) then
+ 2    continue
+!$omp single
+      call tmg_start ( 20, 'fgmres' )
+      call fgmres ( nn,im,rhs,sol,ik,vv,w,w2,wrk8,nthreads,
+     $                     eps,maxite,iout,sol_code,sol_it )
+      call tmg_stop ( 20 )
+!$omp end single
+*
+      if ( sol_code.gt.0 ) then
+*
+         if ( precond.eq.'ADI_3D' ) then
+            call adipc2_3d ( w(1,ik), vv(1,ik),s,czz,r3,dge,ccc,nlim,
+     $                                               nx,ny,nz,niterj )
+         else if ( precond.eq.'FCT' ) then 
+c            call fct ( w2, w1, s, wfft, lfft, work, lwork, lx, ly,
+c     $                       czz, b, d, x, y, dx, dy, nx, ny, nz )
+         else if ( precond.eq.'JACOBI' ) then
+            call JACPC ( w(1,ik), vv(1,ik), s, czz, w1,nx,ny,nz,niterj )
+         else
+            print*, ' INVALID CHOICE OF PRECONDITIONER'
+            stop
+         endif
+         call MATVEC ( vv(1,ik+1), w(1,ik), s, czz, t1, t2, t3, w1, 
+     $                      nx, ny, nz, minx,maxx,miny,maxy,niterj )
+         sol_code = 2
+         goto 2
+*
+      else
+         goto 555
+      endif
+      endif
+*
+ 555  continue
+!$omp do
+      do k = 1, nz
+      do j = 1, ny
+      do i = 1, nx
+         qpp(i,j,k) = sol(i,j,k)
+      end do
+      end do
+      end do
+!$omp enddo
+!$omp single
+         call rpn_comm_xch_halo(qpp(minx,miny,1),minx,maxx,miny,maxy,
+     $                  ldni,ldnj,gnk,hx,hy,period_x,period_y,ldni,0)
+!$omp end single
+*
+c      deallocate (vv)
+ 9988 if (rsol) then
+         if (myproc.eq.0) then
+            allocate (wk6(gni,gnj,gnk),wk7(minx:gni+hx,miny:gnj+hy,gnk))
+            read (49) wk6
+            do k=1,nz
+            do j=1,gnj
+            do i=1,gni
+               wk7(i,j,k) = wk6(i,j,k)
+            end do
+            end do
+            end do
+         endif
+         call glbdist2 ( wk7,qpp(minx,miny,1),
+     $                   minx,maxx,miny,maxy,gni+hx,gnj+hy,nz )
+         if (myproc.eq.0) deallocate (wk6, wk7)
+      endif
+*
+      if (wsol) then
+         if (myproc.eq.0) allocate (wk6(gni,gnj,gnk))
+         call glbcolc ( wk6,gni,gnj,qpp(minx,miny,1),
+     $                  minx,maxx,miny,maxy,nz )
+         if (myproc.eq.0) then
+            write (49) wk6
+            deallocate (wk6)
+         endif
+      endif
+*
+*---------------------------------------------------------------------
+      return
+      end
+*
+
+
+
+
+

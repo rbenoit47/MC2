@@ -1,0 +1,6 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      real hh0,hh0i,hh0f
+      pointer (pahh0  , hh0  (minx:maxx,miny:maxy,2)),
+     $        (pahh0i , hh0i (minx-1:maxx,miny-1:maxy,2)),
+     $        (pahh0f , hh0f (minx-1:maxx,miny-1:maxy,2))
+      common /topo/ pahh0,pahh0i,pahh0f

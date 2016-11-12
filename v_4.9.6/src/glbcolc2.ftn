@@ -1,0 +1,108 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine glbcolc2(f2rc,g_id,g_if,g_jd,g_jf,
+     $                    f2cc,lminx,lmaxx,lminy,lmaxy,lnk,z_out,nk_out)
+      implicit none
+*
+      integer g_id,g_if,g_jd,g_jf,lminx,lmaxx,lminy,lmaxy,lnk,nk_out
+      integer z_out(nk_out)
+      real f2rc(g_id:g_if,g_jd:g_jf,nk_out), 
+     $     f2cc(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+#include "partopo.cdk"
+#include "lcldim.cdk"
+      include 'mpif.h'
+*
+      integer i, j, k, iproc, tag, err
+      integer si,sj,loindx,hiindx,loindy,hiindy
+      integer len,l_id,l_if,l_jd,l_jf
+      common /gatherit/ len,l_id,l_if,l_jd,l_jf
+      integer MPI_status(MPI_status_size)
+      real buf (dim2d*nk_out*2)
+      data tag /210/
+*
+*----------------------------------------------------------------------
+*
+      loindx=1
+      loindy=1
+      hiindx=ldni
+      hiindy=ldnj
+      if (west_L ) loindx = lminx
+      if (south_L) loindy = lminy
+      if (north_L) hiindy = lmaxy
+      if (east_L ) hiindx = lmaxx
+      si = gc_ld(1,myproc) - 1
+      sj = gc_ld(3,myproc) - 1
+      l_id = max(loindx,(g_id-si))
+      l_if = min(hiindx,(g_if-si))
+      l_jd = max(loindy,(g_jd-sj))
+      l_jf = min(hiindy,(g_jf-sj))
+      len = max(0,(l_if-l_id+1))*max(0,(l_jf-l_jd+1))*lnk
+*          
+      if (myproc.eq.0) then
+*
+*       Copy local data (LD) segment to global field on processor 1
+*
+         if (len.gt.0) then
+            len = 0
+            do k = 1, nk_out
+               do j = l_jd, l_jf
+               do i = l_id, l_if
+                  len = len + 1
+                  buf(len) = f2cc(i,j,z_out(k))
+               enddo
+               enddo
+            enddo
+            len = 0
+            do k = 1, nk_out
+               do j = gc_ld(3,myproc)+l_jd-1, gc_ld(3,myproc)+l_jf-1
+               do i = gc_ld(1,myproc)+l_id-1, gc_ld(1,myproc)+l_if-1
+                  len = len + 1
+                  f2rc(i,j,k) = buf(len)
+               enddo
+               enddo
+            enddo
+         endif
+*
+*       Receive the local data (LD) segments from all other processors
+*
+         do iproc = 1, numproc-1
+            call MPI_recv(len, 5, MPI_INTEGER, iproc, tag,
+     $                     MPI_COMM_WORLD, MPI_status, err)
+            if (len.gt.0) then
+               call MPI_recv(buf, len, MPI_REAL, iproc, tag,
+     $                        MPI_COMM_WORLD, MPI_status, err)
+               len = 0
+               do k = 1, nk_out
+               do j = gc_ld(3,iproc)+l_jd-1, gc_ld(3,iproc)+l_jf-1
+               do i = gc_ld(1,iproc)+l_id-1, gc_ld(1,iproc)+l_if-1
+                  len = len + 1
+                  f2rc(i,j,k) = buf(len)
+               enddo
+               enddo
+               enddo 
+            endif
+         enddo 
+*
+      else
+*
+*       Send local data (LD) segment to processor 1
+*
+         len = 0
+         do k = 1, nk_out
+            do j = l_jd, l_jf
+            do i = l_id, l_if
+               len = len + 1
+               buf(len) = f2cc(i,j,z_out(k))
+            enddo
+            enddo
+         enddo
+         call MPI_send(len, 5, MPI_INTEGER, 0, tag,MPI_COMM_WORLD,err)
+         if (len.gt.0)
+     $   call MPI_send(buf, len,  MPI_REAL, 0, tag,MPI_COMM_WORLD,err)
+*
+      endif
+*
+*----------------------------------------------------------------------
+      return
+      end
+*

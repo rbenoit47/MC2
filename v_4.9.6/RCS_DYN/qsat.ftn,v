@@ -1,0 +1,88 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r qsat
+*
+      subroutine qsat (q,td,pr,ng,nk,satues,h)
+      implicit none
+*
+      character* (*) h
+      logical satues
+      integer ng,nk
+      real q(ng,nk),td(ng,nk),pr(ng,nk)
+*
+*OBJECT
+*
+*     calcul l'humidite specifique ( q ) en unites S.I.
+*     a partir du point de rosee td et de la pression pr.
+*     foqsa() et foqst() sont des fonctions thermodynamiques
+*     de base de la physique CMC/RPN.
+*
+*METHOD
+*
+*EXTERNALS
+*
+*AUTHOR  Simon Pellerin                     Dec   1993
+*
+**
+*
+      integer i,k
+*
+#include "consdyn_8.cdk"
+#include "dtherfct2.cdk"
+#include "ftherfct2.cdk"
+*
+*-----------------------------------------------------------------
+*
+      if (h.eq.'ES') then
+         if(.not.satues) then
+            do 1 k=1,nk
+            do 1 i=1,ng
+               q(i,k)=  foqsa(td(i,k),pr(i,k))
+ 1          continue
+         else
+            do 2 k=1,nk
+            do 2 i=1,ng
+               q(i,k)=  foqst(td(i,k),pr(i,k))
+ 2          continue
+         endif
+      endif
+*
+      if (h.eq.'HR') then
+         if(.not.satues) then
+            do 10 k=1,nk
+            do 10 i=1,ng
+               q(i,k)=q(i,k)*foqsa(td(i,k),pr(i,k))
+ 10         continue
+         else
+            do 20 k=1,nk
+            do 20 i=1,ng
+               q(i,k)=q(i,k)*foqst(td(i,k),pr(i,k))
+ 20         continue
+         endif
+      endif
+*
+*-----------------------------------------------------------------
+      return
+      end
+@

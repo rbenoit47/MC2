@@ -1,0 +1,46 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------#
+#                                                                            #
+#                                 RUGOS V1.3                                 #
+#                                                                            #
+# ---------------------------------------------------------------------------#
+#
+#                               MODE D'EMPLOI
+#  
+#  
+#   Ce script permet de generer la longueur de rugosite sur n'importe quel
+#   type de grille a n'importe quelle resolution.  Les champs produits 
+#   avec RUGOS sont : Z0 (longueur de rugosite), ZP (logarithme de la longueur
+#   de rugosite), LH (launching height).  La longueur de rugosite est obtenue
+#   par la formule de Grant et Mason (1990).
+#
+eval `cclargs $0 -ni          "30"                                          \
+                 -nj          "30"                                          \
+                 -tictac      "tictactest.std"                              \
+                 -fileout     "champs_geo.std"                              \
+                 -filetopo    "topo_filtree.std"                            \
+                 -fileoutru   "rugos_out"                                ++ $*`
+#
+#____ Repertoire ou se trouvent les donnees sources.  Pour l'instant, elles
+#____ resident sur morgane.
+#
+rep=/data/cmda/genesis/donnees/topo
+repn=/data/cmdax3/afsd/jud/topo_usgs
+#
+$EDITFST -s $tictac -d $fileoutru <<EOF
+ desire(-1,['^^','>>'])
+EOF
+#
+/users/dor/afsd/jud/geo/v_1.3.0/rugos/bin/pollux/rugos_pollux \
+-ixy ${tictac} -i $ni -j $nj -var ME -gtyp E \
+-fichme $filetopo -fichvg $fileout \
+-infich ${repn}/topo_usgs_0_10.fst    ${repn}/topo_usgs_11_35.fst   \
+        ${repn}/topo_usgs_36_60.fst   ${repn}/topo_usgs_61_85.fst   \
+        ${repn}/topo_usgs_86_110.fst  ${repn}/topo_usgs_111_133.fst \
+        ${repn}/topo_usgs_134_150.fst ${repn}/topo_usgs_151_165.fst \
+        ${repn}/topo_usgs_166_180.fst ${rep}/top_us                 \
+-out $fileoutru > mess.rugos
+
+
+
+

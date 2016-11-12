@@ -1,0 +1,39 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r physout
+*
+      subroutine physout (ng)
+      implicit none
+*
+      integer ng
+**
+#include "rec.cdk"
+#include "sor.cdk"
+*
+      integer fstfrm,flag,nphy,npar,stepno,err
+*
+*----------------------------------------------------------------------
+*
+ 210  continue
+      read (23,end=220,iostat=flag) nphy,npar,stepno
+      goto 230
+ 220  continue
+      print*, ' END OF FILE REACHED (zmc2.phys)'
+      goto 500
+*
+ 230  if (flag.eq.0) then
+         gnstepno = stepno
+         if (gnstepno.gt.gnstep2) goto 500
+         call rdphyo2 (nphy,npar,ng,stepno,23,24)
+         goto 210
+      endif
+*
+ 500  err = fstfrm(24)
+      close (23)
+*
+*----------------------------------------------------------------------
+ 101  format (/' PROG ',I3,'HR',10X,'TIME STEP NO: ',I5)
+*
+      return
+      end
+
+

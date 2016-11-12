@@ -1,0 +1,125 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine hollow_z (zgeot,zgeom,topo_s,topo_l,ni,nj,nk)
+      implicit none
+*
+      integer ni,nj,nk,nhx
+      real zgeot(ni,nj,nk),zgeom(ni,nj,nk),topo_s(ni,nj),topo_l(ni,nj)
+*
+#include "halo.cdk"
+*
+      logical done1
+      integer i,j,k,cnt1,cnt2
+      real wk1,wk2,wk3,wk4
+      dimension wk1(dimhx*nk), wk2(dimhx*nk), wk3(dimhx), wk4(dimhx)
+      real tr1,tr2,tr3,tr4
+      pointer (patr1, tr1(*)),(patr2, tr2(*)),
+     $        (patr3, tr3(*)),(patr4, tr4(*))
+      data done1 /.false./
+      save done1
+*
+*---------------------------------------------------------------------
+*
+      if (done1) return
+*
+      cnt1 = 0
+      do k=1,nk
+         do j=1,halox
+         do i=1,ni
+            cnt1 = cnt1 + 1
+            wk1(cnt1) = zgeot(i,j,k)
+            wk2(cnt1) = zgeom(i,j,k)
+         end do
+         end do
+         do j=nj-halox+1,nj
+         do i=1,ni
+            cnt1 = cnt1 + 1
+            wk1(cnt1) = zgeot(i,j,k)
+            wk2(cnt1) = zgeom(i,j,k)
+         end do
+         end do
+         do j=halox,nj-halox+1
+         do i=1,halox
+            cnt1 = cnt1 + 1
+            wk1(cnt1) = zgeot(i,j,k)
+            wk2(cnt1) = zgeom(i,j,k)
+         end do
+         end do
+         do j=halox,nj-halox+1
+         do i=ni-halox+1,ni
+            cnt1 = cnt1 + 1
+            wk1(cnt1) = zgeot(i,j,k)
+            wk2(cnt1) = zgeom(i,j,k)
+         end do
+         end do
+      end do
+*
+      cnt2 = 0
+      do j=1,halox
+      do i=1,ni
+         cnt2 = cnt2 + 1
+         wk3(cnt2) = topo_s(i,j)
+         wk4(cnt2) = topo_l(i,j)
+      end do
+      end do
+      do j=nj-halox+1,nj
+      do i=1,ni
+         cnt2 = cnt2 + 1
+         wk3(cnt2) = topo_s(i,j)
+         wk4(cnt2) = topo_l(i,j)
+      end do
+      end do
+      do j=halox,nj-halox+1
+      do i=1,halox
+         cnt2 = cnt2 + 1
+         wk3(cnt2) = topo_s(i,j)
+         wk4(cnt2) = topo_l(i,j)
+      end do
+      end do
+      do j=halox,nj-halox+1
+      do i=ni-halox+1,ni
+         cnt2 = cnt2 + 1
+         wk3(cnt2) = topo_s(i,j)
+         wk4(cnt2) = topo_l(i,j)
+      end do
+      end do
+*
+      patr1 = loc(zgeot(1,1,1))
+      patr2 = loc(zgeom(1,1,1))
+      patr3 = loc(topo_s(1,1))
+      patr4 = loc(topo_l(1,1))
+      do i=1,cnt1
+         tr1(i) = wk1(i)
+         tr2(i) = wk2(i)
+      end do
+      do i=1,cnt2
+         tr3(i) = wk3(i)
+         tr4(i) = wk4(i)
+      end do
+*
+      done1 = .true.
+*---------------------------------------------------------------------
+      return
+      end
+@

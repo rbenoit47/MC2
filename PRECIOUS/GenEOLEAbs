@@ -1,0 +1,141 @@
+# faire les Abs pour 496+38+EOLE
+EOLE_496=/home/rb/exper/MC2/eole_496
+RECETTES_MC2=/home/rb/exper/MC2/PRECIOUS/DYN/recettes_DYN
+PRECIOUS=/home/rb/exper/MC2/PRECIOUS
+#
+TRAVAIL=/home/rb/exper/MC2/basic_DYN+PHY+EOLE_ABS  #faire les Bas dans TRAVAIL
+#
+bloc1=0
+bloc2=0
+bloc3=0
+bloc4=0
+#
+bloc=$1   #plus simple ainsi
+
+if [ "$bloc" == "" ];
+then
+echo donner un numero de bloc en argument 1.  $0 1  par exemple
+exit
+fi
+#
+ln -sfn $TRAVAIL TRAVAIL
+cd $TRAVAIL
+#
+set -x
+#
+# modele
+cat >modele.dot <<FIN
+export MODEL=mc2
+export MODEL_VERSION=4.9.6
+export PHY_VERSION=3.8
+export MODEL_PATH=/home/rb/exper/MC2/v_4.9.6
+export MODLIBPATH=\${MODEL_PATH}/lib/\${EC_ARCH}
+#       MODLIBPATH=\$MODEL_PATH/lib/\$ARCH
+FIN
+#
+. modele.dot
+#
+#  petites manoeuvres CRUCIALES	
+#
+# deja fait ...mkdir -p $MODEL_PATH/Makefile_$EC_ARCH
+#
+cp -f $PRECIOUS/Makefile_Linux_x86-64_gfortran $MODEL_PATH/Makefile_$EC_ARCH
+#  skip.  Fait manuellement cp -fp $GEMCLIM/RCS_DYN/.recettes $MODEL_PATH/RCS_DYN/
+cp -f $PRECIOUS/recettes_mc2_from_gemclim $MODEL_PATH/RCS_DYN/.recettes
+cp -f $PRECIOUS/cibles_sisl               $MODEL_PATH/RCS_DYN/.cibles
+#
+
+#if [ $bloc1 -eq 1 ];
+if [ "$bloc" == "1" ];
+then
+rm -f *.ftn *.cdk *.h *.o Makefile* arbre_de_dependance make_cdk *~ *.f
+rm -rf malib${EC_ARCH}
+mkdir -p malib${EC_ARCH}
+#
+cp ../PRECIOUS/DYN/*.ftn .  
+cp ../PRECIOUS/PHY/*.ftn .
+#  pas tout de suite cp ../PRECIOUS/PHY/*.h .
+#
+cp ${EOLE_496}/*.ftn .
+cp ${EOLE_496}/*.cdk .
+#
+cp -f ../PRECIOUS/EOLE/*.ftn .
+cp -f ../PRECIOUS/EOLE/*.cdk .
+#
+#  et quoi pour added_manually ???????????
+#
+#  un kdiff3 entre src de 4.9.6 et added_manually révèle ceci pour les *.ftn et .cdk
+# les decks suivants sont différents avec des edits de moi ou autre dedans
+# mais ce sont juste des print
+# donc PAS IMPORTANTS.  NE PAS INCLURE ALORS.
+cat > /dev/null <<FIN
+ecris_fst.ftn
+ecris2_fst.ftn
+out_dyn.ftn
+out_dync.ftn
+sorctrl.ftn
+sormc2.ftn
+FIN
+#  
+
+echo CODE EOLE en place
+else
+echo bloc1 RIEN
+fi
+#
+#if [ $bloc2 -eq 1 ];
+if [ "$bloc" == "2" ];
+then
+chmod -x *.ftn *.cdk *.h  #oter droit en exec
+#
+r.make_exp
+# ajouter recettes mc2 ...non deja là
+#
+env|grep -i model
+env|grep -i phy
+echo bloc2 make_exp et env modele fait
+else
+echo bloc2 rien
+fi
+#
+#if [ $bloc3 -eq 1 ];
+if [ "$bloc" == "3" ];
+then
+. modele.dot
+#
+cp -f ../PRECIOUS/PHY/*.h .  #ecrase au besoin
+#
+#  LCLPO=\.  pour avoir les *.o direct ici et evite de refaire continuellement
+#
+make clean
+# pas de LCLPO quand on fait abs...ca fout la pagaille avec le cp final du malib au folder de travail
+# LCLPO=\. 
+make objloc
+echo bloc3 objloc fait
+else
+echo bloc3 rien
+fi
+#
+#if [ $bloc4 -eq 1 ];
+if [ "$bloc" == "4" ];
+then
+. modele.dot
+env |grep -i MOD
+# read toto
+#
+# besoin de makebidon  ...dans scripts du 4.9.6
+PATH=${MODEL_PATH}/scripts:$PATH
+#
+make clean
+#pas de LCLPO=\. pour les Abs
+make    MODLIBPATH=${MODLIBPATH}   PHY_VERSION=${PHY_VERSION} mc2ntr
+make    MODLIBPATH=${MODLIBPATH}   PHY_VERSION=${PHY_VERSION} mc2dm
+ls -al *.Abs
+mkdir $PRECIOUS/Abs  #au besoin
+cp -fp *.Abs $PRECIOUS/Abs
+echo bloc4 Abs fait
+else
+echo bloc4 rien
+fi
+exit #
+

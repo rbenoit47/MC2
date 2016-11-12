@@ -1,0 +1,62 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@      REAL AQL, GAMAZA, GZMOINS, HUPLUS0, QCDIFV
+      REAL QCPLUS0, QRPLUS0, SELOC, TPLUS0, TRAV1D, TRAV2D
+      REAL TVE, TVIRT, UPLUS0, UVTQS1, VPLUS0
+*
+      POINTER (IAQL    ,AQL    (NI,NK  ))
+      POINTER (IGAMAZA ,GAMAZA (NI     ))
+      POINTER (IGZMOIN ,GZMOINS(NI,NK  ))
+      POINTER (IHUPLUS0,HUPLUS0(NI,NK  ))
+      POINTER (IQCDIFV ,QCDIFV (NI,NK  ))
+      POINTER (IQCPLUS0,QCPLUS0(NI,NK  ))
+      POINTER (IQRPLUS0,QRPLUS0(NI,NK  ))
+      POINTER (ISELOC  ,SELOC  (NI,NK  ))
+      POINTER (ITPLUS0 ,TPLUS0 (NI,NK  ))
+      POINTER (ITRAV1D ,TRAV1D (NI     ))
+      POINTER (ITRAV2D ,TRAV2D (NI,NK,6))
+      POINTER (ITVE    ,TVE    (NI,NK  ))
+      POINTER (ITVIRT  ,TVIRT  (NI,NK  ))
+      POINTER (IUPLUS0 ,UPLUS0 (NI,NK  ))
+      POINTER (IUVTQS1 ,UVTQS1 (NI,4   ))
+      POINTER (IVPLUS0 ,VPLUS0 (NI,NK  ))
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

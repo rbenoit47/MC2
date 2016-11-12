@@ -1,0 +1,96 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***fonction sttlcl - calcule la temperature du lcl
+*
+      function sttlcl(td, tt)
+*
+#include "impnone.cdk"
+*
+      real sttlcl
+      real td, tt
+*
+*author
+*      N. Brunet (septembre 2000)
+*
+*object
+*      to compute the temperature of the lifting
+*      condensation level (lcl) from a temperature
+*      and a dew point temperature.
+*
+*      result is in deg K
+*
+*arguments
+*      tt - temperature (K) at the base of the ascent
+*      td - dew point temp (K) at the base of the ascent
+*
+*implicites
+#include "consphy.cdk"
+*modules
+      external inctphy
+*
+**
+*--------------------------------------------------------------------
+*
+      real a, x, y
+*
+#include "dintern.cdk"
+#include "fintern.cdk"
+*
+*-------------------------------------------------------------------
+#include "initcph.cdk"
+*
+      if(td .ge. tt)then
+         sttlcl = tt
+         return
+      end if
+*
+      a = dble(cpd)/(dble(eps1)*folv(td))
+*
+      x = a*tt - 1.
+      y = a - (1./td)
+*
+      sttlcl = x / y
+*
+      return
+      end
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

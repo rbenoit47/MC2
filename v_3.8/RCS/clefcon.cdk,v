@@ -1,0 +1,69 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.34;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+*     DIVERSES CONSTANTES PHYSIQUES
+*
+      REAL ANEMO, ETRMIN
+      REAL CLPCG, Z0MIN
+      REAL CLEFC1,CLEFC4,CLEFC6,CLEFC7,CLEFC8,CLEFCB,CLEFAE
+      COMMON / CLEFCON / ANEMO, ETRMIN, CLPCG, Z0MIN
+     Z    ,CLEFC1,CLEFC4,CLEFC6,CLEFC7,CLEFC8,CLEFCB,CLEFAE
+
+#if defined(DOC)
+*COMMON BLOCK /CLEFCON/
+*          contains various physics constants
+*
+* ANEMO    anemometer; initialized in CLEMUL2.
+* CLPCG    ALOG((1.0-POURCG)/POURCG) where POURCG is set to 0.9;
+*          initialized in PHYDEBU.
+* CLEFC1   =3.75/1.75; initialized in PHYDEBU.
+* CLEFC4   =4.5; initialized in PHYDEBU.
+* CLEFC6   =4.85; initialized in PHYDEBU.
+* CLEFC7   =1.0-0.125*CLEFC6; initialized in PHYDEBU.
+* CLEFC8   =6.5; initialized in PHYDEBU.
+* CLEFCB   =0.4; initialized in PHYDEBU.
+* CLEFAE   =3.0*CLEFC4/CLEFC8; initialized in PHYDEBU.
+* ETRMIN   =1.0 E-4; initialized in PHYDEBU.
+* Z0MIN    =1.5 E-5; roughness length initialized in PHYDEBU.
+*
+#endif
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

@@ -1,0 +1,51 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer maxlvl_out,nkout,nlevtyp
+      parameter (nkout = 1000, maxlvl_out = 1000, nlevtyp=10)
+      character*1   gttpvar,levtyp_S(nlevtyp),levtyp,out_unit_S
+      character*3   rndoseq,out_lt
+      character*12  gtetikt
+      character*15  udolist(nkout)
+      character*256 bprogfile,fileout,out_progfile
+      logical staguv,flipit,out_runt,out_isopen,endsor_l
+      integer nvardyn,datyp,nbit,table_out(3,nkout),table_outn(3,nkout),
+     $        gnstep1,gnstep2,
+     $        g_id,g_if,g_jd,g_jf,g_idp,g_ifp,g_jdp,g_jfp,
+     $        z_out(maxlvl_out),z_tmp(maxlvl_out),
+     $        nk_out,igs(4),gnip1,gnip3,out_dat2,out_h0,out_dat0,
+     $        out_kind,out_clostep,out_unf,endsor_i
+      real pres_o(nkout), height_o(nkout), endsor_r
+*
+      common /sor_c2/ fileout,out_progfile
+      common /sor_c/ gttpvar,levtyp_S,levtyp,out_unit_S,rndoseq,gtetikt,
+     $               udolist,bprogfile,out_lt
+      common /sor_l/ staguv,flipit,out_runt,out_isopen,endsor_l
+      common /sor_i/ 
+     $        nvardyn,table_out,table_outn,datyp,nbit,gnstep1,gnstep2,
+     $        g_id,g_if,g_jd,g_jf,g_idp,g_ifp,g_jdp,g_jfp,
+     $        z_out,z_tmp,igs,nk_out,gnip1,gnip3,out_dat2,out_h0,
+     $        out_dat0,out_kind,out_clostep,out_unf,endsor_i
+      common /sor_r/ pres_o,height_o,endsor_r
+*
+@

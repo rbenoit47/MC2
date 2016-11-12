@@ -1,0 +1,392 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r inikey
+*
+      subroutine inikey (fni,fnj,nk,dimbus,prout)
+      implicit none
+*
+      logical prout
+      integer fni,fnj,nk,dimbus
+*
+*AUTHOR   Michel Desgagne       Nov   1995
+*
+*REVISION
+* 001  Fanyou Kong		December 1996
+*	- add explicit microphysics schemes
+* 002      J. Mailhot  (Mar 1999) - Changes for new SURFACE interface
+* 003      B. Bilodeau (Apr 1999) - BUSENT
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (inikey)
+*     Initialyse index for BUSDYN, BUSPER, BUSVOL, BUSENT and OUTBUS.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    fni        I    I    S       folded dimension along X
+*    fnj        I    I    S       folded dimension along Y
+*    dimbus     O    I    S       dimenion of OUTBUS
+*
+*IMPLICITES
+*
+#include "lesbus.cdk"
+#include "busind.cdk"
+#include "physnml.cdk"
+*
+*MODULES
+*
+**
+      character*12 busname
+      character*4 outname
+      character*3 shape
+      character*1 bus
+      integer lght,init0,init,id,jd,kd,nspc,adrpbus,pnk,ipas
+      integer fadd,fmul,flpcpn,fldiag,flidia,longueur
+      data init0,init /0,-1/
+*
+*-------------------------------------------------------------------
+*
+      call getindx2 ('UMOINS',  'D',umoins,   lght,init0)
+      call getindx2 ('VMOINS',  'D',vmoins,   lght,init0)
+      call getindx2 ('TMOINS',  'D',tmoins,   lght,init0)
+      call getindx2 ('HUMOINS', 'D',humoins,  lght,init0)
+      call getindx2 ('QCMOINS', 'D',qcmoins,  lght,init0)
+      call getindx2 ('QRMOINS', 'D',qrmoins,  lght,init)
+      call getindx2 ('QIMOINS', 'D',qimoins,  lght,init)
+      call getindx2 ('QGMOINS', 'D',qgmoins,  lght,init)
+      call getindx2 ('ENPLUS',  'D',enplus,   lght,init)
+      call getindx2 ('PMOINS',  'D',pmoins,   lght,init0)
+      call getindx2 ('UPLUS',   'D',uplus,    lght,init0)
+      call getindx2 ('VPLUS',   'D',vplus,    lght,init0)
+      call getindx2 ('TPLUS',   'D',tplus,    lght,init0)
+      call getindx2 ('HUPLUS',  'D',huplus,   lght,init0)
+      call getindx2 ('QCPLUS',  'D',qcplus,   lght,init0)
+      call getindx2 ('QRPLUS',  'D',qrplus,   lght,init0)
+      call getindx2 ('QIPLUS',  'D',qiplus,   lght,init)
+      call getindx2 ('QGPLUS',  'D',qgplus,   lght,init)
+      call getindx2 ('PPLUS',   'D',pplus,    lght,init0)
+      call getindx2 ('OMEGAP',  'D',omegap,   lght,init0)
+      call getindx2 ('SIGM',    'D',sigm,     lght,init0)
+      call getindx2 ('DXDY',    'D',dxdy,     lght,init0)
+      call getindx2 ('EPONMOD', 'D',eponmod,  lght,init0)
+
+      call getindx2 ('UE2',     'P',ue2,      lght,init0)
+      call getindx2 ('FTEMP',   'P',ftemp,    lght,init0)
+      call getindx2 ('FVAP',    'P',fvap,     lght,init0)
+      call getindx2 ('ALC',     'P',alc,      lght,init0)
+      call getindx2 ('ALS',     'P',als,      lght,init0)
+      call getindx2 ('ASC',     'P',asc,      lght,init0)
+      call getindx2 ('ASS',     'P',ass,      lght,init0)
+      call getindx2 ('TLC',     'P',tlc,      lght,init0)
+      call getindx2 ('TLS',     'P',tls,      lght,init0)
+      call getindx2 ('TSC',     'P',tsc,      lght,init0)
+      call getindx2 ('TSS',     'P',tss,      lght,init0)
+      call getindx2 ('QSURF',   'P',qsurf,    lght,init0)
+      call getindx2 ('ILMO',    'P',ilmo,     lght,init0)
+      call getindx2 ('HST' ,    'P',hst,      lght,init0)
+      call getindx2 ('TSOIL',   'P',tsoil,    lght,init0)
+      call getindx2 ('Z0' ,     'P',z0 ,      lght,init0)
+      call getindx2 ('DLAT',    'P',dlat,     lght,init0)
+      call getindx2 ('MG',      'P',mg,       lght,init0)
+      call getindx2 ('FQ' ,     'P',fq ,      lght,init0)
+      call getindx2 ('UFCP',    'P',ufcp,     lght,init0)
+      call getindx2 ('VFCP',    'P',vfcp,     lght,init0)
+*
+      call getindx2 ('TRAD',    'V',trad,     lght,init0)
+      call getindx2 ('UDIFV',   'V',udifv,    lght,init0)
+      call getindx2 ('VDIFV',   'V',vdifv,    lght,init0)
+      call getindx2 ('WDIFV',   'V',wdifv,    lght,init)
+      call getindx2 ('TDIFV',   'V',tdifv,    lght,init0)
+      call getindx2 ('QDIFV',   'V',qdifv,    lght,init0)
+      call getindx2 ('EDIFV',   'V',edifv,    lght,init)
+      call getindx2 ('UGWD',    'V',ugwd,     lght,init0)
+      call getindx2 ('VGWD',    'V',vgwd,     lght,init0)
+      call getindx2 ('TCOND',   'V',tcond,    lght,init0)
+      call getindx2 ('HUCOND',  'V',hucond,   lght,init0)
+      call getindx2 ('QCCOND',  'V',qccond,   lght,init)
+      call getindx2 ('QRCOND',  'V',qrcond,   lght,init)
+      call getindx2 ('FICE',    'V',fice,     lght,init)
+      call getindx2 ('QICOND',  'V',qicond,   lght,init)
+      call getindx2 ('QGCOND',  'V',qgcond,   lght,init)
+*
+*     Construction of physics output bus (OUTBUS) for requested
+*     physics variables
+*
+      flpcpn =-2
+      fldiag =-2
+      flidia =-2
+      phyotop=0
+      phyospc=0
+      do 10 id=1,npolist
+         if (upolist(id).eq.'!@#$%^&*') goto 11
+         ipas = index(upolist(id),":")
+         lght = longueur(upolist(id))
+         if (ipas.gt.0) then
+            busname = upolist(id)(1:ipas-1)
+            if (lght.gt.ipas) then
+               read (upolist(id)(ipas+1:lght),901) ipas
+            else
+               ipas = -1
+            endif
+         else
+            busname = upolist(id)
+            ipas    = -1
+         endif
+         if (busname.eq.'RAIN')   flpcpn = ipas
+         if (busname.eq.'SCREEN') fldiag = ipas
+         if (busname.eq.'MIXED')  flidia = ipas
+         do jd=1,pertop
+            if (busname.eq.pernm(jd)) then
+               do kd=1,phyotop
+                  if(busname.eq.phyonm(kd,1)) goto 10
+               end do
+               call decoshp (shape,fadd,fmul,perdc(jd))
+               bus     = 'P'
+               adrpbus = perpar(jd,1)
+               outname = peron(jd)
+               goto 400
+            endif
+         end do
+         do jd=1,voltop
+            if (busname.eq.volnm(jd)) then
+               do kd=1,phyotop
+                  if(busname.eq.phyonm(kd,1)) goto 10
+               end do
+               call decoshp (shape,fadd,fmul,voldc(jd))
+               bus     = 'V'
+               adrpbus = volpar(jd,1)
+               outname = volon(jd)
+               goto 400
+            endif
+         end do
+         do jd=1,enttop
+            if (busname.eq.entnm(jd)) then
+               do kd=1,phyotop
+                  if(busname.eq.phyonm(kd,1)) goto 10
+               end do
+               call decoshp (shape,fadd,fmul,entdc(jd))
+               bus     = 'E'
+               adrpbus = entpar(jd,1)
+               outname = enton(jd)
+               goto 400
+            endif
+         end do
+         do jd=1,dyntop
+            if (busname.eq.dynnm(jd)) then
+               do kd=1,phyotop
+                  if(busname.eq.phyonm(kd,1)) goto 10
+               end do
+               call decoshp (shape,fadd,fmul,dyndc(jd))
+               bus     = 'D'
+               adrpbus = dynpar(jd,1)
+               outname = dynon(jd)
+               goto 400
+            endif
+         end do
+         goto 10
+ 400     nspc = fni*fnj
+         pnk  = 1
+         if ((shape.eq.'SLB').or.(shape.eq.'SLS')) then
+            nspc = fni*fnj*nk
+            pnk  = nk
+         endif
+         phyotop            = phyotop + 1
+         phyonm (phyotop,1) = busname
+         phyonm (phyotop,2) = outname
+         phyonm (phyotop,3) = bus
+         phyopar(phyotop,1) = phyospc + 1
+         phyopar(phyotop,2) = nspc*fmul
+         phyopar(phyotop,3) = pnk
+         phyopar(phyotop,4) = fmul
+         phyopar(phyotop,5) = ipas
+         phyopar(phyotop,6) = adrpbus
+         phyospc = phyopar(phyotop,1) + phyopar(phyotop,2) - 1
+ 10   continue
+*
+*     Special case of precipitations (RAIN in physics namelist)
+*
+ 11   if (flpcpn.gt.-2) then
+         do kd=1,phyotop
+            if('PCPN'.eq.phyonm(kd,1)) goto 600
+         end do
+         phyotop            = phyotop + 1
+         phyonm (phyotop,1) = 'PCPN'
+         phyonm (phyotop,2) = 'RAIN'
+         phyonm (phyotop,3) = 'X'
+         phyopar(phyotop,1) = phyospc + 1
+         phyopar(phyotop,2) = fni*fnj*4
+         phyopar(phyotop,3) = 1
+         phyopar(phyotop,4) = 4
+         phyopar(phyotop,5) = flpcpn
+         phyopar(phyotop,6) = 0
+         phyospc = phyopar(phyotop,1) + phyopar(phyotop,2) - 1
+      endif
+*
+*     Special case of screen levels diagnostics
+*     (SCREEN in physics namelist)
+*
+ 600  if (fldiag.gt.-2) then
+         do kd=1,phyotop
+            if('SCREEN'.eq.phyonm(kd,1)) goto 700
+         end do
+         phyotop            = phyotop + 1
+         phyonm (phyotop,1) = 'SCREEN'
+         phyonm (phyotop,2) = 'SFCDIA'
+         phyonm (phyotop,3) = 'X'
+         phyopar(phyotop,1) = phyospc + 1
+         phyopar(phyotop,2) = fni*fnj*4
+         phyopar(phyotop,3) = 1
+         phyopar(phyotop,4) = 4
+         phyopar(phyotop,5) = fldiag
+         phyopar(phyotop,6) = 0
+         phyospc = phyopar(phyotop,1) + phyopar(phyotop,2) - 1
+      endif
+*
+*     Special case of diagnostic mixed phase (MIXED in physics namelist)
+*
+ 700  if (flidia.gt.0) then
+            nspc = fni*fnj*nk
+            pnk  = nk
+         do kd=1,phyotop
+            if('MIXED'.eq.phyonm(kd,1)) goto 900
+         end do
+         phyotop            = phyotop + 1
+         phyonm (phyotop,1) = 'MIXED'
+         phyonm (phyotop,2) = 'ICEDIA'
+         phyonm (phyotop,3) = 'X'
+         phyopar(phyotop,1) = phyospc + 1
+         phyopar(phyotop,2) = nspc*3
+         phyopar(phyotop,3) = pnk
+         phyopar(phyotop,4) = 3
+         phyopar(phyotop,5) = flidia
+         phyopar(phyotop,6) = 0
+         phyospc = phyopar(phyotop,1) + phyopar(phyotop,2) - 1
+      endif
+*
+ 900  dimbus = phyopar (phyotop,1)+phyopar(phyotop,2) - 1
+*
+      if (prout) then
+      write (6,101) 'PHYSICS OUTPUT BUS'
+      write (6,130)
+      write (6,110)
+      write (6,130)
+      do id=1,phyotop
+         write (6,120) phyonm(id,1),phyonm(id,2),phyonm(id,3),
+     $                 phyopar(id,1),phyopar(id,2),phyopar(id,3),
+     $                 phyopar(id,4),phyopar(id,5),phyopar(id,6)
+      end do
+      write (6,130)
+      print*
+      endif
+*
+ 101  format (/20x,'+',2(8('-'),'+'),4('-'),'+'/
+     $         20x,'|**',a,'**|')
+ 110  format ('|',2x,'Names',2x,'|',' STD ',
+     $     '|BUS|  Start | Length | nk | Mul |Nstep| Pbusid |')
+ 120  format ('|',1x,a8,'|',1x,a2,'  |',1x,a1,' |',2(i7,' |'),
+     $         i3,' |',2(i4,' |'),i7,' |')
+ 130  format ('+',9('-'),'+',5('-'),'+',3('-'),'+',2(8('-'),'+'),
+     $            4('-'),'+',2(5('-'),'+'),8('-'),'+')
+*
+ 901  format (i8)
+*
+*-------------------------------------------------------------------
+      return
+      end
+*
+***s/r decoshp
+*
+      subroutine decoshp (shape,fadd,fmul,string)
+      implicit none
+*
+      character*(*) string
+      character*3 shape
+      integer fadd,fmul
+*
+*AUTHOR   Michel Desgagne       Nov   1995
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (decoshp)
+*     Decode a string in order to get the shape of a busified
+*     variable. The shape is either ROW, SLB or SLS with an additive
+*     and multiplicative factor.
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    shape      O    C     S      shape (ROW, SLB, SLS)
+*    fadd       O    I     S      additive factor
+*    fmul       O    I     S      multiplicative factor
+*    string     I    C     S      input string
+*
+*IMPLICITES
+*
+*
+*MODULES
+*
+**
+      character*120 dum120
+      integer ivs,ideb,ifin,lst,flag
+*
+*-------------------------------------------------------------------
+*
+      lst = len(string)
+      ivs = index(string,"VS=") + 3
+      if (ivs.lt.4) then
+         write (6,800) "STOP IN DECOSTR: VS=[SHAPE] (MANDATORY)",string
+         stop
+      endif
+*
+      dum120 = string(ivs:lst)
+      ifin   = index (dum120,';') - 1
+      if (ifin.lt.0) ifin = 120
+      shape    = dum120(1:ifin)
+      if ((shape.ne."SLB").and.(shape.ne."SLS").and.(shape.ne."ROW"))  
+     $then
+         write(6,800) "STOP IN DECOSTR: UNADMISSIBLE VS=(SHAPE)",string
+         stop
+      endif
+*
+      fadd = 0
+      ideb = index(string,shape//"+") + 4
+      if (ideb.gt.4) then
+         dum120 = string(ideb:lst)
+         ifin   = index (dum120,';') - 1
+         if (ifin.lt.0) ifin = 120
+         read (dum120(1:ifin),702,iostat=flag) fadd
+         if (flag.gt.0) fadd = 0
+      endif
+      ideb = index(string,shape//"-") + 4
+      if (ideb.gt.4) then
+         dum120 = string(ideb:lst)
+         ifin   = index (dum120,';') - 1
+         if (ifin.lt.0) ifin = 120
+         read (dum120(1:ifin),702,iostat=flag) fadd
+         if (flag.gt.0) fadd = 0
+         fadd = -fadd
+      endif
+*
+      fmul = 1
+      ideb = index(string,shape//"*") + 4
+      if (ideb.gt.4) then
+         dum120 = string(ideb:lst)
+         ifin   = index (dum120,';') - 1
+         if (ifin.lt.0) ifin = 120
+         read (dum120(1:ifin),702,iostat=flag) fmul
+         if (flag.gt.0) fmul = 1
+      endif
+*
+*
+ 702  format (i8)
+ 800  format (/1x,a,/"STRING= '",a,"'"/)
+*
+*-------------------------------------------------------------------
+      return
+      end

@@ -1,0 +1,17 @@
+#!/bin/ksh
+#
+. r.entry.dot
+eval `cclargs_lite $0 \
+  -_status "abort"  ""    "[return status]"\
+  ++ $*`
+#
+_status=ABORT
+rsh $MACH -n "mkdir -p $EXECDIR ; chmod 755 $EXECDIR" 2> /dev/null
+if test $? ; then
+  echo "\nEXECDIR directory $EXECDIR_P on $MACH READY\n"
+  _status=OK
+else
+  echo "\nProblem with directory $EXECDIR_P on $MACH\n"
+fi
+#
+. r.return.dot

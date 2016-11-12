@@ -1,0 +1,83 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+*
+      subroutine statdyn2 (tmdt,t,tpdt)
+      implicit none
+*
+      logical tmdt,t,tpdt
+*
+#include "dynmem.cdk"
+#include "partopo.cdk"
+#include "rec.cdk"
+#include "yomdyn.cdk"
+*
+      integer n,no,nfi,nfj
+*--------------------------------------------------------------------
+*
+      no = gnstepno
+*
+      nfi = ldni
+      if (east_L ) nfi = nfi - 1
+      nfj = ldnj
+      if (north_L) nfj = nfj - 1
+*
+      if (tmdt) then
+         if (myproc.eq.0) print*
+         call statf_dm (um, 'um', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,ldni,nfj,gnk-1)
+         call statf_dm (vm, 'vm', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,ldnj,gnk-1)
+         call statf_dm (swm, 'swm', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (qpm(minx,miny,1), 'qpm', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (tpm, 'tpm', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (hmm, 'hmm', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         do n=1,ntr
+         call statf_dm (clm(1-hx,1-hy,1,n), 'clm', n, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         end do
+      endif
+      if (t) then
+         if (myproc.eq.0) print*
+         call statf_dm (u0, 'u0', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,ldni,nfj,gnk-1)
+         call statf_dm (v0, 'v0', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,ldnj,gnk-1)
+         call statf_dm (sw0, 'sw0', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (qp0(minx,miny,1), 'qp0', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (tp0, 'tp0', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (hm0, 'hm0', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         do n=1,ntr
+         call statf_dm (cl0(1-hx,1-hy,1,n), 'cl0', n, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         end do
+      endif
+      if (tpdt) then
+         if (myproc.eq.0) print*
+         call statf_dm (up, 'up', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,ldni,nfj,gnk-1)
+         call statf_dm (vp, 'vp', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,ldnj,gnk-1)
+         call statf_dm (swp, 'swp', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (qpp(minx,miny,1), 'qpp', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (tpp, 'tpp', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         call statf_dm (hmp, 'hmp', no, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         do n=1,ntr
+         call statf_dm (clp(1-hx,1-hy,1,n), 'clp', n, "mc2", gnstatdp,
+     $                  minx,maxx,miny,maxy,gnk-1,1,1,1,nfi,nfj,gnk-1)
+         end do
+      endif
+*
+*------------------------------------------------------------------
+      return
+      end

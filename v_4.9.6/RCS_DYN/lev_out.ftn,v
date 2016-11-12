@@ -1,0 +1,106 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      subroutine lev_out (intlev,nl,pres,prt,height,ng,nk,nkfout)
+      implicit none
+*
+      integer nl,ng,nk,nkfout
+      real intlev(*),pres(*),prt(ng,nk),height(*)
+*
+#include "yomdyn1.cdk"
+#include "sor.cdk"
+*
+      integer i,j,k,cnt
+      real upperl
+*
+*----------------------------------------------------------------------
+*
+      if (levtyp.eq.'P') then
+*
+         do k=1,nkfout
+            if (pres(k).lt.0.) goto 10
+         end do
+ 10      nl = k-1
+         if (nl.lt.1) return
+*
+         upperl=200000.
+         do i=1,ng    
+            upperl = min (upperl,prt(i,nk))
+         end do
+         upperl=float(int(upperl/100.)+5)
+         call sort (pres,nl)
+         cnt=0
+         do i=nl,1,-1
+            if (pres(i).ge.upperl) then
+               cnt=cnt+1
+               intlev(cnt) = pres(i) * 100.
+            endif
+         end do
+         nl = cnt
+         call sort (intlev,nl)
+         write (6,990) upperl
+         do k=1,nl
+            print '(2x,a8,i3,5x,f9.2)', 'Level # ',k,intlev(k)/100.0
+         end do
+
+      elseif (levtyp.eq.'H') then
+*
+         do k=1,nkfout
+            if (height(k).lt.0.) goto 20
+         end do
+ 20      nl = k-1
+         if (nl.lt.1) return
+*
+         upperl=htop
+
+         call sort (height,nl)
+         cnt=0
+         do i=1,nl
+            if (height(i).le.upperl) then
+               cnt=cnt+1
+               intlev(cnt) = height(i)
+            endif
+         end do
+         nl = cnt
+         call sort (intlev,nl)
+         write (6,991) upperl
+         do k=1,nl
+            print '(2x,a8,i3,5x,f9.2)', 'Level # ',k,intlev(k)
+         end do
+*     
+      endif
+*
+ 990  format ( ' ------------------------------------------------'/
+     $         ' MINIMUM PRESSURE FOUND:',f10.2,' hPa'/
+     $         ' VERTICAL INTERPOLATION WILL BE PERFORMED'/
+     $         ' ON THE FOLLOWING PRESSURE LEVELS:')
+ 991  format ( ' ------------------------------------------------'/
+     $         ' MAXIMUM HEIGHT FOUND:',f10.2,' m'/
+     $         ' VERTICAL INTERPOLATION WILL BE PERFORMED'/
+     $         ' ON THE FOLLOWING HEIGHT LEVELS:')
+*
+*----------------------------------------------------------------------
+*
+      return
+      end
+@

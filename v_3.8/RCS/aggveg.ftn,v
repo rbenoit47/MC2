@@ -1,0 +1,122 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.49.37;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P AGGVEG
+*
+      SUBROUTINE AGGVEG( FRACT, TABLEN, TABLES, AGGF, LAT, NI, NCLASS)
+*
+*
+#include "impnone.cdk"
+*
+*
+      INTEGER NI, NCLASS
+      REAL AGGF(NI), FRACT(NI,NCLASS), TABLEN(NCLASS), TABLES(NCLASS), LAT(NI)
+*
+*
+*Author
+*        Stephane Belair
+*Revision
+* 001    B. Bilodeau and S. Belair - Adaptation for southern hemisphere
+*
+*
+*Object
+*        Aggregation of vegetation fields (veg fraction, lai, rsmin, etc...)
+*        from the vegetation fraction mask.
+*
+*
+*Arguments
+*
+*            - Input -
+* FRACT      Fraction of vegetation (masks)
+* TABLEN     Geophysical fields values for each type of vegetation (northern hemisphere)
+* TABLES     Geophysical fields values for each type of vegetation (southern hemisphere)
+* LAT        Latitude
+*
+*            - Output -
+* AGGF       Aggretated geophysical field representative of an entire
+*            grid area
+*
+*            - Input -
+* NI         Horizontal dimension
+* NCLASS     Number of landuse classes
+*
+*
+#include "surfacepar.cdk"
+*
+*
+      INTEGER I,M
+*
+      REAL totfract, table_val
+*
+*
+      DO i=1,ni
+        aggf(i) = 0.0
+      END DO
+*
+*
+*
+      DO i=1,ni
+        totfract = 0.
+        DO m=4,nclass
+          totfract = totfract + fract(i,m)
+        END DO
+        IF (totfract.GE.critmask) THEN
+          DO m=4,nclass
+            if (lat(i).ge.0.0) then    
+*              northern hemisphere
+               table_val = tablen(m)
+            else
+*              southern hemisphere
+               table_val = tables(m)
+            endif
+            aggf(i) = aggf(i) 
+     1              + fract(i,m) * table_val
+          END DO
+          aggf(i) = aggf(i) / totfract
+        END IF
+      END DO
+*
+*
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

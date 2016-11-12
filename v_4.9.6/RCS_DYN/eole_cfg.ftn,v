@@ -1,0 +1,452 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@*
+      subroutine eole_cfg (prout,status)
+      implicit none
+*
+*REVISION
+*
+* Wei Yu (Jan. 2003)
+* Introduce WEST into MC2
+*
+      logical prout
+      integer status
+*
+#include "eole.cdk"
+#include "path.cdk"
+#include "lun.cdk"
+#include "mc2nml.cdk"
+*
+      integer unnml,pnerrdirf,pnflag1,pnflag2,i,j,k,err,longueur,unfin
+      real*8 dayfrac
+      real latref,lonref,my_xref,my_yref  !to position the PS projection window
+      character*12 nmlname
+      logical reajust
+      integer nhauteurs
+      parameter (nhauteurs=4)
+      real temp(nhauteurs),haut(nhauteurs),refroid(2:nhauteurs),
+     $         ref_max(2:nhauteurs)
+      real petit
+      parameter (petit=0.0001)
+*
+      namelist /eole_cfgs/ gni, gnj, gnk, nktop, grd_dx, htop,
+     &               gnnt,
+     &               gnnrstrt, grdt, gnnls, gnnpbl, zt, hord_zspng,
+     &               hblen_x,hblen_y,
+     &               gnpvw, grpilver, gnpilver, g_id, g_if, g_jd, g_jf,
+     &              z_out, grtstar, mtn_ray, uvg, vvg, thrate, my_prout,
+     &               mtn_hwx, mtn_hwy, mtn_xpos, mtn_ypos, mtn_heigth,
+     &               grd_dgrw, ctebcs, nosolv, wall,
+     &               nofc, noms, blb_zp, blb_xs, blb_zs, blb_xp,
+     &               mtn_typ, critstab, cycle_diurne, fhalo, my_psol,
+     &               nest_rug, stabilite_air, meth_ts, rotarb, 
+     &               tprofil1, tprofil2, tprofil3, tprofil4,
+     &               uprofil1, uprofil2, uprofil3, uprofil4,
+     &               vprofil1, vprofil2, vprofil3, vprofil4
+*
+      data unnml /11/
+      data unfin/21/
+*
+      status  = -1
+      hx      = 3
+      hy      = hx
+*
+      if (.not.modrstrt) then
+*
+         fhalo = .false.
+         cycle_diurne = .true.
+         nest_rug = .false.
+         stabilite_air = 0
+         meth_ts = 0
+         rotarb = .false.
+         critstab = 1.
+         my_psol = 100000.d0
+*
+	 haut1 = 0.
+	 haut2 = 1500.
+	 haut3 = 3000.
+	 haut4 = 5500.
+	 tprofil1 = 300.   !(dT/dZ)max=9.8 degres/km
+	 tprofil2 = 298.
+	 tprofil3 = 285.
+	 tprofil4 = 270.
+         uprofil1 = 5.
+         uprofil2 = 8.
+         uprofil3 = 11.
+         uprofil4 = 16.
+         vprofil1 = 0.
+         vprofil2 = 0.
+         vprofil3 = 0.
+         vprofil4 = 0.
+
+         my_prout   = .false.
+         grtstar    = 273.15
+         htop       = 20000.
+         gnk        = 31
+         nk         = gnk-1
+
+         uvg         = 5.
+         vvg         = 0.
+         thrate     = 6.
+
+         grdt     = 200.0
+         gnnls    = 160
+         gnnt     = 1600
+         gnpilver = 10
+         grpilver = 1.
+*
+         grepsi   = 0.            ! No decentering of SI scheme
+         slab     = .false.       ! NO Slab-symmetry in y-direction
+         ctebcs   = .true.        ! Fixed boundary conditions.
+*
+         nofc     = .false.
+         noms     = .true.
+         nofcms   = nofc.and.noms
+         flextop  = .false.
+*
+         nktop    = -1
+         gnnohyd  = 1
+         gnnrstrt = 888888
+         gnnpbl   = -1
+         gnpvw    = 0
+         do k=1,maxdynlv
+            zt(k)=-1.0
+         end do
+*         zt(1)    = 1.     !Distribution lineaire des niveaux verticaux
+*
+         wall     = .false.       ! Solid wall conditions
+*
+         g_id  = -2
+         g_if  = gni+2
+         g_jd  = -2
+         g_jf  = gnj+2
+         do k=1,maxlvl_out
+            z_out(k)=-1
+         end do
+*
+*     all nesting widths set to ZERO !
+*
+         hblen_x = 0
+         hblen_y = 0
+         hord_zspng= 0
+
+*---- Added nml parameters for the Color case
+         blb_zp  = 5000.
+         blb_xp  = 20
+         blb_xs  = 10
+         blb_zs  = 4
+*
+*     no topo .. but leave the possibility
+*
+         mtn_typ    = ''
+         mtn_hwx    = 5
+         mtn_hwy    = 5
+         mtn_xpos   = 15
+         mtn_ypos   = 21
+*
+         nosolv=.false.
+         period_x=.false.
+         period_y=.false.
+         ctebcs  = .true.
+         nofcms  = .true.
+*      
+      latref = 45.
+      lonref = 0.
+*
+* *** Updating configuration with namelist eole_cfgs
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $         form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9991
+         endif
+*
+         nmlname = 'eole_cfgs'
+         rewind ( unnml )
+         read (unnml, nml=eole_cfgs, end = 9120)
+         write (6,601) nmlname
+*
+         close (unnml)
+      else
+*
+         nmlname = 'eole_cfgs'
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $         'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         stop
+*
+      endif
+*
+      if (prout) then
+*
+*     Print control parameters
+         print*
+         write (6, nml=eole_cfgs)
+         print*
+      endif
+*
+      status = 1
+      goto 9991
+ 9120 write (6, 9150) nmlname,nml
+ 9991 continue      
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+*
+* *** Updating configuration with namelist grille
+*
+      if (.not.modrstrt) then
+*
+         open (unnml,file=nml,access='SEQUENTIAL',
+     $                form='FORMATTED',status='OLD',iostat=pnerrdirf)
+         if (pnerrdirf.ne.0) then
+            print '(/,2x,a/2x,3a/)', '==> ABORT -- ABORT <==',
+     $            'FILE ',nml(1:longueur(nml)),' NOT FOUND'
+            goto 9992
+         endif
+*
+         nmlname = 'grille'
+         rewind ( unnml )
+         read (unnml, nml=grille, end = 9121)
+         write (6,601) nmlname
+
+         close (unnml)
+*
+      else
+*
+         nmlname = 'grille'
+         print '(1x,a/1x,3a)', 'WARNING --  RESTART MODE',
+     $         'USING CONFIGURATION OF PREVIOUS RUN (',nmlname,')'
+         stop
+*
+      endif
+
+         print*
+         write (6, nml=grille)
+         print*
+*
+      status = 1
+      goto 9992
+ 9121 write (6, 9150) nmlname,nml
+ 9992 continue      
+#if defined (NEC) || defined (HPPA)
+      call flush (6)
+#endif
+*
+*     Global grid dimensions with halo
+*
+      gni = grd_ni-1-2*hx
+      gnj = grd_nj-1-2*hy
+      print*,'GNI & GNJ UPDATED WITH &GRILLE : GNI=',gni,'GNJ=',gnj
+      call posipar (unfin)         
+*
+*
+      if (period_x) then
+         hblen_x = 0
+      endif
+      if (period_y) then
+         hblen_y = 0
+      endif
+      hblen_x  = min(max(hblen_x,0),(gni/2-1))
+      hblen_y  = min(max(hblen_y,0),(gnj/2-1))
+*
+      g_id = min(gni+hx,max(1-hx,g_id))
+      g_if = min(gni+hx,max(1-hx,g_if))
+      g_jd = min(gnj+hy,max(1-hy,g_jd))
+      g_jf = min(gnj+hy,max(1-hy,g_jf))
+      if (z_out(1).lt.0) then
+         do k=1,gnk
+            z_out(k)=k
+         end do
+         nk_out=gnk
+      else
+         nk_out=0
+         do k=1,maxlvl_out
+            if ((z_out(k).lt.gnk).and.(z_out(k).gt.0)) then
+               nk_out=nk_out+1
+               z_tmp(nk_out) = z_out(k)
+            endif
+         end do
+         do k=1,nk_out
+            z_out(k) = z_tmp(k)
+         end do
+      endif
+*
+      nktop = min(gnk-1,max(0,nktop))
+      hord_zspng = min(gnk-2,max(0,hord_zspng))
+      if (hord_zspng.gt.0) hord_zspng=max(4,hord_zspng)
+*
+*     grid aspect
+*
+      grd_proj_s = 'P'
+      Grd_ni = gni
+      Grd_nj = gnj
+      gcrunstrt = "19980101.000000"
+      gcjobstrt = gcrunstrt
+      dayfrac=(gnnt*grdt)/86400.0
+      call  incdatsd(gcjobend,gcrunstrt,dayfrac)
+      gcrunend = gcjobend
+      call datp2f (gnidate,gcrunstrt)
+*
+      gnstepno= 0
+*
+*     Rotation des vents pour etre conforme a la rotation de la carte
+*
+      if (rotarb) call rotation_vent
+*
+*     Stabilite du profil de temperature impose
+*
+      if (stabilite_air.eq.2) then
+         temp(1)=tprofil1
+         temp(2)=tprofil2
+         temp(3)=tprofil3
+         temp(4)=tprofil4
+         haut(1)=haut1
+         haut(2)=haut2
+         haut(3)=haut3
+         haut(4)=haut4
+         reajust=.false.
+*
+ 10      continue
+         do k=2,nhauteurs
+            refroid(k)=temp(k)-temp(k-1)
+            ref_max(k)=-9.8*critstab*(haut(k)-haut(k-1))/1000.
+         enddo
+*
+         k=2
+ 20      continue
+         if ((refroid(k)-ref_max(k)).lt.(0.-petit)) then
+            temp(k)=temp(k-1)+ref_max(k)
+            reajust=.true.
+            goto 10
+         endif
+         k=k+1
+         if (k.lt.nhauteurs+1) then
+            goto 20
+         endif
+*
+         if (reajust) then
+         print*,'----------------------------------------------'
+         print*,'Tprofil ajuste a',critstab*100.,'% d un ref adiabatique'
+         print*,'ancien profil, nouveau profil'
+         print*,tprofil1,temp(1)
+         print*,tprofil2,temp(2)
+         print*,tprofil3,temp(3)
+         print*,tprofil4,temp(4)
+         print*,'----------------------------------------------'
+         endif
+*
+         tprofil1=temp(1)
+         tprofil2=temp(2)
+         tprofil3=temp(3)
+         tprofil4=temp(4)
+      endif
+*
+*
+*      if (vraies_mtn.eq.1) then
+*        complete the grid aspect
+*         call xyfll (my_xref,my_yref,latref,lonref,grid_reso,grid_dgrw,1)
+*         xref = 0.001* (my_xref - 0.5 *(gni+2*hx))* grid_reso !en km, real 8
+*         yref = 0.001* (my_yref - 0.5 *(gnj+2*hy))* grid_reso 
+*         print *,'grid specs in eole_cfg'
+*         print *, 'xref,yref,latref,lonref,grid_reso,grid_dgrw= '
+*     $        ,xref,yref,latref,lonref,grid_reso,grid_dgrw
+*      endif
+*
+      nofcms   = nofc.and.noms   ! combine selective keys for fc and ms
+*
+      call gllvls (gnk)
+*      
+      v_interp= 'CUBIC_UQAM'
+      gnlst   = int(grdt)
+      pil_nesdt = 0
+c     trpil(1) = 'BU'
+      do i=1,maxntrpil
+         trpil(i) = '@@#'
+      end do
+*
+*
+ 601  format (' CONFIGURATION UPDATED again WITH NAMELIST ',a)
+ 9150 format (/,2x,'==> ABORT -- ABORT <=='/2x,'NAMELIST ',a,
+     $             ' NOT FOUND ON FILE ',a/)
+*
+      return
+      end
+*
+***s/r rotation_vent
+*
+      subroutine rotation_vent
+      implicit none
+*
+#include "grd.cdk"
+#include "consdyn_8.cdk"
+#include "eole.cdk"
+      integer i,nlevuv   ! nombre de niveaux de vents dans le profil input
+      parameter (nlevuv=4)
+      real*8 uin(nlevuv), vin(nlevuv), uout(nlevuv), vout(nlevuv) 
+      real alpha,ca,sa
+*
+      uin(1)=uprofil1
+      uin(2)=uprofil2
+      uin(3)=uprofil3
+      uin(4)=uprofil4
+      vin(1)=vprofil1
+      vin(2)=vprofil2
+      vin(3)=vprofil3
+      vin(4)=vprofil4
+*
+*     grille suez de david
+*
+*      grd_dgrw=210.
+*      grd_lonr=33.75
+*
+*     angle entre EAST et X  (+ antihoraire)
+*
+      alpha=270.-grd_lonr-grd_dgrw
+*
+*     rotation de u,v par -alpha  (de East a X)
+*
+*     ATTENTION, pi n est pas encore defini dans mc2
+      pi_8=acos(-1.)
+      ca=cos(alpha*pi_8/180.)
+      sa=sin(alpha*pi_8/180.)
+
+      do i=1,nlevuv
+         uout(i)=uin(i)*ca + vin(i)*sa
+         vout(i)=vin(i)*ca - uin(i)*sa
+      enddo
+*
+      uprofil1=uout(1)
+      uprofil2=uout(2)
+      uprofil3=uout(3)
+      uprofil4=uout(4)
+      vprofil1=vout(1)
+      vprofil2=vout(2)
+      vprofil3=vout(3)
+      vprofil4=vout(4)
+
+      return
+      end
+@

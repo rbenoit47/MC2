@@ -1,0 +1,93 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P serdim
+*
+      integer function serdim (NSTN,n,nk)
+#include "impnone.cdk"
+      INTEGER NSTN,N,NK
+*
+*Author
+*          M. Desgagne (Mar 99)
+*
+*Revision
+*
+*Object
+*          to determine vector dimensions for time-series
+*
+*Arguments
+*
+*          - Input -
+* NSTN     number of stations
+* N        number of surface or profile variables requested
+* NK       vertical dimension
+*          - Output -
+* serdim   dimension to be allocated by the dynamics
+*
+*Notes
+*
+*IMPLICITES
+*
+#include "sercmdk.cdk"
+*
+*MODULES
+*
+**
+*
+      serdim = 0
+*
+      call serdata ()
+      IF ( NSTN.LE.0) return
+*
+      MXSTT = NSTN
+      if (nk.eq.1) then
+         MXSRF = N
+         serdim = MXSTT * MXSRF
+      else
+         MXPRF = N
+         MXNVO = NK
+         serdim = MXSTT * MXPRF * MXNVO
+      endif
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

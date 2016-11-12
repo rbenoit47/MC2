@@ -1,0 +1,124 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.51.11;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P  RAYSOL
+*
+      SUBROUTINE RAYSOL(RSOL,AL,LAT,LON,TAU,DATE,KOUNT,N)
+*
+#include "impnone.cdk"
+      INTEGER N
+      REAL RSOL(N),AL(N),LAT(N),LON(N),TAU
+      INTEGER DATE(14),KOUNT
+*
+*Author
+*          J. Cote RPN (August 83)
+*
+*Revision
+* 001      J. Cote RPN(Nov 1984)SEF version documentation
+* 002      M. Lepine  -  RFE model code revision project (Feb 87)
+* 003      MJ L'Heureux  (Mar89) Initialization at KOUNT=0
+* 004      N. Brunet  (May91)
+*             New version of thermodynamic functions
+*             and file of constants
+*
+*Object
+*          to calculate the radiation at the ground
+*
+*Arguments
+*
+*          - Output -
+* RSOL     radiation at the ground
+*
+*          - Input -
+* AL       surface albedo
+* LAT      latitude in radians
+* LON      longitude in radians
+* TAU      timestep
+* DATE     array for date
+* KOUNT    timestep counter
+* N        horizontal dimension
+*
+*Notes
+*          RSOL = (1-ALBEDO)*S0*(1-ATENU)*COS(zenith angle of sun)
+*          where S0 = solar constant (WATT/M**2) and ATENU=absorption
+*          due to the atmosphere
+*
+*
+*IMPLICITES
+*
+#include "consphy.cdk"
+#include "clefcon.cdk"
+*
+**
+*
+      REAL ATENU
+      SAVE ATENU
+      REAL HEURE,AJOUR,DGRD,DECLIN,CTE,HRRD,CD,SD
+      INTEGER J
+*
+      DATA ATENU / 0.35 /
+*
+*
+*     DECLIN=DECLINAISON SOLAIRE AU-DESSUS DE EQUATEUR
+*     HEURE=G.M.T.
+*     CALCULEES AU MOYEN DE DATE FORMULES TIREES DE S/R CONRAD (V8)
+*
+*                                           FORMULES PRISES DANS S/R
+*                                           CONRAD (V8)
+*
+      HEURE=AMOD(FLOAT(DATE(5))+FLOAT(KOUNT)*TAU/3600.0,24.0)
+      AJOUR=30.4*FLOAT(DATE(2)-1)+FLOAT(DATE(3))
+      DGRD=ACOS(-1.0)/180.0
+      DECLIN=23.61*COS(DGRD*(360.0*((AJOUR+10.0)/365.25-0.5)))
+      CTE = CONSOL*(1.0-ATENU)
+      HRRD=DGRD*15.0*(HEURE-12.0)
+      CD=CTE*COS(DECLIN*DGRD)
+      SD=CTE*SIN(DECLIN*DGRD)
+      DO 1 J=1,N
+*
+         RSOL(J)=(1.0-AL(J))*(SIN(LAT(J))*SD+COS(LAT(J))*CD*
+     X                                            COS(LON(J)+HRRD))
+    1    RSOL(J)=MAX(0.0,RSOL(J))
+*
+      RETURN
+      END
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@

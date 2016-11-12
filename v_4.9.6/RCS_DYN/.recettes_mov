@@ -1,0 +1,34 @@
+# 
+#   Common recipes for models
+#
+include $(MODEL_PATH)/Makefile_$(ARCH)
+AR          = r.ar -arch $(ARCH)
+PHY_VERSION = 3.8
+PHY         = phy
+PATCH       = 
+OPTF        =
+#  versions locales de librairies pour LIBMODEL et Physique
+#  attention AJUSTER LIBMODEL SELON PATH UTILISE PAR SCRIPT MAITRE
+LIBMODEL= /home/rbenoit/exper/496_Theocase/lib/$(ARCH)$(ABI)
+LESLIB  = $(LIBMODEL)
+LCLPO   = malib$(ARCH)
+mainntr = main$(MODEL)ntr_$(ARCH)_${MODEL_VERSION}.Abs
+maindm  = main$(MODEL)dm_$(ARCH)_${MODEL_VERSION}.Abs
+RCOMPIL = r.compile $(MPI) -optf $(OPTF) -arch $(ARCH) -abi $(ABI) -defines "=$(DEFINE)" $(OMP)
+RBUILD  = r.build
+#
+makedotf= $(RCOMPIL) -P -src
+makedoto= $(RCOMPIL) -O $(OPTIL) -bindir $(LCLPO) -src
+#
+rmpo: 
+	/bin/rm -f $(LCLPO)/*.o
+#
+libdyn: rmpo $(OBJECTS)
+#
+geophy: geophy.o
+	makebidon geophy
+	$(RBUILD) -obj $(LCLPO)/geophy.o $(LCLPO)/bidon.o -arch $(ARCH) -abi $(ABI) -opt "=$(LFLAGS)" -o geophy.Abs -librmn 
+	/bin/rm -f $(LCLPO)/geophy.o $(LCLPO)/bidon.o
+#
+
+

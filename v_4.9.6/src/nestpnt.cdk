@@ -1,0 +1,20 @@
+copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+      integer gnpilver,gnpvw,nesmt_bgx,nesmt_bgy,nesmt_ndx,nesmt_ndy,
+     $        hblen_x,hblen_y,endnesti
+      real grpilver,endnestr
+*
+      common /nestpnti/ hblen_x,hblen_y,
+     $             gnpilver,gnpvw,nesmt_bgx,nesmt_bgy,
+     $             nesmt_ndx,nesmt_ndy,endnesti
+      common /nestptnr/ grpilver,endnestr
+* 
+      real*8 wh_w,wh_e,wh_s,wh_n,wh_sw,wh_se,wh_nw,wh_ne
+      pointer (pawh_w,wh_w(hblen_x)),(pawh_e,wh_e(ldni-hblen_x+1:ldni)),
+     $        (pawh_s,wh_s(hblen_y)),(pawh_n,wh_n(ldnj-hblen_y+1:ldnj)),
+     $        (pawh_sw, wh_sw(hblen_x            ,hblen_y)), 
+     $        (pawh_se, wh_se(ldni-hblen_x+1:ldni,hblen_y)),
+     $        (pawh_nw, wh_nw(hblen_x            ,ldnj-hblen_y+1:ldnj)),
+     $        (pawh_ne, wh_ne(ldni-hblen_x+1:ldni,ldnj-hblen_y+1:ldnj))
+*
+      common /panest1/ pawh_w ,pawh_e ,pawh_s ,pawh_n,
+     $                 pawh_sw,pawh_se,pawh_nw,pawh_ne

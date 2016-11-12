@@ -1,0 +1,135 @@
+head	4.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+4.9
+date	2003.06.09.13.08.55;	author armnmod;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+4.9
+log
+@mc2_4.9
+@
+text
+@copyright (C) 2001  MSC-RPN COMM  %%%MC2%%%
+***s/r diagphy  -  Compute and print minimum, average and maximum
+*                  of physics tendencies.
+*
+      subroutine diagphy (utd,vtd,ttd,hutd,lminx,lmaxx,lminy,lmaxy,lnk)
+      implicit none
+*
+      integer lminx,lmaxx,lminy,lmaxy,lnk
+      real utd (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     vtd (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     ttd (lminx:lmaxx,lminy:lmaxy,lnk),
+     $     hutd(lminx:lmaxx,lminy:lmaxy,lnk)
+*
+*AUTHOR   Michel Desgagne                  Dec     1993
+*
+*REVISION
+*
+*LANGUAGE   Fortran 77
+*
+*OBJECT (diagphy)
+*
+*FILES
+*
+*ARGUMENTS
+*    NAMES     I/O  TYPE  A/S        DESCRIPTION
+*
+*    utd        I    R     A     u-tendency
+*    vtd        I    R     A     v-tendency
+*    ttd        I    R     A     t-tendency
+*    hutd       I    R     A     hu-tendency
+*    nis        I    I     S     max. horizontal dimension along X
+*    njs        I    I     S     max. horizontal dimension along Y
+*    nks        I    I     S     max. vertical dimension
+*    ni         I    I     S     computational hor. dimension along X
+*    nj         I    I     S     computational hor. dimension along Y
+*    nk         I    I     S     computational vertical dimension
+*
+*IMPLICIT
+#include "yomdyn1.cdk"
+#include "consdyn_8.cdk"
+#include "lcldim.cdk"
+#include "partopo.cdk"
+*
+*MODULES
+*
+**
+      character*8 label(3)
+      integer i,j,k
+      real*8 con1,con2
+      real usum,umoy,umin,umax
+      real vsum,vmoy,vmin,vmax
+      real tsum,tmoy,tmin,tmax
+      real husum,humoy,humin,humax
+*
+      data label /'min_tend','avg_tend','max_tend'/
+c--------------------------------------------------------------------
+c
+      if (numproc.gt.1) return
+      con1 = 86400. / grdt
+      con2 = con1 * chlc_8   / cpd_8
+      print '(/15x,a)', '***** DIAGNOSING THE PHYSICS TENDENCIES *****'
+      print '(1x,a,7x,a,10x,a,10x,a,9x,a)',
+     $      'LEVEL-LABEL','U_TEND','V_TEND','T_TEND','HU_TEND'
+c
+      do 1 k=nk,1,-1
+*
+         usum=0
+         umin=utd(1,1,1)
+         umax=utd(1,1,1)
+         vsum=0
+         vmin=vtd(1,1,1)
+         vmax=vtd(1,1,1)
+         tsum=0
+         tmin=ttd(1,1,1)
+         tmax=ttd(1,1,1)
+         husum=0
+         humin=hutd(1,1,1)
+         humax=hutd(1,1,1)
+         do 10 j=1,ldnj
+            do 10 i=1,ldni
+               umin=min(umin,utd(i,j,k))
+               umax=max(umax,utd(i,j,k))
+               usum=usum + utd(i,j,k)
+               vmin=min(vmin,vtd(i,j,k))
+               vmax=max(vmax,vtd(i,j,k))
+               vsum=vsum + vtd(i,j,k)
+               tmin=min(tmin,ttd(i,j,k))
+               tmax=max(tmax,ttd(i,j,k))
+               tsum=tsum + ttd(i,j,k)
+               humin=min(humin,hutd(i,j,k))
+               humax=max(humax,hutd(i,j,k))
+               husum=husum + hutd(i,j,k)
+ 10      continue
+         umin = umin / grdt
+         umax = umax / grdt
+         umoy = usum / float(ldni*ldnj) / grdt
+         vmin = vmin / grdt
+         vmax = vmax / grdt
+         vmoy = vsum / float(ldni*ldnj) / grdt
+         tmin = tmin * con1
+         tmax = tmax * con1
+         tmoy = tsum / float(ldni*ldnj) * con1
+         humin = humin * con2
+         humax = humax * con2
+         humoy = husum / float(ldni*ldnj) * con2
+         print '(/i3,a9,4e16.7)', k,label(1),umin,vmin,tmin,humin
+         print '(i3,a9,4e16.7)', k,label(2),umoy,vmoy,tmoy,humoy
+         print '(i3,a9,4e16.7)', k,label(3),umax,vmax,tmax,humax
+ 1    continue
+c----------------------------------------------------------------
+      return
+      end
+@

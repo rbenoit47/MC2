@@ -1,0 +1,176 @@
+head	3.9;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+3.9
+date	2003.06.16.18.50.49;	author armnphy;	state Exp;
+branches;
+next	3.8;
+
+3.8
+date	2003.03.12.15.49.43;	author armnbil;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+3.9
+log
+@La version 3.9 de la physique a ete creee le 16 juin 2003.
+
+Elle constitue la premiere version de conversion vers le
+calculateur IBM.
+
+Le nouveau code de "gravity wave drag" sgoflx3.ftn est une
+copie du code linearise lin_sgoflx1.ftn.
+@
+text
+@!copyright (C) 2001  MSC-RPN COMM  %%%RPNPHY%%%
+***S/P LIN_INICHAMP1
+*
+      SUBROUTINE LIN_INICHAMP1(E, ESIZ, F, FSIZ, 
+     $                         V, VSIZ, D, DSIZ,
+     $                         TRAV2D, SELOC, KOUNT, TRNCH,
+     $                         DT, CDT1, NI, NK)
+*
+#include "impnone.cdk"
+*
+      INTEGER I, IK, K, ESIZ, FSIZ, VSIZ, DSIZ, KOUNT, NI, NK, TRNCH
+      REAL E(ESIZ), F(FSIZ), D(DSIZ), V(VSIZ), DT, CDT1
+      REAL SELOC(NI,NK)
+      REAL TRAV2D (NI,NK)
+*
+*Author
+*          S. Laroche (Dec 2001) Simplified version of inichamp1
+*
+*Revision
+*
+* 001      A. Zadra (May 2002)   - Compute subgrid orography fields
+*                                  (slope, eccentricity, direction)
+*                                  at the first timestep
+* 002      S. Laroche (Oct 2002) - Bug fix: remove reinitialization of
+*                                  few variables related to climate mode
+*                                  in F
+*
+*Object
+*          To initialize arrays.
+*
+* Arguments
+*
+*          - Input -
+* F        field for permanent physics variables
+* FSIZ     dimension of F
+* V        volatile bus
+* VSIZ     dimension of V
+* D        dynamics bus
+* DSIZ     dimension of D
+* TRAV2D   work field
+* SELOC    intermediate (staggered) sigma levels (2D)
+* KOUNT    timestep number
+* TRNCH    row number
+* DT       length of timestep
+* CDT1     =   DT for 2-time level models
+*          = 2*DT for 3-time level models
+* NI       horizontal dimension
+* NK       vertical dimension
+*
+**
+*
+#include "indx_sfc.cdk"
+#include "options.cdk"
+#include "phy_macros_f.h"
+#include "phybus.cdk"
+#include "consphy.cdk"
+#include "phy_macros_f.h"
+*
+      INTEGER NIK
+*
+      EXTERNAL INISURF,EQUIVMOUNT
+*
+      AUTOMATIC ( LAND   , REAL   , (NI   ) )
+      AUTOMATIC ( ENV    , REAL   , (NI   ) )
+      AUTOMATIC ( SXX    , REAL   , (NI   ) )
+      AUTOMATIC ( SYY    , REAL   , (NI   ) )
+      AUTOMATIC ( SXY    , REAL   , (NI   ) )
+      AUTOMATIC ( SLOPE8 , REAL   , (NI   ) )
+      AUTOMATIC ( XCENT8 , REAL   , (NI   ) )
+      AUTOMATIC ( MTDIR8 , REAL   , (NI   ) )
+*
+*
+      NIK = NI*NK
+*
+*
+************************************************************************
+*        INITIALISATIONS FAITES A KOUNT = 0 SEULEMENT                  *
+*        --------------------------------------------                  *
+************************************************************************
+*
+      IF (KOUNT.EQ.0) THEN
+*
+         DO I=1,FSIZ
+            F(I) = 0.0
+         END DO
+*
+         DO I=1,VSIZ
+            V(I) = 0.0
+         END DO
+*
+         CALL INISURF( E, ESIZ, F, FSIZ, NI, NK)
+*
+         DO I=0,NI-1
+            F(TSM1 + I) = F(TSOIL + I)
+         END DO
+*
+         DO I=1,NI
+            LAND(I)  = - ABS( NINT( F(mg+I-1) ) )
+            ENV(I)   = F(lhtg+I-1)
+            SXX(I)   = F(dhdx+I-1)
+            SYY(I)   = F(dhdy+I-1)
+            SXY(I)   = F(dhdxdy+I-1)
+         ENDDO
+*
+         CALL EQUIVMOUNT (LAND, ENV, SXX, SYY, SXY,
+     +                    NI, 1, NI,
+     +                    SLOPE8, XCENT8, MTDIR8)
+*
+         DO  I=1,NI
+           F(slope+I-1) = SLOPE8(I)
+           F(xcent+I-1) = XCENT8(I)
+           F(mtdir+I-1) = MTDIR8(I)
+         ENDDO
+*
+      ENDIF
+*
+*
+************************************************************************
+*     INITIALISATIONS FAITES A KOUNT > 0 SEULEMENT                     *
+*     --------------------------------------------                     *
+************************************************************************
+*
+      IF (KOUNT.GT.0) THEN
+*
+         DO I=1,VSIZ
+            V(I) = 0.0
+         END DO
+*
+      ENDIF
+*
+      RETURN
+      END
+
+
+@
+
+
+3.8
+log
+@description_r3.8
+@
+text
+@@
